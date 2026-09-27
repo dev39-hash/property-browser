@@ -38,12 +38,14 @@ configure_file(
 )
 
 # --- qpb::core (Qt6::Core only) ----------------------------------------------
+#
+# Headers are listed here together with their implementation (docs/PLAN.md
+# M2/M3); the remaining public headers are declarations only for now.
 
 qpb_add_library(qpb_core
     EXPORT_DEFINE QPB_BUILD_CORE_LIB
     OUTPUT_NAME qpbcore
     SOURCES
-        include/qpb/qpb.h
         include/qpb/qpbglobal.h
         "${CMAKE_CURRENT_BINARY_DIR}/include/qpb/qpbversion.h"
         src/core/qpbglobal.cpp
