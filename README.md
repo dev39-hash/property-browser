@@ -4,7 +4,7 @@ A property browser library for Qt 6 Widgets (namespace `qpb`): declare propertie
 flat list or (since 1.1) a form on top of a single `QAbstractItemModel`, filter them with a search box, and add data types
 and editors without modifying the library.
 
-Status: 1.0.0 released. The public API is stable within a major version (see below).
+Status: 1.1.0 released. The public API is stable within a major version (see below).
 
 ```cpp
 auto root = qpb::PropertyGroup::create("Camera");
