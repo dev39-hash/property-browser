@@ -1,15 +1,21 @@
 // Drives the RC trial application through its UI (docs/PLAN.md RC.1).
 
+#include <QApplication>
 #include <QCheckBox>
+#include <QContextMenuEvent>
 #include <QDir>
 #include <QDoubleSpinBox>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMenu>
 #include <QSettings>
+#include <QSignalSpy>
+#include <QSlider>
 #include <QSpinBox>
 #include <QTabWidget>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QTimer>
 
 #include "InspectorPage.h"
 #include "MainWindow.h"
@@ -22,17 +28,55 @@ template <class Editor>
 Editor* openEditor(qpb::PropertyTreeView* view, const QModelIndex& valueIndex)
 {
     view->setFocus();
-    view->setCurrentIndex(valueIndex);
-    for (Editor* e : view->findChildren<Editor*>()) {
-        if (e->isVisible())
-            return e;
-    }
-    return nullptr;
+    if (view->currentIndex() == valueIndex)
+        view->edit(valueIndex); // already current: open it again, as F2 does
+    else
+        view->setCurrentIndex(valueIndex);
+    QWidget* editor = view->indexWidget(valueIndex);
+    if (!editor)
+        return nullptr;
+    if (auto* e = qobject_cast<Editor*>(editor))
+        return e;
+    return editor->findChild<Editor*>(); // part of a composite editor
 }
 
 QModelIndex valueIndex(qpb::PropertyModel& model, const QString& path)
 {
     return model.indexOf(model.find(path), qpb::PropertyModel::ValueColumn);
+}
+
+QString currentPath(qpb::PropertyTreeView* view)
+{
+    return view->currentIndex().data(qpb::PropertyModel::PathRole).toString();
+}
+
+// Presses Tab in whatever has the focus (an editor or one of its children).
+void pressTab()
+{
+    QWidget* focus = QApplication::focusWidget();
+    QVERIFY(focus);
+    QTest::keyClick(focus, Qt::Key_Tab);
+}
+
+// Opens the view's context menu on index and triggers its first action if
+// it is enabled. Returns whether it was enabled.
+bool triggerContextAction(qpb::PropertyTreeView* view, const QModelIndex& index)
+{
+    bool enabled = false;
+    QTimer::singleShot(0, view, [&enabled] {
+        auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+        if (!menu)
+            return;
+        QAction* action = menu->actions().value(0);
+        enabled = action && action->isEnabled();
+        if (enabled)
+            action->trigger();
+        menu->close();
+    });
+    const QPoint pos = view->visualRect(index).center();
+    QContextMenuEvent event(QContextMenuEvent::Mouse, pos, view->viewport()->mapToGlobal(pos));
+    QApplication::sendEvent(view->viewport(), &event);
+    return enabled;
 }
 
 } // namespace
@@ -47,11 +91,17 @@ private slots:
 
     void inspectorEditsWriteBackToScene();
     void inspectorSwitchesObjects();
+    void inspectorRejectsDuplicateName();
+    void inspectorHidesCameraForLights();
     void settingsLoadStoredValues();
     void settingsDependencyAndSave();
     void settingsSaveUpdatesReadOnlyStatus();
     void settingsResetAll();
+    void settingsKeyboardNavigation();
+    void settingsRejectsMissingDirectory();
+    void settingsContextMenuResetsGroup();
     void pluginsRuntimeChangesAndSearch();
+    void pluginsEnableAllIsOneBatch();
     void screenshots();
 
 private:
@@ -84,14 +134,17 @@ void tst_Trial::cleanup()
 void tst_Trial::inspectorEditsWriteBackToScene()
 {
     InspectorPage* page = m_window->inspector();
-    page->objectList()->setCurrentRow(1);
+    page->objectList()->setCurrentRow(0);
 
-    auto* fov = openEditor<QSpinBox>(page->view(), valueIndex(page->model(), "Camera/fov"));
+    // Field of view uses the application's slider editor.
+    auto* fov = openEditor<QSlider>(page->view(), valueIndex(page->model(), "Camera/fov"));
     QVERIFY(fov);
+    QCOMPARE(fov->maximum(), 170);
     fov->setValue(75);
     QTest::keyClick(fov, Qt::Key_Return);
-    QTRY_COMPARE(page->scene()[1].fov, 75);
+    QTRY_COMPARE(page->scene()[0].fov, 75);
 
+    page->objectList()->setCurrentRow(1);
     auto* name = openEditor<QLineEdit>(page->view(), valueIndex(page->model(), "name"));
     QVERIFY(name);
     name->setText("Rim light");
@@ -101,7 +154,7 @@ void tst_Trial::inspectorEditsWriteBackToScene()
 
     QVERIFY(page->model().setValue("Render/tint", QColor(Qt::red)));
     QCOMPARE(page->scene()[1].tint, QColor(Qt::red));
-    QCOMPARE(page->scene()[0].fov, 60); // other objects untouched
+    QCOMPARE(page->scene()[0].fov, 75); // other objects untouched
 }
 
 void tst_Trial::inspectorSwitchesObjects()
@@ -115,6 +168,42 @@ void tst_Trial::inspectorSwitchesObjects()
     page->objectList()->setCurrentRow(0);
     QCOMPARE(page->model().find("Transform/x")->value().toDouble(), 12.5);
     QVERIFY(page->view()->isExpanded(page->model().indexOf(page->model().find("Transform"))));
+}
+
+void tst_Trial::inspectorRejectsDuplicateName()
+{
+    InspectorPage* page = m_window->inspector();
+    page->objectList()->setCurrentRow(1);
+    QSignalSpy failed(&page->model(), &qpb::PropertyModel::validationFailed);
+
+    auto* name = openEditor<QLineEdit>(page->view(), valueIndex(page->model(), "name"));
+    QVERIFY(name);
+    name->setText("Main camera");
+    QTest::keyClick(name, Qt::Key_Return);
+    QTRY_COMPARE(failed.count(), 1);
+    QCOMPARE(failed[0][0].toString(), QString("name"));
+    QVERIFY(failed[0][2].toString().contains("already named"));
+    QCOMPARE(page->scene()[1].name, QString("Key light"));
+    QCOMPARE(page->model().find("name")->value().toString(), QString("Key light"));
+}
+
+void tst_Trial::inspectorHidesCameraForLights()
+{
+    InspectorPage* page = m_window->inspector();
+    qpb::PropertyTreeView* view = page->view();
+    const auto cameraHidden = [&] {
+        const QModelIndex camera = page->model().indexOf(page->model().find("Camera"));
+        return view->isRowHidden(camera.row(), camera.parent());
+    };
+    page->objectList()->setCurrentRow(0);
+    QVERIFY(!cameraHidden());
+    page->objectList()->setCurrentRow(1);
+    QVERIFY(cameraHidden());
+
+    // Tab from the last transform field skips the hidden camera settings.
+    QVERIFY(openEditor<QDoubleSpinBox>(view, valueIndex(page->model(), "Transform/z")));
+    pressTab();
+    QTRY_COMPARE(currentPath(view), QString("Render/tint"));
 }
 
 void tst_Trial::settingsLoadStoredValues()
@@ -170,6 +259,84 @@ void tst_Trial::settingsResetAll()
     QCOMPARE(model.find("General/autosaveMinutes")->value().toInt(), 5);
 }
 
+// Tab chains the editors: it never stops on the read-only About entries, on
+// autosaveMinutes while autosave is off, or on check boxes (SPEC 5.5, finding
+// F5). Check boxes are reached with the arrow keys and toggled with Space.
+void tst_Trial::settingsKeyboardNavigation()
+{
+    SettingsPage* page = m_window->settingsPage();
+    m_window->tabs()->setCurrentWidget(page);
+    qpb::PropertyTreeView* view = page->view();
+    qpb::PropertyModel& model = page->model();
+
+    QVERIFY(openEditor<QWidget>(view, valueIndex(model, "General/language")));
+    QStringList visited {currentPath(view)};
+    for (int i = 0; i < 6; ++i) {
+        pressTab();
+        QCoreApplication::processEvents();
+        if (currentPath(view) != visited.last())
+            visited << currentPath(view);
+    }
+    QCOMPARE(visited,
+        QStringList(
+            {"General/language", "General/autosaveMinutes", "Paths/projectDir", "Paths/cacheDir"}));
+
+    // Down from language to the autosave check box, Space toggles it.
+    auto* language = openEditor<QWidget>(view, valueIndex(model, "General/language"));
+    QVERIFY(language);
+    QTest::keyClick(language, Qt::Key_Escape);
+    QTRY_VERIFY(view->hasFocus());
+    QTest::keyClick(view, Qt::Key_Down);
+    QCOMPARE(currentPath(view), QString("General/autosave"));
+    QTest::keyClick(view, Qt::Key_Space);
+    QCOMPARE(model.find("General/autosave")->value().toBool(), false);
+
+    QVERIFY(openEditor<QWidget>(view, valueIndex(model, "General/language")));
+    pressTab();
+    QTRY_COMPARE(currentPath(view), QString("Paths/projectDir"));
+}
+
+void tst_Trial::settingsRejectsMissingDirectory()
+{
+    SettingsPage* page = m_window->settingsPage();
+    m_window->tabs()->setCurrentWidget(page);
+    QSignalSpy failed(&page->model(), &qpb::PropertyModel::validationFailed);
+    const QString before = page->model().find("Paths/projectDir")->value().toString();
+
+    auto* path = openEditor<QLineEdit>(page->view(), valueIndex(page->model(), "Paths/projectDir"));
+    QVERIFY(path);
+    path->setText(m_dir.filePath("does-not-exist"));
+    QTest::keyClick(path, Qt::Key_Return);
+    QTRY_COMPARE(failed.count(), 1);
+    QCOMPARE(page->model().find("Paths/projectDir")->value().toString(), before);
+
+    // An existing directory is accepted.
+    path = openEditor<QLineEdit>(page->view(), valueIndex(page->model(), "Paths/projectDir"));
+    QVERIFY(path);
+    path->setText(m_dir.path());
+    QTest::keyClick(path, Qt::Key_Return);
+    QTRY_COMPARE(page->model().find("Paths/projectDir")->value().toString(), m_dir.path());
+}
+
+// "Reset group" from the context menu restores user settings and leaves the
+// read-only status maintained by the application alone.
+void tst_Trial::settingsContextMenuResetsGroup()
+{
+    SettingsPage* page = m_window->settingsPage();
+    m_window->tabs()->setCurrentWidget(page);
+    qpb::PropertyModel& model = page->model();
+    QVERIFY(model.setValue("General/language", "vi"));
+    QVERIFY(model.setValue("General/autosaveMinutes", 30));
+    page->save();
+    const QString lastSaved = model.find("About/lastSaved")->value().toString();
+
+    QVERIFY(!triggerContextAction(page->view(), model.indexOf(model.find("About"))));
+    QVERIFY(triggerContextAction(page->view(), model.indexOf(model.find("General"))));
+    QCOMPARE(model.find("General/language")->value().toString(), QString("en"));
+    QCOMPARE(model.find("General/autosaveMinutes")->value().toInt(), 5);
+    QCOMPARE(model.find("About/lastSaved")->value().toString(), lastSaved);
+}
+
 void tst_Trial::pluginsRuntimeChangesAndSearch()
 {
     PluginsPage* page = m_window->plugins();
@@ -195,12 +362,26 @@ void tst_Trial::pluginsRuntimeChangesAndSearch()
     QCOMPARE(page->proxy().rowCount(page->proxy().index(0, 0)), 4);
 }
 
+void tst_Trial::pluginsEnableAllIsOneBatch()
+{
+    PluginsPage* page = m_window->plugins();
+    QSignalSpy changed(&page->model(), &qpb::PropertyModel::valueChanged);
+    QSignalSpy batch(&page->model(), &qpb::PropertyModel::batchValueChanged);
+    page->setAllEnabled(true);
+    QCOMPARE(changed.count(), 2);
+    QCOMPARE(batch.count(), 1);
+    QCOMPARE(batch[0][0].toStringList(), QStringList({"denoise/enabled", "sharpen/enabled"}));
+    const QModelIndex group = page->proxy().index(0, 0);
+    QCOMPARE(page->proxy().index(0, 1, group).data(Qt::EditRole).toBool(), true);
+}
+
 void tst_Trial::screenshots()
 {
     const QString directory = qEnvironmentVariable("QPB_TRIAL_SCREENSHOTS");
     if (directory.isEmpty())
         QSKIP("Set QPB_TRIAL_SCREENSHOTS to save screenshots");
     m_window->inspector()->model().setValue("Camera/fov", 90);
+    m_window->plugins()->setAllEnabled(true);
     const char* names[] = {"inspector.png", "settings.png", "plugins.png"};
     for (int i = 0; i < 3; ++i) {
         m_window->tabs()->setCurrentIndex(i);

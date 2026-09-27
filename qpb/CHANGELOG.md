@@ -6,6 +6,15 @@ All notable changes to qpb are documented here. Each release has the sections
 From 1.0.0 on, releases within a major version never require changes to consuming code or CMake.
 Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC trial shows a problem.
 
+## 1.0.0 - 2026-09-27
+
+First stable release: the same content as `1.0.0-rc2`, which passed the RC trial without API or behaviour
+changes (docs/rc-trial.md). The public API is frozen for 1.x.
+
+### Upgrade notes
+- From `1.0.0-rc2`: nothing to do.
+- From `1.0.0-rc1`: see the `1.0.0-rc2` upgrade notes below.
+
 ## 1.0.0-rc2 - 2026-09-27
 
 Second release candidate, after the first RC trial round (docs/rc-trial.md).
