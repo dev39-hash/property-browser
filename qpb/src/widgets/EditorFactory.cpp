@@ -14,6 +14,7 @@
 #include <limits>
 #include <vector>
 
+#include "Int64SpinBox_p.h"
 #include "PathEdit_p.h"
 #include "widgets_p.h"
 
@@ -87,6 +88,37 @@ EditorHandler intEditor()
         auto* spinBox = static_cast<QSpinBox*>(editor);
         spinBox->interpretText();
         return QVariant(spinBox->value());
+    };
+    return handler;
+}
+
+// --- Int64 -----------------------------------------------------------------------
+
+EditorHandler int64Editor()
+{
+    EditorHandler handler;
+    handler.createEditor = [](QWidget* parent, const Property&) {
+        auto* spinBox = new detail::Int64SpinBox(parent);
+        spinBox->setFrame(false);
+        spinBox->setKeyboardTracking(false);
+        return spinBox;
+    };
+    handler.applyAttributes = [](QWidget* editor, const Property& property) {
+        auto* spinBox = static_cast<detail::Int64SpinBox*>(editor);
+        spinBox->setRange(
+            property.attribute(Attr::Minimum, std::numeric_limits<qint64>::min()).toLongLong(),
+            property.attribute(Attr::Maximum, std::numeric_limits<qint64>::max()).toLongLong());
+        spinBox->setSingleStep(property.attribute(Attr::Step, 1).toLongLong());
+        spinBox->setPrefix(property.attribute(Attr::Prefix).toString());
+        spinBox->setSuffix(property.attribute(Attr::Suffix).toString());
+    };
+    handler.setEditorData = [](QWidget* editor, const QVariant& value, const Property&) {
+        static_cast<detail::Int64SpinBox*>(editor)->setValue(value.toLongLong());
+    };
+    handler.editorData = [](QWidget* editor, const Property&) {
+        auto* spinBox = static_cast<detail::Int64SpinBox*>(editor);
+        spinBox->interpretInput();
+        return QVariant::fromValue(spinBox->value());
     };
     return handler;
 }
@@ -256,6 +288,7 @@ EditorFactory::EditorFactory()
     d->insert(Types::Enum, enumEditor());
     d->insert(Types::FilePath, pathEditor(detail::PathEdit::Kind::File));
     d->insert(Types::DirPath, pathEditor(detail::PathEdit::Kind::Directory));
+    d->insert(Types::Int64, int64Editor()); // 1.2
 }
 
 EditorFactory::~EditorFactory() = default;

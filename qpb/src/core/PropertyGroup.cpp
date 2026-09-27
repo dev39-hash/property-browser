@@ -68,6 +68,11 @@ BoolBuilder PropertyGroup::addBool(const QString& id, bool value)
     return BoolBuilder(add(Types::Bool, id, value));
 }
 
+Int64Builder PropertyGroup::addInt64(const QString& id, qint64 value)
+{
+    return Int64Builder(add(Types::Int64, id, value));
+}
+
 IntBuilder PropertyGroup::addInt(const QString& id, int value)
 {
     return IntBuilder(add(Types::Int, id, value));

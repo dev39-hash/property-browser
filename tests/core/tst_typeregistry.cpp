@@ -37,6 +37,7 @@ private slots:
     void boolType();
     void intClampsAndDisplays();
     void intConversion();
+    void int64ClampsDisplaysAndConverts();
     void doubleRoundsClampsAndDisplays();
     void doubleRejectsNaN();
     void stringMaxLengthAndPattern();
@@ -99,6 +100,41 @@ void tst_TypeRegistry::intClampsAndDisplays()
 
     Property& big = root->addInt(QStringLiteral("big"), 1234567);
     QCOMPARE(display(big), QLocale().toString(1234567));
+}
+
+// Since 1.2.
+void tst_TypeRegistry::int64ClampsDisplaysAndConverts()
+{
+    QVERIFY(TypeRegistry::global().contains(Types::Int64));
+    QCOMPARE(TypeRegistry::global().types().indexOf(TypeId(Types::Int64)), 7); // after 1.0's
+    QCOMPARE(
+        TypeRegistry::global().handler(Types::Int64)->storageType, QMetaType::fromType<qint64>());
+
+    auto root = PropertyGroup::create(QStringLiteral("r"));
+    const qint64 big = qint64(1) << 40;
+    Property& n = root->addInt64(QStringLiteral("n"), 5)
+                      .range(-big, big)
+                      .step(1000)
+                      .prefix(QStringLiteral("#"))
+                      .suffix(QStringLiteral(" B"));
+    QCOMPARE(n.typeId(), TypeId(Types::Int64));
+    QCOMPARE(n.value(), QVariant(qint64(5)));
+    QCOMPARE(n.attribute(Attr::Step), QVariant(qint64(1000)));
+    QVERIFY(n.setValue(big * 4));
+    QCOMPARE(n.value(), QVariant(big));
+    QVERIFY(n.setValue(-big - 1));
+    QCOMPARE(n.value(), QVariant(-big));
+    QCOMPARE(display(n), QStringLiteral("#") + QLocale().toString(-big) + QStringLiteral(" B"));
+
+    // Conversion from other types, e.g. text read from an INI file.
+    QVERIFY(n.setValue(QStringLiteral("123456789012")));
+    QCOMPARE(n.value(), QVariant(qint64(123456789012)));
+    QVERIFY(n.setValue(7)); // int
+    QCOMPARE(n.value(), QVariant(qint64(7)));
+
+    // Without attributes: the whole range.
+    Property& full = root->addInt64(QStringLiteral("full"), std::numeric_limits<qint64>::max());
+    QCOMPARE(full.value(), QVariant(std::numeric_limits<qint64>::max()));
 }
 
 void tst_TypeRegistry::intConversion()
