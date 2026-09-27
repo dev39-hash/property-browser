@@ -164,7 +164,7 @@ M5.4 attribute `multiline` · M5.5 `tests/api_compat/v1_1.cpp` + diff API snapsh
 `tests/widgets/tst_propertyformview.cpp`), `PropertyFilterProxyModel` trong `qpb::core` (7 test), attribute `multiline`
 (tree view và form), `tests/api_compat/v1_1.cpp` và snapshot `api-1.1.txt` (chứa trọn `api-1.0.txt`, file này vẫn được
 kiểm tra). Ô search là `QLineEdit` của ứng dụng nối với `setFilterFixedString()`, minh họa trong `examples/form_view`.
-Quyết định D36–D39 trong SPEC. Còn lại: M5.6 (release 1.1.0) sau khi merge.
+Quyết định D36–D39 trong SPEC. M5.6: đã phát hành `1.1.0`.
 
 ### M6 — 1.2 (chỉ bổ sung)
 
