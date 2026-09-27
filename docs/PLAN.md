@@ -93,6 +93,13 @@ model and runs the value pipeline from a statically linked copy of `qpb/` (this 
 
 ### M3 — Tree view + editors (≈ 24h)
 
+**Status:** done, except the internal `0.1.0` tag (M3.8), which is left to the maintainer. `qpb::widgets` is implemented
+(`EditorFactory` with the seven built-in editors, internal `PathEdit`, `PropertyDelegate`, `PropertyTreeView`); all five
+examples now link and start. `tests/widgets` covers the factory (13 functions) and view/delegate interaction (19 functions:
+Enter/Escape/focus-out, Tab/Shift+Tab skipping, enum and path commits, dialog focus protection, check boxes, validation tool
+tip, modes, hidden rows, context-menu reset, proxy models). The manual pass used offscreen screenshots (`QPB_SCREENSHOT_DIR`).
+The decision point after M3.6 did not trigger: no hacks beyond an event filter and a `moveCursor()` override were needed.
+
 High-risk parts first: Int + String + FilePath (editor UX, focus while a dialog is open).
 
 | ID    | Task                                                                                         | h | Done when |
