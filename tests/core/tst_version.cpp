@@ -28,7 +28,10 @@ void tst_Version::componentsMatchString()
                                        .arg(QPB_VERSION_MAJOR)
                                        .arg(QPB_VERSION_MINOR)
                                        .arg(QPB_VERSION_PATCH);
-    QCOMPARE(fromComponents, QStringLiteral(QPB_VERSION_STR));
+    // QPB_VERSION_STR may carry a pre-release suffix ("1.0.0-rc1").
+    const QString full = QStringLiteral(QPB_VERSION_STR);
+    QVERIFY2(full == fromComponents || full.startsWith(fromComponents + QLatin1Char('-')),
+        qPrintable(full));
     QCOMPARE(
         QPB_VERSION, QPB_VERSION_CHECK(QPB_VERSION_MAJOR, QPB_VERSION_MINOR, QPB_VERSION_PATCH));
 }

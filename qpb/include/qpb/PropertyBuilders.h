@@ -13,9 +13,9 @@
 namespace qpb {
 
 // Fluent configuration of a property right after it was added to a group
-// (docs/SPEC.md §4.3):
+// (docs/SPEC.md section 4.3):
 //
-//   group.addInt("fov", 60).range(10, 170).suffix(QStringLiteral("°"));
+//   group.addInt("fov", 60).range(10, 170).suffix(QStringLiteral(" deg"));
 //
 // A builder is a lightweight handle to a property owned by its group; keep the
 // Property& (builders convert implicitly) rather than the builder itself.

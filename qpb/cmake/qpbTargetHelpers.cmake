@@ -44,15 +44,15 @@ function(qpb_add_library target)
     )
 
     if(MSVC)
-        target_compile_options(${target} PRIVATE /W4 /permissive- /Zc:__cplusplus)
+        target_compile_options(${target} PRIVATE /W4 /permissive- /Zc:__cplusplus /utf-8)
     else()
         target_compile_options(${target} PRIVATE -Wall -Wextra -Wpedantic)
     endif()
 
     set_target_properties(${target} PROPERTIES
         OUTPUT_NAME ${arg_OUTPUT_NAME}
-        VERSION ${PROJECT_VERSION}
-        SOVERSION ${PROJECT_VERSION_MAJOR}
+        VERSION ${QPB_VERSION}
+        SOVERSION ${QPB_VERSION_MAJOR}
         AUTOMOC ON
         CXX_EXTENSIONS OFF
         CXX_VISIBILITY_PRESET hidden
