@@ -53,9 +53,11 @@ QVariant PropertyPrivate::convertInitial(const QVariant& input) const
     return converted.convert(handler->storageType) ? converted : input;
 }
 
-bool PropertyPrivate::assign(const QVariant& input)
+bool PropertyPrivate::assign(const QVariant& input, Origin origin)
 {
-    if (q->isGroup() || q->isReadOnly() || !q->isEnabled())
+    if (q->isGroup())
+        return false;
+    if (origin == Origin::User && (q->isReadOnly() || !q->isEnabled()))
         return false;
 
     const TypeHandler* handler = TypeRegistry::global().handler(typeId);
@@ -200,7 +202,7 @@ QVariant Property::value() const
 
 bool Property::setValue(const QVariant& value)
 {
-    return d->assign(value);
+    return d->assign(value, PropertyPrivate::Origin::Application);
 }
 
 QVariant Property::defaultValue() const
@@ -237,7 +239,7 @@ bool Property::resetToDefault()
             observer->endBatch();
         return ok;
     }
-    return d->assign(d->defaultValue);
+    return d->assign(d->defaultValue, PropertyPrivate::Origin::Application);
 }
 
 Property::Validator Property::validator() const
