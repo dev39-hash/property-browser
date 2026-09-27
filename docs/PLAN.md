@@ -1,155 +1,201 @@
 # qpb — Kế hoạch triển khai
 
 > Đặc tả: [`SPEC.md`](SPEC.md). Ý tưởng gốc: [`brainstorm.md`](brainstorm.md).
-> Giả định nguồn lực: **bán thời gian (~15 giờ/tuần)**, một người. v0.1 time-box **4 tuần**.
-> Nếu hết tuần 4 mà M3 chưa xong: **cắt phạm vi, không kéo dài** (xem mục 5).
+> Giả định nguồn lực: **bán thời gian (~15 giờ/tuần)**, một người.
+
+## 0. Định hướng (bản điều chỉnh)
+
+Ba mục tiêu chi phối toàn bộ kế hoạch (SPEC §1.1):
+
+1. **API cố định (G5):** project đã dùng qpb nâng cấp trong cùng major version **không phải sửa code**.
+   → Thiết kế API *trước* khi cài đặt (API-first), bản đầu tiên cho project thật là **1.0** và khóa API ngay từ đó.
+   0.x chỉ dùng nội bộ trong repo.
+2. **Phân phối dạng component folder (G6):** chép `qpb/` vào `components/qpb/` của project, thêm 2 dòng CMake.
+   Cập nhật = thay folder + build lại. → Cấu trúc repo lấy folder `qpb/` làm trung tâm từ ngày đầu,
+   tests và examples dùng nó y như một consumer.
+3. **Viết mới hoàn toàn (G7):** không wrap/fork, không chép code từ QtPropertyBrowser/QtnProperty.
+   (Bước "thử lib có sẵn rồi quyết định wrap" của bản kế hoạch trước đã bị bỏ.)
+
+Hệ quả so với bản trước: thêm ~18 giờ cho thiết kế API, kiểm thử tương thích và đóng gói;
+có thêm giai đoạn **dùng thử (RC)** trong một project thật trước khi tag 1.0.
 
 ---
 
 ## 1. Tổng quan milestone
 
-| Milestone | Tuần | Kết quả kiểm chứng được                                                    | Giả định được test (brainstorm §9)            |
-|-----------|------|------------------------------------------------------------------------------|-----------------------------------------------|
-| **M0** Kiểm chứng & khung   | 0 (2–3 ngày) | Quyết định "viết mới" có căn cứ; repo build được lib rỗng + test rỗng | Lib hiện có không đáp ứng; nhu cầu ≥ 3 project |
-| **M1** Core + Model         | 1–2  | Toàn bộ `qpb::core` pass test, kể cả `QAbstractItemModelTester`               | Builder + `QVariant` đủ tiện tay              |
-| **M2** Tree view + editor   | 2–3  | Demo inspector sửa được 7 kiểu, bàn phím đầy đủ                               | UX editor làm được trong `QStyledItemDelegate` |
-| **M3** Hoàn thiện v0.1      | 4    | List mode, reset, QColor example, CMake install; tag `v0.1.0`                 | Một model nuôi nhiều view (một nửa)           |
-| **M4** v0.2                 | 5–7  | Form view + filter; inspector chuyển 3 view                                   | Một model nuôi cả tree/list/form              |
-| **M5** v0.3                 | 8–11 | QObject adapter, serialize, qint64                                            | —                                             |
+| Milestone | Tuần (ước lượng) | Kết quả kiểm chứng được                                                                 |
+|-----------|------------------|------------------------------------------------------------------------------------------|
+| **M0** Khung component           | 1        | Folder `qpb/` build được như một component; `tests/consumer` dùng nó bằng `add_subdirectory` |
+| **M1** Thiết kế API 1.0          | 1–2      | Toàn bộ header public 1.0 được viết và review; code mẫu biên dịch được trên header       |
+| **M2** Core + Model              | 2–3      | `qpb::core` cài đặt đủ, pass test kể cả `QAbstractItemModelTester`                       |
+| **M3** Tree view + editor        | 4–5      | Inspector sửa được 7 kiểu, bàn phím đầy đủ → tag nội bộ `0.1.0`                          |
+| **M4** Hoàn thiện & khóa API     | 6        | List mode, reset, test tương thích, gói release → `1.0.0-rc1`                            |
+| **RC** Dùng thử                  | 7–8      | rc1 chạy trong ≥ 1 project thật mà không phải đổi API → tag `1.0.0`                      |
+| **M5** 1.1                       | sau 1.0  | Form view + filter (chỉ bổ sung)                                                          |
+| **M6** 1.2                       | sau 1.1  | QObject adapter, serialize, Int64 (chỉ bổ sung)                                          |
 
-Tổng thời gian đến v0.3 ước tính 11 tuần bán thời gian. Chỉ M0–M3 là cam kết; M4–M5 lập kế hoạch lại sau khi dùng v0.1 trong một project thật.
+M0–M4 ≈ 86 giờ (≈ 6 tuần bán thời gian). M5–M6 sẽ lập kế hoạch lại sau khi 1.0 được dùng thật.
 
 ---
 
 ## 2. Chi tiết công việc
 
-Mỗi task có **Done khi** (tiêu chí chấp nhận). Ước lượng tính bằng giờ tập trung.
+Mỗi task có ước lượng (giờ tập trung) và tiêu chí **Done khi**.
 
-### M0 — Kiểm chứng & khung (≈ 8h)
+### M0 — Khung component (≈ 8h)
 
-| ID    | Task                                                                                         | Ước lượng | Done khi |
-|-------|----------------------------------------------------------------------------------------------|-----------|----------|
-| M0.1  | Liệt kê ≥ 3 project/panel thật sẽ dùng lib (ghi vào `docs/use-cases.md`)                    | 1h        | Có tên project + danh sách property của ít nhất 1 panel thật |
-| M0.2  | Time-box 1h: thử bản port Qt 6 của QtPropertyBrowser và QtnProperty với panel ở M0.1          | 2h        | Ghi kết luận "đủ/không đủ, vì sao" vào `docs/use-cases.md`. Nếu "đủ" → **dừng, cân nhắc wrap/fork** |
-| M0.3  | Khung CMake: `qpb_core`, `qpb_widgets` (1 file rỗng mỗi lib), alias `qpb::*`, option `QPB_BUILD_TESTS/EXAMPLES`, cờ cảnh báo | 2h | `cmake --build` + `ctest` chạy trên Qt 6.8 |
-| M0.4  | Test rỗng dùng Qt Test ở `tests/core`, `tests/widgets` (offscreen)                            | 1h        | `ctest` báo 2 test pass |
-| M0.5  | `.clang-format`, `.gitignore`, `LICENSE` (MIT), cập nhật `README.md` (mục tiêu + link docs)   | 1h        | Có trong repo |
-| M0.6  | (tùy chọn) GitHub Actions: Ubuntu + Qt 6.8, build + test                                      | 1h        | Workflow xanh |
+| ID    | Task                                                                                                  | Giờ | Done khi |
+|-------|-------------------------------------------------------------------------------------------------------|-----|----------|
+| M0.1  | Ghi `docs/use-cases.md`: ≥ 3 project/panel thật sẽ dùng qpb, kèm danh sách property của 1 panel     | 1   | Có file; dùng làm dữ liệu cho M1 |
+| M0.2  | Tạo cấu trúc repo theo SPEC §6.1: `qpb/{CMakeLists.txt,VERSION,LICENSE,CHANGELOG.md,include/qpb,src}`, CMake gốc cho dev | 2 | `cmake -S . -B build && cmake --build build` chạy |
+| M0.3  | `qpb/CMakeLists.txt` tuân **toàn bộ** SPEC §6.3 (không biến global, static mặc định, `find_package` có điều kiện, không `.qrc`) | 2 | Review checklist §6.3 từng dòng |
+| M0.4  | `qpbglobal.h` sinh từ `VERSION`: `QPB_VERSION*`, `QPB_VERSION_CHECK`, export macro, `QPB_DEPRECATED_X`, `QPB_DISABLE_DEPRECATED` | 1 | Test in ra `qpb::version()` |
+| M0.5  | `tests/consumer/`: project CMake độc lập chép `qpb/` vào `components/qpb/` (bước copy trong CTest) rồi build app tối thiểu | 1 | CTest pass; build cả C++17 và C++20 |
+| M0.6  | `.clang-format`, `.gitignore`, cập nhật README; (tùy chọn) GitHub Actions Ubuntu + Qt 6.8                | 1   | Có trong repo |
 
-### M1 — Core + Model (≈ 22h)
+### M1 — Thiết kế API 1.0 (≈ 10h) — *API-first*
 
-| ID    | Task                                                                                         | Ước lượng | Done khi |
-|-------|----------------------------------------------------------------------------------------------|-----------|----------|
-| M1.1  | `Property`: dữ liệu, cờ, trạng thái hiệu lực kế thừa (SPEC §4.2), `path()`                    | 3h        | Test: kế thừa readOnly/enabled/visible qua 3 tầng; path đúng |
-| M1.2  | `PropertyGroup`: con có thứ tự, `add`/`remove`/`find`, id trùng (SPEC §4.3)                   | 2h        | Test: find theo path lồng, remove, id trùng không tạo nút mới |
-| M1.3  | `PropertyBuilder<T>`, `EnumBuilder`, `PathBuilder`, hằng `Attr::*` (SPEC §4.3–4.4)            | 3h        | Ví dụ Phụ lục A biên dịch; `addInt(...).regex(...)` **không** biên dịch (test compile-fail tùy chọn) |
-| M1.4  | `TypeRegistry` + `TypeHandler` + 7 kiểu cơ bản: displayText, normalize (clamp/decimals), validate (SPEC §4.5, §4.7) | 4h | Test cho mỗi kiểu: hiển thị, clamp, regex, enum ngoài options, mustExist |
-| M1.5  | `PropertyModel` chỉ đọc: `index/parent/rowCount/columnCount/data/flags/headerData`, role tùy biến | 3h     | `QAbstractItemModelTester` (Fatal) pass trên cây 3 tầng |
-| M1.6  | Pipeline ghi giá trị (SPEC §4.6, 6 bước) + `valueChanged`/`validationFailed`; `Property::setValue`, `PropertyModel::setValue` | 3h | `QSignalSpy`: đúng 1 signal khi đổi, 0 khi bằng giá trị cũ, 0 khi read-only, `validationFailed` khi lỗi |
-| M1.7  | `TreeObserver`: insert/remove/metadata khi model sống; `setRoot`                             | 3h        | Tester pass khi thêm/xóa property lúc chạy; `dataChanged` khi `setReadOnly`/`setVisible` |
-| M1.8  | Batch (`beginBatch/endBatch` lồng) + `resetToDefault` (đệ quy cho group)                      | 1h        | Test: `batchValueChanged` phát 1 lần ở batch ngoài cùng |
+Mục tiêu: chốt hình dạng API **trước khi** có code cài đặt để phụ thuộc vào, vì sau 1.0 không còn sửa được.
 
-**Checkpoint cuối M1:** viết `examples/quickstart` (chưa có view, chỉ in `valueChanged`) đúng 30 dòng. Nếu API gây khó chịu → sửa builder **ngay bây giờ**, trước khi có code view phụ thuộc.
+| ID    | Task                                                                                                  | Giờ | Done khi |
+|-------|-------------------------------------------------------------------------------------------------------|-----|----------|
+| M1.1  | Viết toàn bộ header public 1.0 (chỉ khai báo + comment tài liệu): `Property`, `PropertyGroup`, builders, `Attr`, `Types`, `TypeRegistry`, `ValidationResult`, `PropertyModel`, `EditorFactory`, `PropertyDelegate`, `PropertyTreeView`, `qpb.h` | 4 | Mọi header tuân SPEC §9.3 (d-pointer, không data member public, không logic inline) |
+| M1.2  | Viết trên header (chỉ biên dịch, chưa link): `examples/quickstart` (≤ 30 dòng), `examples/custom_type` (QColor), và panel thật từ M0.1 | 2 | Biên dịch được thành object file; tự đánh giá độ tiện tay |
+| M1.3  | **Kiểm tra chừa chỗ cho tương lai:** phác thảo (không cài đặt) header của `PropertyFormView`, `PropertyFilterProxyModel`, `QObjectPropertySource`, serialize, `Int64` chỉ dùng API public 1.0 | 2 | Không cần thêm/sửa gì ở API 1.0; nếu cần → sửa API **bây giờ** |
+| M1.4  | Review API theo checklist SPEC §9.2–9.3; ghi quyết định mới vào SPEC Phụ lục B                          | 1   | Checklist ký tên; SPEC cập nhật |
+| M1.5  | Test "header tự đủ" (mỗi header public include riêng lẻ) đưa vào CTest                               | 1   | CTest pass |
 
-### M2 — Tree view + editor (≈ 24h)
+Từ sau M1, thay đổi header public phải ghi lý do vào Phụ lục B (vẫn cho phép đến trước 1.0, nhưng phải có lý do).
 
-Làm theo thứ tự rủi ro cao trước: Int + String + FilePath để kiểm chứng UX editor (brainstorm §9, prototype 1 ngày).
+### M2 — Core + Model (≈ 22h)
 
-| ID    | Task                                                                                         | Ước lượng | Done khi |
-|-------|----------------------------------------------------------------------------------------------|-----------|----------|
-| M2.1  | `EditorFactory` + `EditorHandler`, tra `editorId` → `typeId`, `notifyCommit` (SPEC §5.1–5.2) | 2h        | Test headless: tạo editor theo typeId và theo editorId |
-| M2.2  | `PropertyDelegate` cơ bản: create/set/commit qua factory; Int + String                        | 3h        | Test: edit Int → model đổi; Esc hủy; focus-out commit |
-| M2.3  | `PropertyTreeView` Mode::Tree: 2 cột, group spanned, ẩn hàng theo `IsVisibleRole`, edit triggers | 3h     | Demo `examples/inspector` hiện cây Phụ lục A |
-| M2.4  | `PathEdit` (file/dir) + chặn `FocusOut` khi dialog mở + hook test (SPEC §5.3–5.4, D6)          | 4h        | Test: mở "dialog" giả → editor không đóng; chọn xong → commit ngay. Kiểm tay trên 1 OS có dialog native |
-| M2.5  | Double, Enum (commit khi chọn), Bool (checkbox qua `CheckStateRole`, click + Space)           | 3h        | Test cho từng kiểu trong tree |
-| M2.6  | Điều hướng bàn phím: Enter, Esc, Tab/Shift+Tab sang ô editable kế tiếp (bỏ group/read-only)  | 4h        | Test `QTest::keyClick` qua 5 property có group xen giữa |
-| M2.7  | Hiển thị lỗi validation (tooltip tại ô, D5); elide path giữa; paint group                    | 2h        | Nhập regex sai → giá trị cũ giữ nguyên + tooltip |
-| M2.8  | Kiểm tay trọn bộ trên inspector, ghi lỗi UX vào issue                                         | 3h        | Danh sách lỗi UX, lỗi chặn đã sửa |
+| ID    | Task                                                                                         | Giờ | Done khi |
+|-------|----------------------------------------------------------------------------------------------|-----|----------|
+| M2.1  | `Property` + d-pointer: dữ liệu, cờ, trạng thái hiệu lực kế thừa, `path()` (SPEC §4.2)        | 3   | Test kế thừa readOnly/enabled/visible qua 3 tầng; path đúng |
+| M2.2  | `PropertyGroup`: `add`/`remove`/`find`, id trùng (SPEC §4.3)                                  | 2   | Test find lồng, remove, id trùng không tạo nút mới |
+| M2.3  | Builders + `Attr::*` (SPEC §4.3–4.4)                                                          | 3   | quickstart ở M1.2 giờ link và chạy |
+| M2.4  | `TypeRegistry` + 7 kiểu cơ bản: displayText, normalize, validate; đăng ký lười (SPEC §4.5, §4.7, §6.3) | 4 | Test từng kiểu; test link static không mất kiểu cơ bản |
+| M2.5  | `PropertyModel` đọc: index/parent/data/flags/header, role (kể cả dải `UserRole`)             | 3   | `QAbstractItemModelTester` (Fatal) pass trên cây 3 tầng |
+| M2.6  | Pipeline ghi giá trị 6 bước + `valueChanged`/`validationFailed` (SPEC §4.6)                   | 3   | `QSignalSpy`: 1 signal khi đổi, 0 khi bằng cũ/read-only; lỗi → `validationFailed` |
+| M2.7  | `TreeObserver`: thêm/xóa/metadata khi model sống; `setRoot`                                   | 3   | Tester pass khi thêm/xóa lúc chạy |
+| M2.8  | Batch lồng + `resetToDefault` đệ quy                                                          | 1   | `batchValueChanged` phát 1 lần ở batch ngoài cùng |
 
-**Điểm dừng quyết định (cuối tuần 3):** nếu M2.4 hoặc M2.6 cần hack sâu hơn `eventFilter`/`QTreeView::moveCursor`
-(vd. phải thay cả cơ chế edit của `QAbstractItemView`) → ghi lại, và cân nhắc để Form view (editor thường trực) làm view chính.
+### M3 — Tree view + editor (≈ 24h)
 
-### M3 — Hoàn thiện v0.1 (≈ 14h)
+Làm phần rủi ro cao trước: Int + String + FilePath (UX editor, focus khi mở dialog).
 
-| ID    | Task                                                                                         | Ước lượng | Done khi |
-|-------|----------------------------------------------------------------------------------------------|-----------|----------|
-| M3.1  | Mode::List (D4): không decoration, indent 0, expandAll giữ khi insert, group là section header | 2h       | Test: đổi Tree↔List giữ giá trị + selection; inspector có nút chuyển |
-| M3.2  | Context menu Reset to default / Reset group                                                  | 1h        | Test: action disabled khi không modified |
-| M3.3  | `examples/custom_type`: `ColorButton` + đăng ký `app.color` ≤ 100 dòng (S2)                   | 2h        | Đếm dòng ≤ 100; màu hiển thị ô swatch; edit được |
-| M3.4  | Hoàn thiện `examples/quickstart` với view (S1 ≤ 30 dòng)                                      | 1h        | Đếm dòng ≤ 30 |
-| M3.5  | `install(EXPORT)`, `qpbConfig.cmake`, version file; test consumer bằng `find_package` và `FetchContent` | 3h | Thư mục `tests/consumer` build được từ bản install |
-| M3.6  | Kiểm tra luật kiến trúc: grep `QtWidgets` trong `src/core` = 0; không `switch` theo typeId trong view (R1, R2) | 1h | Script `tools/check_arch.sh` chạy trong CTest |
-| M3.7  | Build Windows (MSVC) + macOS ít nhất một lần; sửa cảnh báo                                    | 2h        | Build sạch cảnh báo trên 3 OS |
-| M3.8  | `CHANGELOG.md`, cập nhật README (quickstart), tag `v0.1.0`                                     | 2h        | Tag đã push |
+| ID    | Task                                                                                         | Giờ | Done khi |
+|-------|----------------------------------------------------------------------------------------------|-----|----------|
+| M3.1  | `EditorFactory` + tra `editorId` → `typeId` + `notifyCommit` (SPEC §5.1–5.2)                 | 2   | Test headless tạo editor theo typeId/editorId |
+| M3.2  | `PropertyDelegate`: create/set/commit qua factory; Int + String                               | 3   | Edit Int → model đổi; Esc hủy; focus-out commit |
+| M3.3  | `PropertyTreeView` Mode::Tree: 2 cột, group spanned, ẩn theo `IsVisibleRole`                  | 3   | `examples/inspector` hiện cây Phụ lục A |
+| M3.4  | `PathEdit` file/dir + chặn FocusOut khi dialog mở + hook test (SPEC §5.3–5.4, D6)             | 4   | Dialog giả không đóng editor; chọn xong commit ngay; thử tay dialog native |
+| M3.5  | Double, Enum (commit khi chọn), Bool (`CheckStateRole`, click + Space)                        | 3   | Test từng kiểu |
+| M3.6  | Bàn phím: Enter, Esc, Tab/Shift+Tab bỏ qua group/read-only                                    | 4   | `QTest::keyClick` qua 5 property có group xen giữa |
+| M3.7  | Lỗi validation (tooltip tại ô), elide path giữa, paint group, in đậm khi modified             | 2   | Regex sai → giữ giá trị cũ + tooltip |
+| M3.8  | Kiểm tay toàn bộ inspector; sửa lỗi chặn; tag nội bộ `0.1.0`                                  | 3   | Danh sách lỗi UX; lỗi chặn đã sửa |
 
-### M4 — v0.2 (≈ 30h, lập kế hoạch lại sau v0.1)
+**Điểm dừng quyết định (cuối M3.6):** nếu Tab/FocusOut cần thay cả cơ chế edit của `QAbstractItemView`
+→ cân nhắc đưa Form view (editor thường trực) lên làm view chính của 1.0. Quyết định này **phải có trước M4**
+vì sau 1.0 không đổi được.
+
+### M4 — Hoàn thiện & khóa API (≈ 22h)
+
+| ID    | Task                                                                                         | Giờ | Done khi |
+|-------|----------------------------------------------------------------------------------------------|-----|----------|
+| M4.1  | Mode::List (D4) + nút chuyển trong inspector                                                  | 2   | Đổi Tree↔List giữ giá trị và selection |
+| M4.2  | Context menu Reset to default / Reset group                                                   | 1   | Action disabled khi không modified |
+| M4.3  | Hoàn thiện examples; đo S1 (≤ 30 dòng) và S2 (≤ 100 dòng) bằng script                         | 2   | Script trong CTest |
+| M4.4  | `tests/api_compat/v1_0.cpp`: dùng **toàn bộ** API public 1.0 (build + chạy)                   | 3   | CTest pass; file được đóng băng từ đây |
+| M4.5  | Mở rộng `tests/consumer`: static/shared, C++17/C++20, kiểm tra không rò rỉ biến global (so sánh `CMAKE_*` trước/sau `add_subdirectory`), mô phỏng "thay folder rồi build lại" | 3 | CTest pass |
+| M4.6  | `tools/check_arch.sh`: core không include QtWidgets/QtGui; view không rẽ nhánh theo typeId; `src/` không bị include từ header public (R1, R2, R5) | 1 | Chạy trong CTest |
+| M4.7  | Build Windows (MSVC) + macOS; header public sạch cảnh báo dưới `-Wall -Wextra -Wpedantic` / `/W4` | 3 | Sạch trên 3 OS |
+| M4.8  | Tạo snapshot API gốc (`tools/api_snapshot`) để so sánh từ 1.1                                  | 2   | File snapshot trong repo |
+| M4.9  | Quy trình phát hành (mục 4): `CHANGELOG.md`, zip `qpb-1.0.0-rc1.zip` chỉ chứa `qpb/`, nhánh `qpb-release` bằng `git subtree split` | 3 | Release rc1 trên GitHub |
+| M4.10 | Review API lần cuối với SPEC §9; README hướng dẫn tích hợp component + chính sách nâng cấp       | 2   | Review xong |
+
+### RC — Dùng thử trước khi khóa (1–2 tuần, song song việc khác)
 
 | ID    | Task                                                                                         | Done khi |
 |-------|----------------------------------------------------------------------------------------------|----------|
-| M4.1  | `PropertyFormView`: dựng form từ model, editor thường trực, group collapsible (SPEC §5.6)    | Inspector hiện Form cùng model với Tree |
-| M4.2  | Đồng bộ hai chiều form ↔ model (dataChanged, insert/remove/reset) không vòng lặp             | Test: sửa ở Tree → Form cập nhật và ngược lại, 2 view cùng mở |
-| M4.3  | `PropertyFilterProxyModel` + ô search trong inspector (SPEC §5.7)                            | Lọc "x" hiện `Transform/x` kèm group cha |
-| M4.4  | String `multiline` (`QPlainTextEdit`, Ctrl+Enter commit)                                     | Test commit/hủy |
-| M4.5  | In đậm tên khi modified (`IsModifiedRole`), tooltip đầy đủ                                    | Test ảnh chụp/role |
-| M4.6  | Tag `v0.2.0`                                                                                 | — |
+| RC.1  | Tích hợp `1.0.0-rc1` vào ≥ 1 project thật từ M0.1 bằng `components/qpb/`                        | Panel thật chạy |
+| RC.2  | Ghi mọi chỗ "khó chịu" với API. Nếu phải đổi API → sửa, phát `rc2`, lặp lại RC                  | Một vòng RC không cần đổi API |
+| RC.3  | Tag `1.0.0` (cùng nội dung RC cuối, chỉ đổi `VERSION`)                                          | Tag + release zip |
 
-### M5 — v0.3 (≈ 40h, lập kế hoạch lại sau v0.2)
+### M5 — 1.1 (chỉ bổ sung, lập kế hoạch lại sau 1.0)
 
-| ID    | Task                                                                                         | Done khi |
-|-------|----------------------------------------------------------------------------------------------|----------|
-| M5.1  | `QObjectPropertySource`: đọc `Q_PROPERTY`, metadata qua `Q_CLASSINFO`, đồng bộ qua notify signal | Test với QObject mẫu: đổi từ UI → setter được gọi; đổi từ code → UI cập nhật |
-| M5.2  | Serialize: `toJson/fromJson`, `save/load(QSettings&)` theo path                              | Round-trip test |
-| M5.3  | `qint64` + spinbox 64-bit                                                                     | Test giá trị > INT_MAX |
-| M5.4  | Tài liệu tích hợp `QUndoStack` (example dùng old/new trong `valueChanged`)                    | Example chạy được |
+M5.1 `PropertyFormView` (SPEC §5.6) · M5.2 đồng bộ hai chiều form ↔ model · M5.3 `PropertyFilterProxyModel` + ô search ·
+M5.4 attribute `multiline` · M5.5 `tests/api_compat/v1_1.cpp` + diff API snapshot (chỉ được thêm) · M5.6 release 1.1.0.
+
+### M6 — 1.2 (chỉ bổ sung)
+
+M6.1 `QObjectPropertySource` · M6.2 serialize JSON/`QSettings` · M6.3 `Types::Int64` · M6.4 example `QUndoStack` ·
+M6.5 `v1_2.cpp` + diff snapshot · M6.6 release 1.2.0.
 
 ---
 
 ## 3. Phụ thuộc giữa các task
 
 ```text
-M0.3 ─► M1.1 ─► M1.2 ─► M1.3 ──────────────► (checkpoint quickstart)
-             └► M1.4 ─┐
-                      ├► M1.5 ─► M1.6 ─► M1.7 ─► M1.8
-M1.4 ─► M2.1 ─► M2.2 ─► M2.3 ─► M2.4, M2.5 ─► M2.6 ─► M2.7 ─► M2.8
-M2.3 ─► M3.1, M3.2          M2.1 ─► M3.3          M0.3 ─► M3.5
+M0.2 ─► M0.3 ─► M0.4 ─► M0.5
+M0.* ─► M1.1 ─► M1.2, M1.3 ─► M1.4 ─► M1.5
+M1.* ─► M2.1 ─► M2.2 ─► M2.3
+        M2.4 ─► M2.5 ─► M2.6 ─► M2.7 ─► M2.8
+M2.4 ─► M3.1 ─► M3.2 ─► M3.3 ─► M3.4, M3.5 ─► M3.6 ─► M3.7 ─► M3.8
+M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6
 ```
 
-M1.4 (registry) và M1.1–M1.3 có thể làm song song. M3.5 (CMake install) độc lập, làm khi cần "nghỉ" khỏi UI.
+---
+
+## 4. Quy trình phát hành (mọi bản 1.x)
+
+1. Cập nhật `qpb/VERSION` và mục mới trong `qpb/CHANGELOG.md` (Added / Changed / Deprecated / Fixed / **Upgrade notes**).
+2. CI xanh: unit test, `api_compat/*` của **mọi** bản trước, `tests/consumer`, `check_arch`, diff API snapshot chỉ có thêm.
+3. Thêm `tests/api_compat/v<x_y>.cpp` cho bản mới (bản minor) và cập nhật snapshot.
+4. Tag `vX.Y.Z` trên `main`.
+5. Tạo artifact: `qpb-X.Y.Z.zip` (chỉ folder `qpb/`) đính kèm GitHub Release; cập nhật nhánh `qpb-release`
+   (`git subtree split --prefix qpb -b qpb-release`) cho consumer dùng `git subtree pull`.
+
+**Phía consumer khi nâng cấp:** thay `components/qpb/` → build lại → đọc *Upgrade notes*. Với 1.x mong đợi là "không cần làm gì".
 
 ---
 
-## 4. Quy trình làm việc
+## 5. Quy trình làm việc
 
-- **Nhánh:** mỗi task (hoặc nhóm task nhỏ) một nhánh `feat/M1.4-type-registry`, PR vào `main`, squash merge.
-- **Definition of Done cho mọi PR:** build sạch cảnh báo; test mới cho hành vi mới; `ctest` pass (widgets chạy `offscreen`);
-  không vi phạm R1–R4 (SPEC §3); public API mới có ít nhất một nơi dùng.
+- **Nhánh:** mỗi task/nhóm task một nhánh `feat/M2.4-type-registry`, PR vào `main`, squash merge.
+- **Definition of Done cho mọi PR:** build sạch cảnh báo; test mới cho hành vi mới; `ctest` pass (widgets `offscreen`);
+  không vi phạm R1–R5 (SPEC §3); public API mới có nơi dùng.
+- **PR chạm `qpb/include/`:** phải có dòng "API change: none / additive / breaking" trong mô tả.
+  Sau 1.0, "breaking" bị từ chối trừ khi đang làm 2.0.
 - **Commit:** Conventional Commits (`feat(core): ...`, `fix(widgets): ...`).
-- **Review cuối mỗi milestone:** 30 phút đối chiếu với SPEC; cập nhật Phụ lục B (nhật ký quyết định) nếu có đổi thiết kế.
+- **Không chép code** từ QtPropertyBrowser/QtnProperty hay nguồn có license khác (G7); chỉ tham khảo hành vi UX.
 
 ---
 
-## 5. Rủi ro & phương án cắt phạm vi
+## 6. Rủi ro & phương án cắt phạm vi
 
-| Rủi ro                                         | Dấu hiệu                                    | Phản ứng                                                                    |
-|------------------------------------------------|---------------------------------------------|-----------------------------------------------------------------------------|
-| Chậm tiến độ v0.1                               | Cuối tuần 3 chưa xong M2.6                   | Cắt theo thứ tự: M3.7 (đa nền tảng) → DirPath → Tab navigation (giữ Enter/Esc) → M3.5 (dùng `add_subdirectory` trước) |
-| UX editor cần hack sâu                          | M2.4/M2.6 vượt 2× ước lượng                 | Điểm dừng cuối tuần 3 (xem M2)                                              |
-| Builder API khó dùng                            | Quickstart > 30 dòng hoặc cần nhiều cast     | Sửa ở checkpoint M1, trước khi viết view                                    |
-| `TreeObserver` gây lỗi index khi thêm/xóa        | `QAbstractItemModelTester` fail không rõ lý do | Tạm thời chỉ cho thay đổi cấu trúc qua `setRoot` (reset model) ở v0.1      |
-| Khác biệt dialog native giữa OS (focus)          | Editor đóng khi dialog mở trên Windows/macOS | Fallback: đóng editor trước khi mở dialog, dialog trả về thì ghi thẳng qua `model->setData` |
-| M0.2 cho thấy lib sẵn có "đủ tốt"               | —                                           | Dừng; viết wrapper mỏng hoặc fork thay vì tiếp tục kế hoạch này             |
+| Rủi ro                                        | Dấu hiệu                                       | Phản ứng                                                                    |
+|-----------------------------------------------|------------------------------------------------|-----------------------------------------------------------------------------|
+| API 1.0 sai mà đã khóa                        | Trong RC phải thêm workaround ở project thật   | Kéo dài RC; không tag 1.0 khi còn nghi ngờ. Sau 1.0: chỉ thêm API mới + deprecate cái cũ |
+| Chậm tiến độ                                  | Hết tuần 5 chưa xong M3.6                       | Cắt khỏi 1.0 (thêm lại ở 1.x là *bổ sung*, không phá API): DirPath → Tab navigation → build shared. **Không** cắt M1, M4.4–M4.6 |
+| UX editor cần hack sâu                        | M3.4/M3.6 vượt 2× ước lượng                    | Điểm dừng cuối M3.6                                                         |
+| Consumer có cấu hình CMake lạ làm hỏng build  | RC.1 lỗi CMake                                  | Thêm case vào `tests/consumer`, sửa `qpb/CMakeLists.txt`                   |
+| `TreeObserver` gây lỗi index                   | `QAbstractItemModelTester` fail                | 1.0 chỉ cho đổi cấu trúc qua `setRoot`; thêm/xóa lúc chạy là bổ sung ở 1.1 (API `add/remove` đã có sẵn, chỉ ghi rõ hạn chế) |
+| Dialog native khác nhau giữa OS               | Editor đóng khi dialog mở trên Windows/macOS   | Fallback: đóng editor trước khi mở dialog, kết quả ghi qua `model->setData` |
 
 ---
 
-## 6. Việc cần bạn xác nhận trước khi bắt đầu M1
+## 7. Việc cần bạn xác nhận trước khi bắt đầu M1
 
-Các mục sau đang theo giả định trong SPEC; đổi mục nào sẽ ảnh hưởng tới task liệt kê bên cạnh.
+Sau 1.0 các lựa chọn này bị khóa đến 2.0 (SPEC §9.2), nên cần chốt sớm.
 
-| Câu hỏi (brainstorm §13)                  | Giả định hiện tại            | Ảnh hưởng nếu đổi                      |
-|-------------------------------------------|------------------------------|----------------------------------------|
-| C++17 hay C++20?                          | C++17                        | M1.4, M2.1 (có thể dùng designated initializer) |
-| Qt tối thiểu?                             | 6.5 (phát triển trên 6.8)     | M0.3, M3.7                             |
-| License / public?                         | MIT, public sau v1.0          | M0.5                                   |
-| "Custom property table" nghĩa là gì?      | (a) tập property runtime      | Nếu (b) thêm cột: M1.5 thêm API cột tùy biến |
-| Nguồn dữ liệu chính?                      | Builder tường minh            | Nếu là `QObject`: kéo M5.1 lên ngay sau M3 |
-| Thời gian cho MVP?                        | 4 tuần × ~15h                 | Toàn bộ lịch                            |
+| Câu hỏi                                   | Giả định hiện tại              | Ảnh hưởng nếu đổi                                    |
+|-------------------------------------------|--------------------------------|------------------------------------------------------|
+| C++17 hay C++20?                          | C++17 (tối thiểu)              | Nâng sau 1.0 = breaking. C++20 cho phép designated initializer trong API handler |
+| Qt tối thiểu?                             | 6.5                            | Nâng sau 1.0 = breaking                              |
+| Namespace / tên target / prefix include   | `qpb`, `qpb::widgets`, `<qpb/...>` | Đổi sau 1.0 = breaking                           |
+| Build system của các project dùng qpb     | CMake                          | Nếu có project dùng qmake: thêm `qpb/qpb.pri` vào M0 |
+| Cách đồng bộ folder components            | Chép tay từ zip (có hỗ trợ subtree/submodule) | Chỉ ảnh hưởng quy trình phát hành        |
+| License                                   | MIT                            | M0.2                                                  |
+| "Custom property table" nghĩa là gì?      | (a) tập property runtime       | Nếu (b) thêm cột tùy biến: phải có trong API 1.0 (M1.1) |
+| Nguồn dữ liệu chính?                      | Builder tường minh             | Nếu là `QObject`: M1.3 phải thiết kế kỹ `QObjectPropertySource`, cân nhắc đưa vào 1.0 |
