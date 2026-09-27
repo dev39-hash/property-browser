@@ -77,6 +77,11 @@ Từ sau M1, thay đổi header public phải ghi lý do vào Phụ lục B (v�
 
 ### M2 — Core + Model (≈ 22h)
 
+**Trạng thái:** xong. `qpb::core` đã cài đặt (`qpb/src/core/`) với 61 hàm test trong `tests/core/`
+(`tst_property`, `tst_typeregistry`, `tst_propertymodel`; test model chạy dưới `QAbstractItemModelTester` chế độ Fatal).
+Tiêu chí "quickstart link được" của M2.3 cần module widgets (M3); phần core được chứng minh qua `tests/consumer`, giờ dựng
+model và chạy pipeline giá trị từ bản `qpb/` link static (cũng là kiểm tra link static của M2.4).
+
 | ID    | Task                                                                                         | Giờ | Done khi |
 |-------|----------------------------------------------------------------------------------------------|-----|----------|
 | M2.1  | `Property` + d-pointer: dữ liệu, cờ, trạng thái hiệu lực kế thừa, `path()` (SPEC §4.2)        | 3   | Test kế thừa readOnly/enabled/visible qua 3 tầng; path đúng |

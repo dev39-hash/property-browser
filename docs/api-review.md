@@ -80,4 +80,4 @@ Conclusion: no planned 1.1/1.2 feature requires changing or removing 1.0 API.
 - Behaviour of `Property::create()` / `PropertyGroup::add()` for types registered after the property was created.
 - Whether `PropertyModel` should accept a non-global `TypeRegistry` (additive if needed later).
 - Names returned by `PropertyModel::roleNames()` (become part of the QML-facing contract).
-- Duplicate-id behaviour (assert in debug, return existing child) once real usage exists.
+- Duplicate-id behaviour: settled in M2 as a warning plus returning the existing child (D29); revisit only if the RC trial shows problems.
