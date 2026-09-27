@@ -34,10 +34,10 @@ Rationale: brainstorm section 11. The design **must not preclude** multi-object 
 
 | #  | Criterion                                                        | Verified by                                            |
 |----|------------------------------------------------------------------|--------------------------------------------------------|
-| S1 | 10-property panel in ≤ 30 lines                                  | `examples/quickstart/main.cpp` (line count, excluding includes) |
-| S2 | `QColor` type in ≤ 100 lines, outside the library                 | `examples/custom_type/`                                |
+| S1 | 10-property panel in ≤ 30 lines                                  | `examples/quickstart/main.cpp` (non-blank lines, excluding comments and `#include`s) |
+| S2 | `QColor` type in ≤ 100 lines, outside the library                 | `examples/custom_type/ColorType.{h,cpp}` (same counting rule as S1) |
 | S3 | Switching Tree ↔ List ↔ Form does not change the model            | `examples/inspector` view switcher + test              |
-| S4 | Used in ≥ 2 real projects within 6 months after 1.0               | Tracked outside the repo                               |
+| S4 | The three reference scenarios (`docs/use-cases.md`) are implementable with the public API only | Standalone RC application (PLAN RC.1); real projects tracked outside the repo when they exist |
 | S5 | Upgrading 1.x → 1.y requires no consumer code changes             | API compatibility tests (§9.5) pass on every 1.y       |
 | S6 | Updating the library = replace `components/qpb/` + rebuild        | `tests/consumer` rebuilds after the folder is replaced, with no change to the consumer's CMake |
 
@@ -88,6 +88,9 @@ Rationale: brainstorm section 11. The design **must not preclude** multi-object 
 
 ## 4. Core (`qpb::core`)
 
+> Since M1 the public headers in `qpb/include/qpb/` are the **normative API reference**; the code in §4–§5 summarizes them.
+> The M1 API review is recorded in [`api-review.md`](api-review.md) and Appendix B (D21–D28).
+
 ### 4.1 Type identifiers (`TypeId`)
 
 Types are identified by a **logical ID** (string), not by `QMetaType`, because several logical types share one
@@ -97,14 +100,14 @@ storage type (`String`, `FilePath`, `DirPath` are all `QString`).
 namespace qpb {
 using TypeId = QString;
 namespace Types {
-inline const TypeId Bool     = QStringLiteral("bool");
-inline const TypeId Int      = QStringLiteral("int");
-inline const TypeId Double   = QStringLiteral("double");
-inline const TypeId String   = QStringLiteral("string");
-inline const TypeId Enum     = QStringLiteral("enum");
-inline const TypeId FilePath = QStringLiteral("filepath");
-inline const TypeId DirPath  = QStringLiteral("dirpath");
-inline const TypeId Group    = QStringLiteral("group");
+inline constexpr QLatin1StringView Bool{"bool"};
+inline constexpr QLatin1StringView Int{"int"};
+inline constexpr QLatin1StringView Double{"double"};
+inline constexpr QLatin1StringView String{"string"};
+inline constexpr QLatin1StringView Enum{"enum"};
+inline constexpr QLatin1StringView FilePath{"filepath"};
+inline constexpr QLatin1StringView DirPath{"dirpath"};
+inline constexpr QLatin1StringView Group{"group"};
 }
 }
 ```
@@ -134,7 +137,8 @@ Non-copyable; no public constructor (created via `PropertyGroup::add*` or `Prope
 | `isVisible()`     | `bool`                 | Hiding a group hides all its children                                   |
 | `parent()`        | `PropertyGroup*`       | `nullptr` for the root                                                  |
 | `isModified()`    | `bool`                 | `value() != defaultValue()` (`QVariant` comparison)                     |
-| `validator`       | `std::function<ValidationResult(const QVariant&)>` | Optional, runs after type validation         |
+| `validator()`     | `Property::Validator` = `std::function<ValidationResult(const QVariant&, const Property&)>` | Optional, runs after type validation |
+| `flags()`         | `Property::Flags` (`ReadOnly`, `Disabled`, `Hidden`) | Own state; `isReadOnly/isEnabled/isVisible` above are effective |
 
 The corresponding setters (`setDisplayName`, `setToolTip`, `setReadOnly`, `setEnabled`, `setVisible`,
 `setAttribute`, `setValidator`, `setDefaultValue`) **notify the model** when the property is attached to one
@@ -152,21 +156,24 @@ class PropertyGroup : public Property {
 public:
     static std::unique_ptr<PropertyGroup> create(const QString& id);
 
-    PropertyGroup& addGroup(const QString& id);
-    PropertyBuilder<bool>    addBool  (const QString& id, bool v);
-    PropertyBuilder<int>     addInt   (const QString& id, int v);
-    PropertyBuilder<double>  addDouble(const QString& id, double v);
-    PropertyBuilder<QString> addString(const QString& id, const QString& v);
-    EnumBuilder              addEnum  (const QString& id, const QStringList& labels, int index);
-    EnumBuilder              addEnum  (const QString& id, const QList<EnumOption>& options, const QVariant& v);
-    PathBuilder              addFilePath(const QString& id, const QString& v);
-    PathBuilder              addDirPath (const QString& id, const QString& v);
-    Property&                add(const TypeId& type, const QString& id, const QVariant& v); // custom type
-    Property&                add(std::unique_ptr<Property> p);
+    PropertyGroup&  addGroup(const QString& id);
+    BoolBuilder     addBool  (const QString& id, bool value);
+    IntBuilder      addInt   (const QString& id, int value);
+    DoubleBuilder   addDouble(const QString& id, double value);
+    StringBuilder   addString(const QString& id, const QString& value);
+    EnumBuilder     addEnum  (const QString& id, const QStringList& labels, int currentIndex);
+    EnumBuilder     addEnum  (const QString& id, const QList<EnumOption>& options, const QVariant& value);
+    FilePathBuilder addFilePath(const QString& id, const QString& path);
+    DirPathBuilder  addDirPath (const QString& id, const QString& path);
+    Property&       add(const TypeId& type, const QString& id, const QVariant& value); // custom type
+    Property&       add(std::unique_ptr<Property> property);
 
     bool remove(const QString& id);
     int  childCount() const;
-    Property* child(int i) const;
+    Property* child(int index) const;
+    Property* child(const QString& id) const;
+    QList<Property*> children() const;
+    int  indexOf(const Property* child) const;
     Property* find(const QString& path) const;   // "Transform/x"
 };
 ```
@@ -174,8 +181,9 @@ public:
 - Adding a duplicate `id` to the same group: **asserts in debug**; in release returns the existing property (nothing new is created).
 - `PropertyBuilder<T>` is a thin wrapper around `Property&` whose setters return `*this`:
   `displayName`, `toolTip`, `readOnly`, `enabled`, `visible`, `validator`, plus type-specific setters
-  (`range`, `step`, `decimals`, `prefix`, `suffix`, `maxLength`, `placeholder`, `regex`, `filter`, `mode`, `defaultDir`, `mustExist`).
-  A setter that does not apply to the type (e.g. `regex` on `int`) **does not compile** (declared only on the matching specialization).
+  (`range`, `minimum`, `maximum`, `step`, `decimals`, `prefix`, `suffix`, `maxLength`, `placeholder`, `regularExpression`, `filter`, `dialogMode`, `defaultDir`, `mustExist`), plus `attribute` and `editor` for any type.
+  Builders are concrete classes (`BoolBuilder`, `IntBuilder`, `DoubleBuilder`, `StringBuilder`, `EnumBuilder`, `FilePathBuilder`, `DirPathBuilder`)
+  sharing `PropertyBuilderBase<Derived>`; a setter that does not apply to the type (e.g. `regularExpression` on an int) **does not compile**.
 - A builder converts implicitly to `Property&`.
 
 ### 4.4 Standard attributes
@@ -184,11 +192,11 @@ Keys are the constants `qpb::Attr::*` (`QString`). Unknown attributes are ignore
 
 | Type       | Attributes (value type)                                                                  | Default               |
 |------------|-------------------------------------------------------------------------------------------|-----------------------|
-| Int        | `min`(int) `max`(int) `step`(int) `prefix` `suffix`                                        | INT_MIN / INT_MAX / 1 |
-| Double     | `min` `max` `step`(double) `decimals`(int) `prefix` `suffix`                               | −∞ / +∞ / 1.0 / 2     |
-| String     | `maxLength`(int) `placeholder` `regex`(QString) `multiline`(bool, **1.1**)                | unlimited             |
+| Int        | `minimum`(int) `maximum`(int) `step`(int) `prefix` `suffix`                                | INT_MIN / INT_MAX / 1 |
+| Double     | `minimum` `maximum` `step`(double) `decimals`(int) `prefix` `suffix`                       | −∞ / +∞ / 1.0 / 2     |
+| String     | `maxLength`(int) `placeholder` `regularExpression`(QString) `multiline`(bool, **1.1**)    | unlimited |
 | Enum       | `options`(`QList<EnumOption>` — `{QString label; QVariant value;}`)                         | —                     |
-| FilePath   | `filter`(QString) `mode`(`"open"`/`"save"`) `defaultDir` `mustExist`(bool)                  | `"open"`, false       |
+| FilePath   | `filter`(QString) `dialogMode`(int, `qpb::FileMode::Open`/`Save`) `defaultDir` `mustExist`(bool) | `Open`, false |
 | DirPath    | `defaultDir` `mustExist`(bool)                                                             | false                 |
 | (any type) | `editorId`(TypeId) — overrides the editor for this property only (see 5.2)                  | —                     |
 
@@ -202,19 +210,21 @@ The overload `addEnum(id, QStringList labels, int index)` creates options with `
 
 ```cpp
 struct TypeHandler {
-    int storageType = QMetaType::UnknownType;                           // expected QVariant type
-    std::function<QString(const QVariant&, const Property&)> displayText; // null → QVariant::toString()
-    std::function<ValidationResult(const QVariant&, const Property&)> validate; // null → always valid
-    std::function<QVariant(const QVariant&, const Property&)> normalize;  // null → unchanged (e.g. clamp)
+    QMetaType storageType;                                                // invalid → stored unconverted
+    std::function<QString(const QVariant&, const Property&)> displayText; // empty → QVariant::toString()
+    std::function<QVariant(const QVariant&, const Property&)> normalize;  // empty → unchanged (e.g. clamp)
+    std::function<ValidationResult(const QVariant&, const Property&)> validate; // empty → always valid
 };
 
 class TypeRegistry {
 public:
     static TypeRegistry& global();
-    bool registerType(const TypeId& id, TypeHandler h);   // false if id already exists (no overwrite)
-    void replaceType (const TypeId& id, TypeHandler h);   // deliberate overwrite
-    const TypeHandler* handler(const TypeId& id) const;   // nullptr if not registered
-    template <class T> bool registerType(const TypeId& id, TypeHandler h); // sets storageType
+    bool registerType(const TypeId& id, const TypeHandler& h); // false if id exists or is reserved
+    template <class T> bool registerType(const TypeId& id, TypeHandler h); // sets storageType to T
+    bool replaceType (const TypeId& id, const TypeHandler& h); // false if id is not registered
+    bool contains(const TypeId& id) const;
+    const TypeHandler* handler(const TypeId& id) const;        // nullptr if not registered
+    QList<TypeId> types() const;                               // registration order
 };
 ```
 
@@ -252,7 +262,7 @@ public:
     Property* find(const QString& path) const;
 
     bool setValue(const QString& path, const QVariant& v);
-    void resetToDefault(const QModelIndex& idx);          // group ⇒ recursive reset
+    bool resetToDefault(const QModelIndex& idx);          // group ⇒ recursive reset
 
     void beginBatch();                                    // nestable
     void endBatch();
@@ -317,9 +327,9 @@ Default validation of the basic types:
 | Type       | Check                                                                     |
 |------------|---------------------------------------------------------------------------|
 | Int/Double | Always in range after normalize → always valid (clamp instead of reject)  |
-| String     | `maxLength`; `regex` (full match, `QRegularExpression::anchoredPattern`)  |
+| String     | `maxLength`; `regularExpression` (full match, `QRegularExpression::anchoredPattern`) |
 | Enum       | Value is one of `options`                                                 |
-| FilePath   | `mustExist` + mode `open` → `QFileInfo::isFile()`; empty string is always valid |
+| FilePath   | `mustExist` + `FileMode::Open` → `QFileInfo::isFile()`; empty string is always valid |
 | DirPath    | `mustExist` → `QFileInfo::isDir()`; empty string is always valid          |
 
 ---
@@ -330,23 +340,30 @@ Default validation of the basic types:
 
 ```cpp
 struct EditorHandler {
-    std::function<QWidget*(QWidget* parent, const Property&)> createEditor;   // required
+    std::function<QWidget*(QWidget* parent, const Property&)> createEditor;        // required
     std::function<void(QWidget*, const QVariant&, const Property&)> setEditorData; // required
-    std::function<QVariant(QWidget*, const Property&)> editorData;            // required
+    std::function<QVariant(QWidget*, const Property&)> editorData;                 // required
     std::function<void(QPainter*, const QStyleOptionViewItem&, const QVariant&, const Property&)> paint; // optional
-    std::function<void(QWidget*, const Property&)> applyAttributes;          // optional, called after createEditor and when attributes change
+    std::function<void(QWidget*, const Property&)> applyAttributes;                // optional
 };
 
 class EditorFactory {
 public:
     static EditorFactory& global();
-    bool registerEditor(const TypeId& id, EditorHandler h);
-    void replaceEditor (const TypeId& id, EditorHandler h);
+    bool registerEditor(const TypeId& id, const EditorHandler& h);
+    bool replaceEditor (const TypeId& id, const EditorHandler& h);
+    bool contains(const TypeId& id) const;
     const EditorHandler* handler(const TypeId& id) const;
+    const EditorHandler* handlerFor(const Property& p) const;  // editorId attribute, then typeId
+    QList<TypeId> editors() const;
+    QWidget* createEditor(QWidget* parent, const Property& p) const;
+    static void notifyCommit(QWidget* editor);                // commit now, don't wait for focus-out
+};
 
-    QWidget* createEditor(QWidget* parent, const Property& p) const; // honours the editorId attribute
-    // An editor calls this when the user "commits" a value (e.g. finished picking a file) so the view commits immediately.
-    static void notifyCommit(QWidget* editor);
+class EditorDialogScope {                                     // RAII: editor shows a modal dialog
+public:
+    explicit EditorDialogScope(QWidget* editor);
+    ~EditorDialogScope();
 };
 ```
 
@@ -365,10 +382,10 @@ that property. Storage type and validation still follow the original `typeId`.
 | Bool     | *no editor* in Tree/List (checkbox painted by the delegate via `CheckStateRole`); `QCheckBox` in Form | Toggle with click or Space |
 | Int      | `QSpinBox`                                                    | Applies `min/max/step/prefix/suffix`; `keyboardTracking = false`        |
 | Double   | `QDoubleSpinBox`                                              | Like Int + `decimals`; when not editing, shows at most `decimals` fractional digits via `QLocale`, trailing zeros removed |
-| String   | `QLineEdit`                                                   | `maxLength`, `placeholder`, `QRegularExpressionValidator` from `regex`  |
+| String   | `QLineEdit`                                                   | `maxLength`, `placeholder`, `QRegularExpressionValidator` from `regularExpression` |
 | Enum     | `QComboBox` (not editable)                                    | Commits on selection (`notifyCommit` on `activated`)                    |
-| FilePath | `qpb::PathEdit` = `QLineEdit` + `QToolButton "…"`             | Button opens `QFileDialog::getOpenFileName`/`getSaveFileName` per `mode`; on selection → `notifyCommit` |
-| DirPath  | `qpb::PathEdit` (directory mode)                              | `QFileDialog::getExistingDirectory`                                     |
+| FilePath | internal `PathEdit` = `QLineEdit` + `QToolButton "…"`         | Button opens `QFileDialog::getOpenFileName`/`getSaveFileName` per `dialogMode`; on selection → `notifyCommit` |
+| DirPath  | internal `PathEdit` (directory mode)                          | `QFileDialog::getExistingDirectory`                                     |
 
 Long paths in a (non-editing) cell are elided in the middle (`Qt::ElideMiddle`); the tooltip shows the full path.
 
@@ -378,8 +395,9 @@ Long paths in a (non-editing) cell are elided in the middle (`Qt::ElideMiddle`);
   if it returns `false` (validation error) the editor still closes, the model keeps the old value, and the view shows the error
   (tooltip at the cell, `QToolTip::showText`) — 1.0 behaviour. [Decision D5]
 - `paint`: uses `EditorHandler::paint` when present; Bool paints a left-aligned checkbox; groups paint a `QPalette::AlternateBase` background with bold text.
-- **Focus while a dialog is open:** `PathEdit` sets a `dialogOpen` flag while the modal dialog is shown. `PropertyDelegate::eventFilter`
-  ignores `FocusOut` for editors with that flag, so the editor is not committed/closed half-way. [Decision D6]
+- **Focus while a dialog is open:** an editor showing a modal dialog holds a `qpb::EditorDialogScope` (public, so custom editors such as
+  a color button can use it; the internal `PathEdit` does too). `PropertyDelegate::eventFilter` ignores `FocusOut` while a scope is
+  active, so the editor is not committed/closed half-way. [Decisions D6, D24]
 - Keys: **Enter** commits + closes; **Esc** cancels; **Tab/Shift+Tab** commit and open the editor on the next/previous editable Value cell
   (skipping groups and read-only properties); focus-out commits.
 
@@ -392,7 +410,9 @@ public:
     explicit PropertyTreeView(QWidget* parent = nullptr);
     void setModel(QAbstractItemModel* model) override; // accepts a PropertyModel or a proxy of one
     void setMode(Mode m);  Mode mode() const;
+    int nameColumnWidth() const;
     void setNameColumnWidth(int px);
+    PropertyDelegate* propertyDelegate() const;
 };
 ```
 
@@ -438,7 +458,8 @@ property-browser/                  (development repo)
 │   ├── CHANGELOG.md               # includes upgrade notes for every release
 │   ├── cmake/                     # internal CMake helpers and templates
 │   ├── include/qpb/               # public headers (only these) — §9
-│   │   ├── qpb.h                  # umbrella header: includes everything
+│   │   ├── qpb.h                  # umbrella header: everything (needs qpb::widgets)
+│   │   ├── qpbcore.h              # umbrella header for qpb::core only
 │   │   ├── qpbglobal.h            # export macros, QPB_VERSION*, QPB_DEPRECATED*
 │   │   ├── Property.h  PropertyGroup.h  PropertyModel.h  TypeRegistry.h ...
 │   │   └── widgets/PropertyTreeView.h  EditorFactory.h ...
@@ -515,7 +536,7 @@ Three supported ways to keep the folder in sync (the consumer chooses):
 | API compat    | compile + run only             | §9.5: client code of every released 1.x still builds and behaves correctly        |
 | Consumer      | sample CMake project `tests/consumer` | copy `qpb/` into `components/`, build; no leaked global variables; C++17 and C++20; static and shared |
 
-`PathEdit` exposes a static hook (`setDialogProviderForTesting`) so tests can replace `QFileDialog` with a function returning a fixed value.
+The internal `PathEdit` has a test hook (under `src/`, not public) so tests can replace `QFileDialog` with a function returning a fixed value.
 
 CI: GitHub Actions, matrix Ubuntu/Windows/macOS × Qt 6.5 / 6.8, via `jurplel/install-qt-action`.
 
@@ -661,3 +682,13 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D16| Written from scratch, no wrap/fork                                          | Goal G7; full control of the API makes the stability commitment possible              |
 | D17| C++17, Qt ≥ 6.5, namespace `qpb`, CMake only — confirmed                   | Settled before M1 because they are frozen until 2.0                                    |
 | D18| Code and docs in English; `-vi` files are reference translations only      | Project convention                                                                     |
+| D19| "Custom property table" = users build property tables with the public API (G1, G3) | Clarified by the maintainer; no separate feature                                  |
+| D20| API design and the RC trial use reference scenarios instead of real projects | No real consuming project is available yet                                          |
+| D21| The public headers are the normative API reference; SPEC code summarizes them | Avoids two sources of truth after M1                                              |
+| D22| Type IDs and attribute keys are `constexpr QLatin1StringView` constants     | No static-initialization order issues; convert implicitly to `QString`                 |
+| D23| Own state as `Property::Flags` (ReadOnly/Disabled/Hidden) + effective getters | One extensible enum instead of separate own/effective getter pairs                 |
+| D24| `EditorDialogScope` is public; `PathEdit` stays internal                    | Custom editors that open dialogs (e.g. colors) need the same focus protection as paths |
+| D25| Concrete builder classes over a CRTP `PropertyBuilderBase`                  | Type-specific setters only where they apply; exported non-template classes          |
+| D26| Attribute keys use full words (`minimum`, `regularExpression`, `dialogMode`) | Readability; the enum `qpb::FileMode` stores the dialog mode                        |
+| D27| `qpb/qpbcore.h` umbrella for core-only users; `qpb/qpb.h` includes widgets  | Core-only consumers must not need QtWidgets                                          |
+| D28| Validators receive the property (`(value, property)`) like `TypeHandler::validate` | One signature; validators can read attributes                                  |
