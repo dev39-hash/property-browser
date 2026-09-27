@@ -395,7 +395,9 @@ Long paths in a (non-editing) cell are elided in the middle (`Qt::ElideMiddle`);
 - `createEditor/setEditorData/setModelData` delegate to `EditorFactory`. `setModelData` calls `model->setData`;
   if it returns `false` (validation error) the editor still closes, the model keeps the old value, and the view shows the error
   (tooltip at the cell, `QToolTip::showText`) — 1.0 behaviour. [Decision D5]
-- `paint`: uses `EditorHandler::paint` when present; Bool paints a left-aligned checkbox; groups paint a `QPalette::AlternateBase` background with bold text.
+- `paint`: uses `EditorHandler::paint` when present; check boxes come from `CheckStateRole`; groups paint a `QPalette::Button` background
+  with bold text; the name of a modified property is bold; read-only values (enabled, neither editable nor checkable) use
+  `QPalette::PlaceholderText`; value text is elided in the middle. [D30]
 - **Focus while a dialog is open:** an editor showing a modal dialog holds a `qpb::EditorDialogScope` (public, so custom editors such as
   a color button can use it; the internal `PathEdit` does too). `PropertyDelegate::eventFilter` ignores `FocusOut` while a scope is
   active, so the editor is not committed/closed half-way. [Decisions D6, D24]
@@ -424,6 +426,8 @@ public:
   `itemsExpandable = false`, `expandAll()` kept on new rows; groups render as section headers (spanned, not collapsible). [Decision D4]
 - Context menu on a property: **Reset to default** (disabled when not modified or read-only); on a group: **Reset group**.
 - Switching mode does not recreate the model and loses neither values nor the current selection.
+- `moveCursor()` is overridden so `MoveNext`/`MovePrevious` (Tab / Shift+Tab while editing) land on the next editable value,
+  skipping groups, read-only rows, check boxes and hidden rows.
 
 ### 5.6 `PropertyFormView : QScrollArea` (1.1)
 
@@ -694,3 +698,4 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D27| `qpb/qpbcore.h` umbrella for core-only users; `qpb/qpb.h` includes widgets  | Core-only consumers must not need QtWidgets                                          |
 | D28| Validators receive the property (`(value, property)`) like `TypeHandler::validate` | One signature; validators can read attributes                                  |
 | D29| Duplicate or invalid ids log a warning instead of asserting                 | An assert would abort debug builds of consuming apps; the tree stays consistent either way |
+| D30| Group rows use `QPalette::Button`; read-only values are dimmed             | `AlternateBase` was indistinguishable from alternating rows; read-only needs a visual cue |

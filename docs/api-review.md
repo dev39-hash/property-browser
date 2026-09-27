@@ -68,6 +68,14 @@ Conclusion: no planned 1.1/1.2 feature requires changing or removing 1.0 API.
 
 ## 5. Changes made during the review
 
+During M3 (implementation):
+
+- `PropertyTreeView::moveCursor()` override declared, so Tab / Shift+Tab skip non-editable rows (additive override).
+- `EditorDialogScope` holds a `QPointer` (private member; no API change) so an editor destroyed during a dialog is safe.
+
+During M1:
+
+
 - Added `EditorDialogScope`: custom editors that open dialogs need the focus protection the internal path editor uses (D24).
 - Added `TypeRegistry::types()`/`contains()` and `EditorFactory::handlerFor()`/`editors()`: required by the QObject source and form view sketches.
 - Added `qpb/qpbcore.h` so core-only consumers never include QtWidgets (D27).
