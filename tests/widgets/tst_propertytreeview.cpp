@@ -150,6 +150,7 @@ private slots:
     void insertedGroupsAreExpandedAndSpanned();
     void contextMenuResets();
     void contextMenuLeavesReadOnlyAlone();
+    void contextMenuLeavesLiveAlone();
     void nameColumnFitsContents();
     void worksThroughProxyModel();
     void multilineEditor();
@@ -464,6 +465,33 @@ void tst_PropertyTreeView::contextMenuLeavesReadOnlyAlone()
     QApplication::sendEvent(f->view->viewport(), &event);
     QCOMPARE(x->value(), QVariant(0.0));
     QCOMPARE(locked->value(), QVariant(7.0));
+}
+
+// Since 1.3: a live value is not bold and survives "Reset group".
+void tst_PropertyTreeView::contextMenuLeavesLiveAlone()
+{
+    Property* x = f->model.find(QStringLiteral("Transform/x"));
+    Property* y = f->model.find(QStringLiteral("Transform/y"));
+    y->setLive(true);
+    QVERIFY(x->setValue(5.0));
+    QVERIFY(y->setValue(9.0));
+    const QModelIndex yName = f->model.indexOf(y);
+    QVERIFY(!yName.data(PropertyModel::IsModifiedRole).toBool());
+
+    const QModelIndex transform = f->model.indexOf(f->model.find(QStringLiteral("Transform")));
+    QTimer::singleShot(0, this, [] {
+        auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+        if (menu) {
+            menu->actions().first()->trigger();
+            menu->close();
+        }
+    });
+    const QPoint position = f->view->visualRect(transform).center();
+    QContextMenuEvent event(
+        QContextMenuEvent::Mouse, position, f->view->viewport()->mapToGlobal(position));
+    QApplication::sendEvent(f->view->viewport(), &event);
+    QCOMPARE(x->value(), QVariant(0.0));
+    QCOMPARE(y->value(), QVariant(9.0));
 }
 
 void tst_PropertyTreeView::nameColumnFitsContents()

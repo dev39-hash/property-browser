@@ -166,6 +166,7 @@ private slots:
     void multilineEditing();
     void customEditorWithDialog();
     void contextMenuResets();
+    void liveValues();
     void commitThatChangesTheTree();
     void typeWithoutEditorIsShownAsText();
     void modelDestroyedFirst();
@@ -476,6 +477,23 @@ void tst_PropertyFormView::contextMenuResets()
     QVERIFY(resetFromMenu(f->title(QStringLiteral("Transform"))));
     QCOMPARE(f->stored(QStringLiteral("Transform/x")), QVariant(0.0));
     QCOMPARE(f->stored(QStringLiteral("Transform/locked")), QVariant(5.0));
+}
+
+// Since 1.3: live values are never bold, and "Reset group" leaves them alone.
+void tst_PropertyFormView::liveValues()
+{
+    Property* y = f->model.find(QStringLiteral("Transform/y"));
+    y->setLive(true);
+    QVERIFY(y->setValue(9.0));
+    QVERIFY(f->model.setValue(QStringLiteral("Transform/x"), 5.0));
+    QVERIFY(!f->label(QStringLiteral("Transform/y"))->font().bold());
+    QVERIFY(f->label(QStringLiteral("Transform/x"))->font().bold());
+    QCOMPARE(f->editor<QDoubleSpinBox>(QStringLiteral("Transform/y"))->value(), 9.0);
+
+    QVERIFY(!resetFromMenu(f->label(QStringLiteral("Transform/y"))));
+    QVERIFY(resetFromMenu(f->title(QStringLiteral("Transform"))));
+    QCOMPARE(f->stored(QStringLiteral("Transform/x")), QVariant(0.0));
+    QCOMPARE(f->stored(QStringLiteral("Transform/y")), QVariant(9.0));
 }
 
 // An application that adds properties in response to an edit: the editor that

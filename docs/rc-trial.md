@@ -68,3 +68,15 @@ configured `QSortFilterProxyModel`; a new **Devices** page (scenario 4) shows ap
 Otherwise the new API behaved as specified: the form view follows the dependency and the multi-line field, the filter
 shows all plugin settings when the plugin name is searched, device edits reach the objects, values a device refuses
 (recording while disabled) are replaced by the device's value, and a deleted device disappears from the form.
+
+## Round 5 — 1.3 (M7) before release
+
+The Devices page uses the two additions of 1.3: `Q_CLASSINFO("qpb:title", "name")` on the device class and
+`QObjectPropertySource::setLiveReadOnlyProperties(true)` on the page. 23 trial tests pass.
+
+| # | Finding | Outcome |
+|---|---------|---------|
+| F8 | Group titles | **Closed:** sections read "Studio mic" / "Field recorder" and follow renames; paths still use the object name. |
+| F9 | Live values shown as modified | **Closed:** `used` is live: never bold, left alone by "Reset group", not saved. |
+
+No new finding; nothing else changed for the application.

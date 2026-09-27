@@ -34,6 +34,8 @@ std::unique_ptr<PropertyGroup> createSettings()
         .addString(QStringLiteral("build"), QStringLiteral("42"))
         .readOnly();
     root->addGroup(QStringLiteral("Empty"));
+    // 1.3: live values are not stored either.
+    root->addGroup(QStringLiteral("Status")).addInt(QStringLiteral("uptime"), 0).live();
     return root;
 }
 
@@ -86,7 +88,8 @@ void tst_Serialization::jsonLayout()
     auto root = createSettings();
     modify(*root);
     const QJsonObject json = serialization::toJson(*root);
-    // No read-only "version"; no "About" (read-only only) or "Empty" group.
+    // No read-only "version"; no "About" (read-only only), "Empty" or "Status"
+    // (live only) group.
     QCOMPARE(json.keys(), QStringList({"General", "Limits"}));
     const QJsonObject general = json.value(QStringLiteral("General")).toObject();
     QCOMPARE(general.value(QStringLiteral("language")).toString(), QStringLiteral("vi"));
@@ -215,6 +218,19 @@ void tst_Serialization::settingsRoundTrip()
 
 void tst_Serialization::settingsUnderGroupAndMissingKeys()
 {
+    // Live values: not written, and a stored one is not read.
+    {
+        QTemporaryDir liveDir;
+        QSettings stored(liveDir.filePath(QStringLiteral("live.ini")), QSettings::IniFormat);
+        auto live = createSettings();
+        QVERIFY(live->find(QStringLiteral("Status/uptime"))->setValue(99));
+        serialization::save(*live, stored);
+        QVERIFY(!stored.contains(QStringLiteral("Status/uptime")));
+        stored.setValue(QStringLiteral("Status/uptime"), 5);
+        QVERIFY(serialization::load(*live, stored));
+        QCOMPARE(live->find(QStringLiteral("Status/uptime"))->value(), QVariant(99));
+    }
+
     QTemporaryDir dir;
     QSettings settings(dir.filePath(QStringLiteral("s.ini")), QSettings::IniFormat);
     auto root = createSettings();

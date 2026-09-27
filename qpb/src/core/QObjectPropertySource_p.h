@@ -35,6 +35,8 @@ struct ObjectBinding
     QHash<QString, QMetaProperty> properties;
     // Property ids refreshed by each NOTIFY signal (by signal index).
     QHash<int, QStringList> notified;
+    // Q_PROPERTY giving the group's display name (1.3), if any.
+    QMetaProperty title;
     QList<QMetaObject::Connection> connections;
 };
 
@@ -53,11 +55,15 @@ public:
     void remove(ObjectBinding* binding, bool removeGroup);
     // Copies the object's value of Q_PROPERTY property into the model.
     void read(ObjectBinding& binding, const QString& id);
+    // Sets the group's display name from the title Q_PROPERTY (1.3).
+    void readTitle(ObjectBinding& binding);
     void modelValueChanged(const QString& path, const QVariant& value);
 
     QPointer<PropertyModel> model;
     std::vector<std::unique_ptr<ObjectBinding>> bindings;
     bool updating = false; // writing one side from the other
+    QString titleProperty; // setTitleProperty()
+    bool liveReadOnly = false; // setLiveReadOnlyProperties()
     QMetaObject::Connection modelConnection;
 
 public Q_SLOTS:

@@ -136,13 +136,20 @@ Không copy được; không có constructor public (tạo qua `PropertyGroup::a
 | `toolTip()`       | `QString`              |                                                                         |
 | `isReadOnly()`    | `bool`                 | Hiệu lực = bản thân **hoặc** bất kỳ tổ tiên nào readOnly                 |
 | `isEnabled()`     | `bool`                 | Hiệu lực = bản thân **và** mọi tổ tiên enabled                           |
+| `isLive()` (1.3)  | `bool`                 | Hiệu lực = chính nó **hoặc** tổ tiên bất kỳ là live (xem dưới)          |
 | `isVisible()`     | `bool`                 | Ẩn group ⇒ ẩn toàn bộ con                                               |
 | `parent()`        | `PropertyGroup*`       | `nullptr` với gốc                                                       |
-| `isModified()`    | `bool`                 | `value() != defaultValue()` (so sánh `QVariant`)                        |
+| `isModified()`    | `bool`                 | `value() != defaultValue()` (so sánh `QVariant`); luôn `false` khi live (1.3) |
 | `validator()`     | `Property::Validator` = `std::function<ValidationResult(const QVariant&, const Property&)>` | Tùy chọn, chạy sau validation của kiểu |
-| `flags()`         | `Property::Flags` (`ReadOnly`, `Disabled`, `Hidden`) | Trạng thái riêng; `isReadOnly/isEnabled/isVisible` ở trên là hiệu lực |
+| `flags()`         | `Property::Flags` (`ReadOnly`, `Disabled`, `Hidden`, `Live` (1.3)) | Trạng thái riêng; `isReadOnly/isEnabled/isVisible/isLive` ở trên là hiệu lực |
 
-Setter tương ứng (`setDisplayName`, `setToolTip`, `setReadOnly`, `setEnabled`, `setVisible`,
+**Property live (1.3, `Flag::Live`, `setLive()`, builder `live()`):** giá trị do ứng dụng quản lý (trạng thái, bộ đếm,
+dung lượng đã dùng), không phải thiết lập. Chúng không bao giờ modified (view không bao giờ in đậm), các lệnh reset group
+(`resetToDefault()` trên group, "Reset group", "Reset to default") bỏ qua chúng, và `qpb::serialization` không ghi, không
+đọc. Gọi `resetToDefault()` trực tiếp trên chính property live vẫn reset nó; nó vẫn sửa được trừ khi đồng thời read-only.
+[D44]
+
+Setter tương ứng (`setDisplayName`, `setToolTip`, `setReadOnly`, `setEnabled`, `setVisible`, `setLive`,
 `setAttribute`, `setValidator`, `setDefaultValue`) **thông báo cho model** nếu property đã gắn vào model
 (xem 4.6), để view cập nhật.
 
@@ -357,7 +364,7 @@ bool load(PropertyGroup& group, const QSettings& settings);
 
 - Chỉ lưu **giá trị**; ứng dụng tự dựng cây rồi ghi giá trị vào. Group thành object JSON lồng nhau theo id (group không có gì để lưu thì bỏ qua, giống `save()` không ghi key nào cho chúng); key của
   `QSettings` là path tương đối với group, nằm dưới group hiện tại của settings.
-- **Property read-only không được ghi cũng không được đọc** (ứng dụng tự quản lý, D34). Property ẩn và disabled thì có.
+- **Property read-only và live (1.3) không được ghi cũng không được đọc** (ứng dụng tự quản lý, D34, D44). Property ẩn và disabled thì có.
 - Giá trị được khôi phục bằng `Property::setValue()` (chuyển đổi → normalize → validation). Key lạ và key thiếu bị bỏ qua;
   `fromJson`/`load` trả về `false` nếu có giá trị bị từ chối, các giá trị khác vẫn được áp. Bọc trong
   `beginBatch()`/`endBatch()` để chỉ có một `batchValueChanged`.
@@ -393,6 +400,12 @@ public:
 - Đồng bộ: model → object khi `valueChanged` (`QMetaProperty::write`; nếu object chỉnh hoặc từ chối giá trị, model hiện
   giá trị của object); object → model qua signal NOTIFY (`Property::setValue`); chặn vòng lặp. Object bị hủy → group bị
   xóa. Source bị hủy → group vẫn còn, ngừng đồng bộ. [D41]
+- **Tiêu đề (1.3):** `Q_CLASSINFO("qpb:title", "name")` đặt tên hiển thị của group là giá trị của Q_PROPERTY đó, cập nhật
+  qua signal NOTIFY (giá trị rỗng giữ tiêu đề cũ). Với class ứng dụng không sửa được, `setTitleProperty("name")` làm
+  tương tự cho các object thêm sau đó; class info được ưu tiên. Id của group (và mọi path) vẫn là tên object. [D43]
+- **Giá trị live (1.3):** khóa metadata `live` biến property thành live (§4.2). `setLiveReadOnlyProperties(true)` biến
+  mọi Q_PROPERTY có signal NOTIFY nhưng không có WRITE thành live, cho các object thêm sau đó. Mặc định `false`: giữ
+  hành vi của 1.2. [D44]
 
 ---
 
@@ -651,6 +664,7 @@ Sau 1.0, tính năng mới đến dưới dạng **bổ sung** (minor), không s
 | **1.0** | §4 toàn bộ; §5.1–5.5; 7 kiểu cơ bản; Tree + List; reset; in đậm khi modified; tooltip; component folder (§6); chính sách API (§9); example quickstart, custom_type, inspector | **Khóa API** |
 | 1.1   | `PropertyFormView` (§5.6); `PropertyFilterProxyModel` (§5.7); attribute `multiline`                          | Bổ sung       |
 | 1.2   | `QObjectPropertySource` (đọc `Q_PROPERTY`, metadata qua `Q_CLASSINFO("qpb:<prop>", "min=0;max=10")`, đồng bộ hai chiều); serialize `qpb::serialization::toJson/fromJson/save/load` (§4.8); `Types::Int64`; example `QUndoStack` | Bổ sung |
+| 1.3   | `Property::Flag::Live` (§4.2); tiêu đề và giá trị live của `QObjectPropertySource` (§4.9)                   | Bổ sung       |
 | 2.0   | Chỉ khi thật sự cần phá vỡ API; gom mọi thứ đã deprecate                                                    | Breaking      |
 
 **Thiết kế 1.0 phải "chừa chỗ" cho 1.1/1.2** mà không đổi API: Form view và filter là class mới dùng
@@ -804,3 +818,5 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D40| Hàm tự do mới nằm trong namespace lồng (`qpb::serialization`)               | Hàm trong `qpb` nhận kiểu của qpb bị ADL tìm thấy và làm hỏng lời gọi `save(group, settings)` không kèm namespace của ứng dụng (phát hiện nhờ `future_sketches.cpp`) |
 | D41| `QObjectPropertySource` đọc metadata từ `Q_CLASSINFO`, cần một model, xóa group của object đã bị hủy | Không phải sửa class được hiển thị; thay đổi property chỉ quan sát được qua `valueChanged` của model |
 | D42| Serialization bỏ qua property read-only                                      | Ứng dụng tự quản lý chúng; nạp lại sẽ ghi đè vd. version đang chạy bằng giá trị đã lưu |
+| D43| `QObjectPropertySource` lấy tiêu đề group từ một Q_PROPERTY (`qpb:title`, `setTitleProperty()`); id vẫn là tên object | RC F8: group hiện `studio_mic`; path phải ổn định cho serialization và code ứng dụng |
+| D44| Cờ mới `Live` (không bao giờ modified, bị reset group và serialization bỏ qua); Q_PROPERTY read-only có NOTIFY chỉ thành live khi gọi `setLiveReadOnlyProperties(true)` | RC F9: giá trị live trông như người dùng sửa. Tự động biến thành live sẽ đổi hành vi 1.2 (§9.2), nên phải bật |
