@@ -37,7 +37,10 @@ QJsonObject toJson(const PropertyGroup& group)
     QJsonObject json;
     for (const Property* child : group.children()) {
         if (const PropertyGroup* childGroup = child->toGroup()) {
-            json.insert(child->id(), toJson(*childGroup));
+            // Like save(): a group with nothing to store leaves no trace.
+            const QJsonObject values = toJson(*childGroup);
+            if (!values.isEmpty())
+                json.insert(child->id(), values);
         } else if (!child->isReadOnly()) {
             const TypeHandler* handler = handlerOf(*child);
             json.insert(child->id(),

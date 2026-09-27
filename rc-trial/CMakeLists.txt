@@ -25,6 +25,7 @@ add_library(trial_app STATIC
     src/InspectorPage.cpp src/InspectorPage.h
     src/SettingsPage.cpp src/SettingsPage.h
     src/PluginsPage.cpp src/PluginsPage.h
+    src/DevicesPage.cpp src/DevicesPage.h
     src/MainWindow.cpp src/MainWindow.h
 )
 target_include_directories(trial_app PUBLIC src)
