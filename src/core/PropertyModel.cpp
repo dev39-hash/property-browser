@@ -345,10 +345,12 @@ bool PropertyModel::setData(const QModelIndex& index, const QVariant& value, int
     Property* property = propertyAt(index);
     if (!property || index.column() != ValueColumn || property->isGroup())
         return false;
+    // Edits through the model come from views, i.e. from the user.
+    PropertyPrivate* data = PropertyPrivate::get(property);
     if (role == Qt::CheckStateRole && property->typeId() == Types::Bool)
-        return property->setValue(value.toInt() == Qt::Checked);
+        return data->assign(value.toInt() == Qt::Checked, PropertyPrivate::Origin::User);
     if (role == Qt::EditRole)
-        return property->setValue(value);
+        return data->assign(value, PropertyPrivate::Origin::User);
     return false;
 }
 
