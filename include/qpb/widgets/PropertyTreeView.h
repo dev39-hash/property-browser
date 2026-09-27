@@ -52,6 +52,9 @@ public:
 
 protected:
     void contextMenuEvent(QContextMenuEvent* event) override;
+    // MoveNext / MovePrevious (Tab / Shift+Tab while editing) skip to the next
+    // editable value, passing over groups, read-only and check box rows.
+    QModelIndex moveCursor(CursorAction cursorAction, Qt::KeyboardModifiers modifiers) override;
 
 private:
     std::unique_ptr<detail::PropertyTreeViewPrivate> d;

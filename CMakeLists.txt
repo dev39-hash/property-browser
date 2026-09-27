@@ -66,8 +66,6 @@ target_link_libraries(qpb_core PUBLIC Qt6::Core)
 add_library(qpb::core ALIAS qpb_core)
 
 # --- qpb::widgets (Qt6::Widgets) ---------------------------------------------
-#
-# The widgets headers are declarations only until docs/PLAN.md M3.
 
 qpb_add_library(qpb_widgets
     EXPORT_DEFINE QPB_BUILD_WIDGETS_LIB
@@ -75,11 +73,13 @@ qpb_add_library(qpb_widgets
     SOURCES
         include/qpb/widgets/EditorFactory.h
         include/qpb/widgets/PropertyDelegate.h
+        include/qpb/widgets/PropertyTreeView.h
+        include/qpb/qpb.h
         src/widgets/EditorFactory.cpp
         src/widgets/PathEdit.cpp
         src/widgets/PathEdit_p.h
         src/widgets/PropertyDelegate.cpp
-        src/widgets/qpbwidgets.cpp
+        src/widgets/PropertyTreeView.cpp
         src/widgets/widgets_p.cpp
         src/widgets/widgets_p.h
 )
