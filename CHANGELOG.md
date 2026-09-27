@@ -1,33 +1,26 @@
 # Changelog
 
 All notable changes to qpb are documented here. Each release has the sections
-*Added*, *Changed*, *Deprecated*, *Fixed* and *Upgrade notes* (see `docs/SPEC.md` §9.4).
+*Added*, *Changed*, *Deprecated*, *Fixed* and *Upgrade notes* (see `docs/SPEC.md` section 9.4).
 
-Versions below 1.0 are internal pre-releases; their API may change without notice.
+From 1.0.0 on, releases within a major version never require changes to consuming code or CMake.
+Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC trial shows a problem.
 
-## Unreleased
+## 1.0.0-rc1 - 2026-09-27
+
+First release candidate of the 1.0 API.
 
 ### Added
-- Component folder skeleton: `qpb::core` and `qpb::widgets` targets, `add_subdirectory` integration.
-- `qpb/qpbglobal.h`: export macros, version macros generated from `VERSION`, deprecation macros.
-- `qpb::version()` runtime version query.
-- 1.0 public API declared (not implemented yet): `Property`, `PropertyGroup`, builders, `TypeRegistry`,
-  `PropertyModel`, `EditorFactory`, `EditorDialogScope`, `PropertyDelegate`, `PropertyTreeView`; umbrella headers
-  `qpb/qpb.h` and `qpb/qpbcore.h`.
-- `qpb::core` implemented: `Property`, `PropertyGroup`, builders, `TypeRegistry` with the seven built-in types
-  (conversion, clamping/rounding, validation, display text) and `PropertyModel` (roles, flags, value pipeline,
-  live structural changes, batches, reset to default).
-- `qpb::widgets` implemented: `EditorFactory` with editors for the seven built-in types, `EditorDialogScope`,
-  `PropertyDelegate` (Enter/Escape/Tab/focus-out, dialog focus protection, check boxes, validation tool tip,
-  group/modified/read-only painting) and `PropertyTreeView` (Tree and List modes, hidden rows, reset context menu).
-
-### Fixed
-- The component no longer sets the host project's `CMAKE_PROJECT_VERSION` (`project()` is called without `VERSION`).
-- Replacing the component folder with another version now refreshes the generated version header.
-
-### Changed
-- `VERSION` accepts a pre-release suffix (e.g. `1.0.0-rc1`); `QPB_VERSION_STR` contains it.
-- All files in the component are ASCII (builds with MSVC `/WX` on any code page).
+- Component folder `qpb/`: `add_subdirectory(components/qpb)` plus `qpb::core` / `qpb::widgets`; static libraries
+  by default, `QPB_BUILD_SHARED=ON` for shared ones. Requires C++17, Qt 6.5, CMake 3.21; changes none of the host
+  project's CMake settings.
+- `qpb::core`: `Property`, `PropertyGroup` and typed builders; `TypeRegistry` with seven built-in types (bool, int,
+  double, string, enum, file path, directory path) and custom types; `PropertyModel`, a two-column
+  `QAbstractItemModel` with validation, change signals, batches and reset to default.
+- `qpb::widgets`: `EditorFactory` with editors for the built-in types and custom editors (`EditorDialogScope`,
+  `notifyCommit`); `PropertyDelegate`; `PropertyTreeView` with Tree and List modes and a reset context menu.
+- Headers `qpb/qpb.h` (everything) and `qpb/qpbcore.h` (core only); version macros and `qpb::version()`;
+  deprecation macros for future releases.
 
 ### Upgrade notes
-- Not applicable (first pre-release).
+- Not applicable (first release).
