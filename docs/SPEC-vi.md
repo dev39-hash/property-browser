@@ -83,6 +83,8 @@ Lý do chi tiết: brainstorm mục 11. Thiết kế **không được cấm** m
 - **R4.** Không public API nào chưa có ít nhất một nơi sử dụng (example hoặc test).
 - **R5.** Chỉ header trong `qpb/include/qpb/` là public. Mọi thứ trong namespace `qpb::detail` hoặc
   thư mục `src/` là nội bộ, đổi tự do. Mọi thay đổi public header phải tuân §9.
+- **R6.** Mọi file trong `qpb/` chỉ dùng ký tự ASCII. MSVC trên code page không phải UTF-8 cảnh báo (C4819) với ký tự khác,
+  làm hỏng build của consumer dùng `/WX`. (R1, R2, R5, R6 được kiểm tra bằng `tools/check_architecture.cmake`.)
 
 ---
 
@@ -178,7 +180,8 @@ public:
 };
 ```
 
-- Thêm `id` trùng trong cùng group: **assert trong debug**, trả về property đã tồn tại trong release (không tạo mới).
+- Thêm `id` trùng trong cùng group: ghi cảnh báo và trả về property đã tồn tại (không tạo mới); `addGroup()` trùng với một property
+  không phải group thì thêm group dưới id trống đầu tiên (`<id>_2`, ...). Id rỗng hoặc chứa `/` được sửa lại kèm cảnh báo. [D29]
 - `PropertyBuilder<T>` là wrapper nhẹ quanh `Property&`, trả về `*this` cho mỗi setter:
   `displayName`, `toolTip`, `readOnly`, `enabled`, `visible`, `validator`, và setter theo kiểu
   (`range`, `minimum`, `maximum`, `step`, `decimals`, `prefix`, `suffix`, `maxLength`, `placeholder`, `regularExpression`, `filter`, `dialogMode`, `defaultDir`, `mustExist`), cùng `attribute` và `editor` cho mọi kiểu.
@@ -393,7 +396,9 @@ Hiển thị đường dẫn dài trong ô (không edit): elide ở giữa (`Qt:
 - `createEditor/setEditorData/setModelData` ủy quyền cho `EditorFactory`. `setModelData` gọi `model->setData`;
   nếu trả `false` (validation lỗi) thì editor vẫn đóng, model giữ giá trị cũ, view hiển thị thông báo lỗi
   (tooltip tại ô, `QToolTip::showText`) — hành vi 1.0. [Quyết định D5]
-- `paint`: dùng `EditorHandler::paint` nếu có; Bool vẽ checkbox căn giữa trái; group vẽ nền `QPalette::AlternateBase`, chữ đậm.
+- `paint`: dùng `EditorHandler::paint` nếu có; checkbox lấy từ `CheckStateRole`; group vẽ nền `QPalette::Button`, chữ đậm; tên property
+  đã sửa in đậm; giá trị read-only (enabled nhưng không sửa được, không phải checkbox) dùng màu `QPalette::PlaceholderText`; chữ giá trị
+  bị cắt ở giữa khi dài. [D30]
 - **Focus khi mở dialog:** editor đang mở dialog modal giữ một `qpb::EditorDialogScope` (public, để editor tùy biến như nút chọn màu
   cũng dùng được; `PathEdit` nội bộ cũng dùng nó). `PropertyDelegate::eventFilter` bỏ qua `FocusOut` khi scope còn sống,
   nên editor không bị đóng/commit giữa chừng. [Quyết định D6, D24]
@@ -422,6 +427,8 @@ public:
   `itemsExpandable = false`, `expandAll()` và giữ expand khi có hàng mới; group hiển thị như section header (spanned, không thu gọn được). [Quyết định D4]
 - Context menu trên ô property: **Reset to default** (disabled nếu không modified hoặc read-only); trên group: **Reset group**.
 - Chuyển mode không tạo lại model, không mất giá trị, không mất selection hiện tại.
+- Override `moveCursor()` để `MoveNext`/`MovePrevious` (Tab / Shift+Tab khi đang sửa) nhảy tới giá trị sửa được kế tiếp,
+  bỏ qua group, hàng read-only, checkbox và hàng bị ẩn.
 
 ### 5.6 `PropertyFormView : QScrollArea` (1.1)
 
@@ -523,6 +530,9 @@ Ba cách giữ folder đồng bộ (đều được hỗ trợ, do consumer ch�
 - **Không dựa vào static initializer** để đăng ký kiểu (linker có thể loại bỏ khi link static).
   Kiểu cơ bản đăng ký lười trong `TypeRegistry::global()` / `EditorFactory::global()`.
 - Build shared (`QPB_BUILD_SHARED=ON`) vẫn hỗ trợ; khi đó consumer phải deploy thêm DLL/so — ghi rõ trong README.
+- `VERSION` chứa `MAJOR.MINOR.PATCH` kèm hậu tố pre-release tùy chọn (`1.0.0-rc1`); `QPB_VERSION_STR` giữ chuỗi đầy đủ.
+  Gọi `project()` **không** kèm `VERSION`: trong thư mục con nó sẽ ghi `CMAKE_PROJECT_VERSION` của project chủ nếu project chủ
+  không khai báo version. Sửa `VERSION` sẽ khiến CMake chạy lại (`CMAKE_CONFIGURE_DEPENDS`). [D31, D32]
 
 ## 7. Kiểm thử
 
@@ -689,3 +699,8 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D26| Khóa attribute dùng từ đầy đủ (`minimum`, `regularExpression`, `dialogMode`) | Dễ đọc; enum `qpb::FileMode` lưu chế độ dialog                                        |
 | D27| `qpb/qpbcore.h` cho người chỉ dùng core; `qpb/qpb.h` gồm cả widgets         | Consumer chỉ dùng core không cần QtWidgets                                             |
 | D28| Validator nhận cả property (`(value, property)`) như `TypeHandler::validate` | Một chữ ký thống nhất; validator đọc được attribute                                   |
+| D29| Id trùng hoặc không hợp lệ chỉ ghi cảnh báo, không assert                     | Assert sẽ làm sập bản debug của ứng dụng dùng thư viện; cây vẫn nhất quán              |
+| D30| Hàng group dùng `QPalette::Button`; giá trị read-only được làm mờ          | `AlternateBase` trùng màu hàng xen kẽ; read-only cần dấu hiệu nhận biết               |
+| D31| Component gọi `project()` không kèm `VERSION`; version lấy từ `qpb/VERSION`  | `project(VERSION)` ghi đè `CMAKE_PROJECT_VERSION` của project chủ (test rò rỉ phát hiện) |
+| D32| `VERSION` có thể có hậu tố pre-release; CMake chạy lại khi file đổi         | Bản release candidate (`1.0.0-rc1`); thay folder phải cập nhật header version          |
+| D33| `qpb/` chỉ dùng ASCII (luật R6)                                              | MSVC cảnh báo C4819 trên code page không phải UTF-8 làm hỏng consumer dùng `/WX`        |

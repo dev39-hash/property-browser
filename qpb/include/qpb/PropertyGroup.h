@@ -15,7 +15,7 @@
 
 namespace qpb {
 
-// A property that holds an ordered list of child properties (docs/SPEC.md §4.3).
+// A property that holds an ordered list of child properties (docs/SPEC.md section 4.3).
 //
 // Groups nest without limit. A group has no value; its state flags apply to
 // all descendants. When a group belongs to a PropertyModel, adding and removing
@@ -32,9 +32,12 @@ public:
     // --- adding children -------------------------------------------------------
     //
     // Every add function appends a child and returns a handle to it. If a child
-    // with the same id already exists, nothing is added and the existing child
-    // is returned (and a debug build asserts). Initial values are stored as the
-    // default value too.
+    // with the same id already exists, nothing is added, a warning is logged and
+    // the existing child is returned (addGroup(): if that child is not a group,
+    // the group is added under the first free id "<id>_2", "<id>_3", ...).
+    // IDs must be non-empty and must not contain '/'; offending characters are
+    // replaced by '_' with a warning. Initial values are stored as the default
+    // value too.
 
     PropertyGroup& addGroup(const QString& id);
 

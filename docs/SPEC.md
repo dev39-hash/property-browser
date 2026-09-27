@@ -83,6 +83,8 @@ Rationale: brainstorm section 11. The design **must not preclude** multi-object 
 - **R4.** No public API without at least one user (example or test).
 - **R5.** Only headers under `qpb/include/qpb/` are public. Everything in namespace `qpb::detail` or under `src/`
   is internal and may change freely. Every change to a public header must follow §9.
+- **R6.** Every file in `qpb/` is ASCII only. MSVC on a non-UTF-8 code page warns (C4819) about other characters,
+  which breaks consumers building with `/WX`. (R1, R2, R5 and R6 are checked by `tools/check_architecture.cmake`.)
 
 ---
 
@@ -178,7 +180,8 @@ public:
 };
 ```
 
-- Adding a duplicate `id` to the same group: **asserts in debug**; in release returns the existing property (nothing new is created).
+- Adding a duplicate `id` to the same group logs a warning and returns the existing property (nothing new is created); `addGroup()` over a
+  non-group child adds the group under the first free id (`<id>_2`, ...). Empty ids and ids containing `/` are sanitized with a warning. [D29]
 - `PropertyBuilder<T>` is a thin wrapper around `Property&` whose setters return `*this`:
   `displayName`, `toolTip`, `readOnly`, `enabled`, `visible`, `validator`, plus type-specific setters
   (`range`, `minimum`, `maximum`, `step`, `decimals`, `prefix`, `suffix`, `maxLength`, `placeholder`, `regularExpression`, `filter`, `dialogMode`, `defaultDir`, `mustExist`), plus `attribute` and `editor` for any type.
@@ -394,7 +397,9 @@ Long paths in a (non-editing) cell are elided in the middle (`Qt::ElideMiddle`);
 - `createEditor/setEditorData/setModelData` delegate to `EditorFactory`. `setModelData` calls `model->setData`;
   if it returns `false` (validation error) the editor still closes, the model keeps the old value, and the view shows the error
   (tooltip at the cell, `QToolTip::showText`) — 1.0 behaviour. [Decision D5]
-- `paint`: uses `EditorHandler::paint` when present; Bool paints a left-aligned checkbox; groups paint a `QPalette::AlternateBase` background with bold text.
+- `paint`: uses `EditorHandler::paint` when present; check boxes come from `CheckStateRole`; groups paint a `QPalette::Button` background
+  with bold text; the name of a modified property is bold; read-only values (enabled, neither editable nor checkable) use
+  `QPalette::PlaceholderText`; value text is elided in the middle. [D30]
 - **Focus while a dialog is open:** an editor showing a modal dialog holds a `qpb::EditorDialogScope` (public, so custom editors such as
   a color button can use it; the internal `PathEdit` does too). `PropertyDelegate::eventFilter` ignores `FocusOut` while a scope is
   active, so the editor is not committed/closed half-way. [Decisions D6, D24]
@@ -423,6 +428,8 @@ public:
   `itemsExpandable = false`, `expandAll()` kept on new rows; groups render as section headers (spanned, not collapsible). [Decision D4]
 - Context menu on a property: **Reset to default** (disabled when not modified or read-only); on a group: **Reset group**.
 - Switching mode does not recreate the model and loses neither values nor the current selection.
+- `moveCursor()` is overridden so `MoveNext`/`MovePrevious` (Tab / Shift+Tab while editing) land on the next editable value,
+  skipping groups, read-only rows, check boxes and hidden rows.
 
 ### 5.6 `PropertyFormView : QScrollArea` (1.1)
 
@@ -524,6 +531,9 @@ Three supported ways to keep the folder in sync (the consumer chooses):
 - **No reliance on static initializers** to register types (the linker may drop them when linking statically).
   Basic types are registered lazily in `TypeRegistry::global()` / `EditorFactory::global()`.
 - Shared builds (`QPB_BUILD_SHARED=ON`) are supported; consumers must then deploy the DLL/.so — documented in the README.
+- `VERSION` holds `MAJOR.MINOR.PATCH` with an optional pre-release suffix (`1.0.0-rc1`); `QPB_VERSION_STR` carries the full
+  string. `project()` is called **without** `VERSION`: in a subdirectory it would set the host's `CMAKE_PROJECT_VERSION`
+  when the host project has none. Editing `VERSION` re-runs CMake (`CMAKE_CONFIGURE_DEPENDS`). [D31, D32]
 
 ## 7. Testing
 
@@ -692,3 +702,8 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D26| Attribute keys use full words (`minimum`, `regularExpression`, `dialogMode`) | Readability; the enum `qpb::FileMode` stores the dialog mode                        |
 | D27| `qpb/qpbcore.h` umbrella for core-only users; `qpb/qpb.h` includes widgets  | Core-only consumers must not need QtWidgets                                          |
 | D28| Validators receive the property (`(value, property)`) like `TypeHandler::validate` | One signature; validators can read attributes                                  |
+| D29| Duplicate or invalid ids log a warning instead of asserting                 | An assert would abort debug builds of consuming apps; the tree stays consistent either way |
+| D30| Group rows use `QPalette::Button`; read-only values are dimmed             | `AlternateBase` was indistinguishable from alternating rows; read-only needs a visual cue |
+| D31| `project()` without `VERSION` in the component; version from `qpb/VERSION`  | `project(VERSION)` leaked into the host's `CMAKE_PROJECT_VERSION` (found by the consumer leak check) |
+| D32| `VERSION` may carry a pre-release suffix; CMake re-runs when it changes      | Release candidates (`1.0.0-rc1`); replacing the folder must refresh the version header |
+| D33| `qpb/` is ASCII only (rule R6)                                               | MSVC C4819 on non-UTF-8 code pages would break consumers using `/WX`                   |

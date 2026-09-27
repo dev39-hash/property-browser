@@ -77,6 +77,11 @@ Từ sau M1, thay đổi header public phải ghi lý do vào Phụ lục B (v�
 
 ### M2 — Core + Model (≈ 22h)
 
+**Trạng thái:** xong. `qpb::core` đã cài đặt (`qpb/src/core/`) với 61 hàm test trong `tests/core/`
+(`tst_property`, `tst_typeregistry`, `tst_propertymodel`; test model chạy dưới `QAbstractItemModelTester` chế độ Fatal).
+Tiêu chí "quickstart link được" của M2.3 cần module widgets (M3); phần core được chứng minh qua `tests/consumer`, giờ dựng
+model và chạy pipeline giá trị từ bản `qpb/` link static (cũng là kiểm tra link static của M2.4).
+
 | ID    | Task                                                                                         | Giờ | Done khi |
 |-------|----------------------------------------------------------------------------------------------|-----|----------|
 | M2.1  | `Property` + d-pointer: dữ liệu, cờ, trạng thái hiệu lực kế thừa, `path()` (SPEC §4.2)        | 3   | Test kế thừa readOnly/enabled/visible qua 3 tầng; path đúng |
@@ -89,6 +94,13 @@ Từ sau M1, thay đổi header public phải ghi lý do vào Phụ lục B (v�
 | M2.8  | Batch lồng + `resetToDefault` đệ quy                                                          | 1   | `batchValueChanged` phát 1 lần ở batch ngoài cùng |
 
 ### M3 — Tree view + editor (≈ 24h)
+
+**Trạng thái:** xong, trừ việc gắn tag nội bộ `0.1.0` (M3.8) để bạn quyết định. `qpb::widgets` đã cài đặt
+(`EditorFactory` với 7 editor dựng sẵn, `PathEdit` nội bộ, `PropertyDelegate`, `PropertyTreeView`); cả 5 example đã link và chạy.
+`tests/widgets` kiểm tra factory (13 hàm) và tương tác view/delegate (19 hàm: Enter/Esc/focus-out, Tab/Shift+Tab bỏ qua hàng
+không sửa được, commit enum và path, bảo vệ focus khi mở dialog, checkbox, tooltip lỗi, các mode, hàng ẩn, menu reset, proxy model).
+Kiểm tra thủ công bằng ảnh chụp offscreen (`QPB_SCREENSHOT_DIR`). Điểm dừng quyết định sau M3.6 không xảy ra: chỉ cần một event
+filter và override `moveCursor()`.
 
 Làm phần rủi ro cao trước: Int + String + FilePath (UX editor, focus khi mở dialog).
 
@@ -108,6 +120,14 @@ Làm phần rủi ro cao trước: Int + String + FilePath (UX editor, focus khi
 vì sau 1.0 không đổi được.
 
 ### M4 — Hoàn thiện & khóa API (≈ 22h)
+
+**Trạng thái:** mọi việc không cần publish đã xong; bản `1.0.0-rc1` (M4.9: tag, GitHub Release, đẩy nhánh `qpb-release`)
+chờ bạn quyết định. M4.1/M4.2 đã làm cùng M3. Mới trong M4: `tests/api_compat/v1_0.cpp` (M4.4), các kịch bản consumer cho
+build shared, rò rỉ thiết lập của project chủ và nâng cấp tại chỗ (M4.5), `tools/check_architecture.cmake` với luật mới R6 và
+`tools/count_lines.cmake` (M4.3, M4.6), CI cho Windows (MSVC) và macOS (M4.7), `tools/api_snapshot.py` với baseline
+`tests/api_compat/api-1.0.txt` (M4.8), `tools/make_release.sh` và [`RELEASING.md`](RELEASING.md) (M4.9), README hướng dẫn
+tích hợp/nâng cấp và review cuối trong [`api-review.md`](api-review.md) (M4.10). Các kiểm tra đã phát hiện hai lỗi thật trong
+CMake của component (D31, D32).
 
 | ID    | Task                                                                                         | Giờ | Done khi |
 |-------|----------------------------------------------------------------------------------------------|-----|----------|
@@ -156,6 +176,8 @@ M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6
 ---
 
 ## 4. Quy trình phát hành (mọi bản 1.x)
+
+Hướng dẫn chi tiết và công cụ: [`RELEASING.md`](RELEASING.md), `tools/make_release.sh`.
 
 1. Cập nhật `qpb/VERSION` và mục mới trong `qpb/CHANGELOG.md` (Added / Changed / Deprecated / Fixed / **Upgrade notes**).
 2. CI xanh: unit test, `api_compat/*` của **mọi** bản trước, `tests/consumer`, `check_arch`, diff API snapshot chỉ có thêm.

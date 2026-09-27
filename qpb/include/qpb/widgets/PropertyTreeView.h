@@ -16,7 +16,7 @@ class PropertyTreeViewPrivate;
 }
 
 // Two-column view (name | value) for a PropertyModel or a proxy of one
-// (docs/SPEC.md §5.5).
+// (docs/SPEC.md section 5.5).
 //
 // Tree mode shows collapsible groups; List mode shows the same model flat,
 // with groups as section headers. Switching modes keeps the model, the values
@@ -52,6 +52,9 @@ public:
 
 protected:
     void contextMenuEvent(QContextMenuEvent* event) override;
+    // MoveNext / MovePrevious (Tab / Shift+Tab while editing) skip to the next
+    // editable value, passing over groups, read-only and check box rows.
+    QModelIndex moveCursor(CursorAction cursorAction, Qt::KeyboardModifiers modifiers) override;
 
 private:
     std::unique_ptr<detail::PropertyTreeViewPrivate> d;

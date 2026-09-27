@@ -9,7 +9,7 @@
 
 namespace qpb {
 
-// Outcome of validating a candidate property value (docs/SPEC.md §4.7).
+// Outcome of validating a candidate property value (docs/SPEC.md section 4.7).
 //
 // Aggregate that may gain fields at the end in later versions; create it with
 // valid() / error() rather than positional initialization.

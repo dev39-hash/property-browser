@@ -5,3 +5,18 @@ qpb_add_test(tst_version
 target_compile_definitions(tst_version PRIVATE
     QPB_TEST_VERSION_FILE="${PROJECT_SOURCE_DIR}/qpb/VERSION"
 )
+
+qpb_add_test(tst_property
+    SOURCES tst_property.cpp
+    LIBRARIES qpb::core
+)
+
+qpb_add_test(tst_typeregistry
+    SOURCES tst_typeregistry.cpp
+    LIBRARIES qpb::core
+)
+
+qpb_add_test(tst_propertymodel
+    SOURCES tst_propertymodel.cpp
+    LIBRARIES qpb::core
+)

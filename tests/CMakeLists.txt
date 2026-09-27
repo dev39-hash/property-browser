@@ -10,7 +10,7 @@ function(qpb_add_test name)
     target_link_libraries(${name} PRIVATE Qt6::Test ${arg_LIBRARIES})
     set_target_properties(${name} PROPERTIES AUTOMOC ON)
     if(MSVC)
-        target_compile_options(${name} PRIVATE /W4)
+        target_compile_options(${name} PRIVATE /W4 /utf-8)
     else()
         target_compile_options(${name} PRIVATE -Wall -Wextra -Wpedantic)
     endif()
@@ -23,5 +23,24 @@ function(qpb_add_test name)
 endfunction()
 
 add_subdirectory(api)
+add_subdirectory(api_compat)
 add_subdirectory(core)
+add_subdirectory(widgets)
 add_subdirectory(consumer)
+
+# --- repository checks (docs/PLAN.md M4.3, M4.6) --------------------------------
+
+add_test(NAME architecture_rules
+    COMMAND "${CMAKE_COMMAND}" "-DQPB_DIR=${PROJECT_SOURCE_DIR}/qpb"
+        -P "${PROJECT_SOURCE_DIR}/tools/check_architecture.cmake"
+)
+add_test(NAME size_quickstart_s1
+    COMMAND "${CMAKE_COMMAND}" -DLIMIT=30
+        "-DFILES=${PROJECT_SOURCE_DIR}/examples/quickstart/main.cpp"
+        -P "${PROJECT_SOURCE_DIR}/tools/count_lines.cmake"
+)
+add_test(NAME size_custom_type_s2
+    COMMAND "${CMAKE_COMMAND}" -DLIMIT=100
+        "-DFILES=${PROJECT_SOURCE_DIR}/examples/custom_type/ColorType.h$<SEMICOLON>${PROJECT_SOURCE_DIR}/examples/custom_type/ColorType.cpp"
+        -P "${PROJECT_SOURCE_DIR}/tools/count_lines.cmake"
+)
