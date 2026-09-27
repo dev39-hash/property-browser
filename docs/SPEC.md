@@ -178,7 +178,8 @@ public:
 };
 ```
 
-- Adding a duplicate `id` to the same group: **asserts in debug**; in release returns the existing property (nothing new is created).
+- Adding a duplicate `id` to the same group logs a warning and returns the existing property (nothing new is created); `addGroup()` over a
+  non-group child adds the group under the first free id (`<id>_2`, ...). Empty ids and ids containing `/` are sanitized with a warning. [D29]
 - `PropertyBuilder<T>` is a thin wrapper around `Property&` whose setters return `*this`:
   `displayName`, `toolTip`, `readOnly`, `enabled`, `visible`, `validator`, plus type-specific setters
   (`range`, `minimum`, `maximum`, `step`, `decimals`, `prefix`, `suffix`, `maxLength`, `placeholder`, `regularExpression`, `filter`, `dialogMode`, `defaultDir`, `mustExist`), plus `attribute` and `editor` for any type.
@@ -692,3 +693,4 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D26| Attribute keys use full words (`minimum`, `regularExpression`, `dialogMode`) | Readability; the enum `qpb::FileMode` stores the dialog mode                        |
 | D27| `qpb/qpbcore.h` umbrella for core-only users; `qpb/qpb.h` includes widgets  | Core-only consumers must not need QtWidgets                                          |
 | D28| Validators receive the property (`(value, property)`) like `TypeHandler::validate` | One signature; validators can read attributes                                  |
+| D29| Duplicate or invalid ids log a warning instead of asserting                 | An assert would abort debug builds of consuming apps; the tree stays consistent either way |

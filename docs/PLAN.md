@@ -75,6 +75,11 @@ After M1, every public header change must be justified in Appendix B (still allo
 
 ### M2 — Core + Model (≈ 22h)
 
+**Status:** done. `qpb::core` is implemented (`qpb/src/core/`) with 61 test functions in `tests/core/`
+(`tst_property`, `tst_typeregistry`, `tst_propertymodel`, the last one under `QAbstractItemModelTester` in Fatal mode).
+M2.3's "quickstart links" needs the widgets module (M3); the core part is proven by `tests/consumer`, which now builds a
+model and runs the value pipeline from a statically linked copy of `qpb/` (this also covers M2.4's static-link check).
+
 | ID    | Task                                                                                         | h | Done when |
 |-------|----------------------------------------------------------------------------------------------|---|-----------|
 | M2.1  | `Property` + d-pointer: data, flags, inherited effective state, `path()` (SPEC §4.2)          | 3 | Tests: readOnly/enabled/visible inherited across 3 levels; correct paths |

@@ -178,7 +178,8 @@ public:
 };
 ```
 
-- Thêm `id` trùng trong cùng group: **assert trong debug**, trả về property đã tồn tại trong release (không tạo mới).
+- Thêm `id` trùng trong cùng group: ghi cảnh báo và trả về property đã tồn tại (không tạo mới); `addGroup()` trùng với một property
+  không phải group thì thêm group dưới id trống đầu tiên (`<id>_2`, ...). Id rỗng hoặc chứa `/` được sửa lại kèm cảnh báo. [D29]
 - `PropertyBuilder<T>` là wrapper nhẹ quanh `Property&`, trả về `*this` cho mỗi setter:
   `displayName`, `toolTip`, `readOnly`, `enabled`, `visible`, `validator`, và setter theo kiểu
   (`range`, `minimum`, `maximum`, `step`, `decimals`, `prefix`, `suffix`, `maxLength`, `placeholder`, `regularExpression`, `filter`, `dialogMode`, `defaultDir`, `mustExist`), cùng `attribute` và `editor` cho mọi kiểu.
@@ -689,3 +690,4 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D26| Khóa attribute dùng từ đầy đủ (`minimum`, `regularExpression`, `dialogMode`) | Dễ đọc; enum `qpb::FileMode` lưu chế độ dialog                                        |
 | D27| `qpb/qpbcore.h` cho người chỉ dùng core; `qpb/qpb.h` gồm cả widgets         | Consumer chỉ dùng core không cần QtWidgets                                             |
 | D28| Validator nhận cả property (`(value, property)`) như `TypeHandler::validate` | Một chữ ký thống nhất; validator đọc được attribute                                   |
+| D29| Id trùng hoặc không hợp lệ chỉ ghi cảnh báo, không assert                     | Assert sẽ làm sập bản debug của ứng dụng dùng thư viện; cây vẫn nhất quán              |
