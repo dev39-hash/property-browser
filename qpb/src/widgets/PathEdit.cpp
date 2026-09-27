@@ -38,7 +38,7 @@ PathEdit::PathEdit(Kind kind, QWidget* parent)
     layout->addWidget(m_button);
 
     m_lineEdit->setFrame(false);
-    m_button->setText(QStringLiteral("…"));
+    m_button->setText(QString(QChar(0x2026))); // horizontal ellipsis
     m_button->setToolTip(kind == Kind::File ? tr("Choose a file") : tr("Choose a directory"));
     m_button->setFocusPolicy(Qt::NoFocus);
     setFocusProxy(m_lineEdit);
