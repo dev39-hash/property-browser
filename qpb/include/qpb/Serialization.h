@@ -21,8 +21,8 @@ class PropertyGroup;
 // qpb::serialization::save(*model.root(), settings).
 //
 // Only values are stored, never the structure: the tree is built by the
-// application, then values are written into it. Read-only properties are
-// neither written nor read, since the application maintains them. Values are
+// application, then values are written into it. Read-only and (since 1.3) live
+// properties are neither written nor read, since the application maintains them. Values are
 // restored with Property::setValue(), so they are converted and validated like
 // any value set by the application. To get one PropertyModel::batchValueChanged
 // signal instead of many, call these between beginBatch() and endBatch().

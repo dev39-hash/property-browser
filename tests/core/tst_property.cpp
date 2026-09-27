@@ -31,6 +31,7 @@ private slots:
     void validatorRejectsValue();
     void modifiedAndReset();
     void groupResetResetsDescendants();
+    void liveProperties();
 };
 
 void tst_Property::typedAddsStoreValueAndDefault()
@@ -420,6 +421,45 @@ void tst_Property::groupResetResetsDescendants()
     QVERIFY(g.resetToDefault());
     QCOMPARE(a.value(), QVariant(1));
     QCOMPARE(b.value(), QVariant(QStringLiteral("x")));
+}
+
+// Since 1.3: values maintained by the application.
+void tst_Property::liveProperties()
+{
+    QCOMPARE(int(Property::Flag::Live), 0x8);
+    auto root = PropertyGroup::create(QStringLiteral("root"));
+    Property& setting = root->addInt(QStringLiteral("setting"), 1);
+    Property& used = root->addInt(QStringLiteral("used"), 0).live().readOnly();
+    PropertyGroup& status = root->addGroup(QStringLiteral("status"));
+    Property& counter = status.addInt(QStringLiteral("counter"), 0);
+    status.setLive(true);
+
+    QVERIFY(used.isLive());
+    QVERIFY(used.flags().testFlag(Property::Flag::Live));
+    QVERIFY(counter.isLive()); // inherited from the group
+    QVERIFY(!counter.flags().testFlag(Property::Flag::Live));
+    QVERIFY(!setting.isLive());
+
+    // Never modified.
+    QVERIFY(used.setValue(42));
+    QVERIFY(counter.setValue(7));
+    QVERIFY(setting.setValue(2));
+    QVERIFY(!used.isModified());
+    QVERIFY(!counter.isModified());
+    QVERIFY(setting.isModified());
+
+    // Group resets leave live values alone; resetting one directly still works.
+    QVERIFY(root->resetToDefault());
+    QCOMPARE(setting.value(), QVariant(1));
+    QCOMPARE(used.value(), QVariant(42));
+    QCOMPARE(counter.value(), QVariant(7));
+    QVERIFY(used.resetToDefault());
+    QCOMPARE(used.value(), QVariant(0));
+
+    // Not live any more: modified again.
+    QVERIFY(counter.setValue(9));
+    status.setLive(false);
+    QVERIFY(counter.isModified());
 }
 
 QTEST_APPLESS_MAIN(tst_Property)
