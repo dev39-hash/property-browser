@@ -21,5 +21,13 @@ Versions below 1.0 are internal pre-releases; their API may change without notic
   `PropertyDelegate` (Enter/Escape/Tab/focus-out, dialog focus protection, check boxes, validation tool tip,
   group/modified/read-only painting) and `PropertyTreeView` (Tree and List modes, hidden rows, reset context menu).
 
+### Fixed
+- The component no longer sets the host project's `CMAKE_PROJECT_VERSION` (`project()` is called without `VERSION`).
+- Replacing the component folder with another version now refreshes the generated version header.
+
+### Changed
+- `VERSION` accepts a pre-release suffix (e.g. `1.0.0-rc1`); `QPB_VERSION_STR` contains it.
+- All files in the component are ASCII (builds with MSVC `/WX` on any code page).
+
 ### Upgrade notes
 - Not applicable (first pre-release).

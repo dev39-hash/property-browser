@@ -83,6 +83,8 @@ Lý do chi tiết: brainstorm mục 11. Thiết kế **không được cấm** m
 - **R4.** Không public API nào chưa có ít nhất một nơi sử dụng (example hoặc test).
 - **R5.** Chỉ header trong `qpb/include/qpb/` là public. Mọi thứ trong namespace `qpb::detail` hoặc
   thư mục `src/` là nội bộ, đổi tự do. Mọi thay đổi public header phải tuân §9.
+- **R6.** Mọi file trong `qpb/` chỉ dùng ký tự ASCII. MSVC trên code page không phải UTF-8 cảnh báo (C4819) với ký tự khác,
+  làm hỏng build của consumer dùng `/WX`. (R1, R2, R5, R6 được kiểm tra bằng `tools/check_architecture.cmake`.)
 
 ---
 
@@ -528,6 +530,9 @@ Ba cách giữ folder đồng bộ (đều được hỗ trợ, do consumer ch�
 - **Không dựa vào static initializer** để đăng ký kiểu (linker có thể loại bỏ khi link static).
   Kiểu cơ bản đăng ký lười trong `TypeRegistry::global()` / `EditorFactory::global()`.
 - Build shared (`QPB_BUILD_SHARED=ON`) vẫn hỗ trợ; khi đó consumer phải deploy thêm DLL/so — ghi rõ trong README.
+- `VERSION` chứa `MAJOR.MINOR.PATCH` kèm hậu tố pre-release tùy chọn (`1.0.0-rc1`); `QPB_VERSION_STR` giữ chuỗi đầy đủ.
+  Gọi `project()` **không** kèm `VERSION`: trong thư mục con nó sẽ ghi `CMAKE_PROJECT_VERSION` của project chủ nếu project chủ
+  không khai báo version. Sửa `VERSION` sẽ khiến CMake chạy lại (`CMAKE_CONFIGURE_DEPENDS`). [D31, D32]
 
 ## 7. Kiểm thử
 
@@ -696,3 +701,6 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D28| Validator nhận cả property (`(value, property)`) như `TypeHandler::validate` | Một chữ ký thống nhất; validator đọc được attribute                                   |
 | D29| Id trùng hoặc không hợp lệ chỉ ghi cảnh báo, không assert                     | Assert sẽ làm sập bản debug của ứng dụng dùng thư viện; cây vẫn nhất quán              |
 | D30| Hàng group dùng `QPalette::Button`; giá trị read-only được làm mờ          | `AlternateBase` trùng màu hàng xen kẽ; read-only cần dấu hiệu nhận biết               |
+| D31| Component gọi `project()` không kèm `VERSION`; version lấy từ `qpb/VERSION`  | `project(VERSION)` ghi đè `CMAKE_PROJECT_VERSION` của project chủ (test rò rỉ phát hiện) |
+| D32| `VERSION` có thể có hậu tố pre-release; CMake chạy lại khi file đổi         | Bản release candidate (`1.0.0-rc1`); thay folder phải cập nhật header version          |
+| D33| `qpb/` chỉ dùng ASCII (luật R6)                                              | MSVC cảnh báo C4819 trên code page không phải UTF-8 làm hỏng consumer dùng `/WX`        |
