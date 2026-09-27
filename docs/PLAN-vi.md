@@ -177,6 +177,45 @@ M6.5 `v1_2.cpp` + diff snapshot · M6.6 release 1.2.0.
 tự do trong `qpb` làm hỏng lời gọi không kèm namespace của ứng dụng qua ADL, nên dùng namespace lồng (D40). Quyết định
 D40–D42. M6.6: đã phát hành `1.2.0`, sau vòng thử RC 4 (docs/rc-trial.md) phát hiện và sửa F7.
 
+### M7 — 1.3 (chỉ bổ sung): cải thiện `QObjectPropertySource` (F8, F9)
+
+Lập sau vòng thử RC 4 ([`rc-trial.md`](rc-trial.md)). Cả hai điểm đều giải quyết bằng cách bổ sung; code viết cho 1.0–1.2
+build và chạy như cũ.
+
+**F8 — tiêu đề group.** Group tạo từ một `QObject` có tiêu đề là id (tên object, vd. `studio_mic`). Id giữ nguyên (path
+phải ổn định cho serialization và code ứng dụng); chỉ **tên hiển thị** của group thay đổi:
+
+- `Q_CLASSINFO("qpb:title", "name")`: tên hiển thị của group là giá trị của Q_PROPERTY đó, cập nhật qua signal NOTIFY.
+  Class tự quyết định.
+- `QObjectPropertySource::setTitleProperty(const QString& name)`: tương tự cho object mà class không có class info này,
+  dành cho class ứng dụng không sửa được (vd. từ thư viện khác). Áp cho object thêm sau đó; class info được ưu tiên.
+- Không đặt gì: như cũ (id), giống 1.2.
+
+**F9 — giá trị do ứng dụng quản lý.** Có những property không phải thiết lập mà là giá trị trực tiếp (bộ đếm, trạng
+thái, dung lượng đã dùng). Chúng không bao giờ nên trông như "đã sửa", bị reset hay được lưu.
+
+- Cờ mới `Property::Flag::Live` (thêm ở cuối, `0x8`), với `isLive()` / `setLive()` và `PropertyBuilderBase::live()`.
+  Property live: `isModified()` luôn `false` (view không bao giờ in đậm, `IsModifiedRole` là `false`); "Reset to
+  default" và `resetToDefault()` bỏ qua nó; `qpb::serialization` không ghi, không đọc. Vẫn sửa được trừ khi đồng thời
+  read-only.
+- `QObjectPropertySource`: khóa metadata `live` (`Q_CLASSINFO("qpb:used", "live")`).
+- Quyết định còn mở (D44): Q_PROPERTY **không có WRITE nhưng có NOTIFY** có tự động thành live không? Đó là điều vòng thử
+  RC muốn, nhưng đổi hành vi của 1.2 (hiện các property này in đậm sau khi thay đổi). Đề xuất: mặc định giữ hành vi 1.2
+  và thêm `QObjectPropertySource::setLiveReadOnlyProperties(bool)` (mặc định `false`), ứng dụng bật bằng một lời gọi.
+  Phương án khác: coi là sửa lỗi (SPEC §9.1 cho phép sửa hành vi mâu thuẫn tài liệu) và ghi rõ trong CHANGELOG.
+
+| ID   | Việc                                                                                              | Ước tính (h) | Xong khi |
+|------|---------------------------------------------------------------------------------------------------|--------------|----------|
+| M7.1 | SPEC: §4.2 (cờ Live), §4.8 (serialization bỏ qua live), §4.9 (title, `live`), D43 (tiêu đề), D44 (Live); `-vi` | 1 | Ghi xong quyết định |
+| M7.2 | `Flag::Live`, `isLive()`/`setLive()`, builder `live()`; `isModified()`, reset và serialization tuân theo | 2 | Test core: modified, reset (đơn và group), JSON và QSettings bỏ qua |
+| M7.3 | View: dự kiến không đổi code (dùng `IsModifiedRole` và hàm reset dùng chung); test property live không bao giờ in đậm và menu reset bỏ qua, ở cả tree và form | 1 | Test widget đạt |
+| M7.4 | `QObjectPropertySource`: `qpb:title`, `setTitleProperty()`, khóa `live`, `setLiveReadOnlyProperties()` (nếu D44 được chấp nhận); tiêu đề theo NOTIFY | 3 | Test source: tiêu đề đặt/cập nhật/xóa theo object, metadata live |
+| M7.5 | `tests/api_compat/v1_3.cpp` + `api-1.3.txt` (chứa trọn 1.2); `examples/object_editor` có tiêu đề và giá trị live | 1 | Test tương thích và snapshot đạt |
+| M7.6 | Vòng thử RC 5: trang Devices dùng `qpb:title` và `live`; đóng F8, F9, không có thay đổi hành vi mới | 1 | Test trial đạt, cập nhật báo cáo |
+| M7.7 | Phát hành 1.3.0 (PR, CI xanh, zip, `qpb-release`)                                                 | 0.5 | Có zip phát hành |
+
+Tổng ≈ 9,5 h.
+
 ---
 
 ## 3. Phụ thuộc giữa các task
@@ -187,7 +226,7 @@ M0.* ─► M1.1 ─► M1.2, M1.3 ─► M1.4 ─► M1.5
 M1.* ─► M2.1 ─► M2.2 ─► M2.3
         M2.4 ─► M2.5 ─► M2.6 ─► M2.7 ─► M2.8
 M2.4 ─► M3.1 ─► M3.2 ─► M3.3 ─► M3.4, M3.5 ─► M3.6 ─► M3.7 ─► M3.8
-M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6
+M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7
 ```
 
 ---

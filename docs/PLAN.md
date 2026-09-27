@@ -175,6 +175,47 @@ and native `QSettings`), `Types::Int64` with an internal 64-bit spin box, `examp
 functions in `qpb` break unqualified application calls through ADL, hence the nested namespace (D40). Decisions D40–D42.
 M6.6: released as `1.2.0`, after RC trial round 4 (docs/rc-trial.md) found and fixed F7.
 
+### M7 — 1.3 (additive only): `QObjectPropertySource` ergonomics (F8, F9)
+
+Planned after RC trial round 4 ([`rc-trial.md`](rc-trial.md)). Both findings are solved with additions; code written
+for 1.0–1.2 builds and behaves the same.
+
+**F8 — group titles.** A group made from a `QObject` is titled with its id (the object name, e.g. `studio_mic`). Ids stay
+as they are (paths must be stable for serialization and application code); only the **display name** of the group changes:
+
+- `Q_CLASSINFO("qpb:title", "name")`: the group's display name is the value of that Q_PROPERTY, updated through its
+  NOTIFY signal. The class decides.
+- `QObjectPropertySource::setTitleProperty(const QString& name)`: the same for objects whose class has no such class
+  info, for classes the application cannot change (e.g. from a library). Applies to objects added afterwards; the class
+  info wins.
+- Neither set: unchanged (the id), as in 1.2.
+
+**F9 — values maintained by the application.** Some properties are not settings but live values (a counter, a status,
+the space used). They should never look "modified", be reset or be saved.
+
+- New flag `Property::Flag::Live` (appended, `0x8`), with `isLive()` / `setLive()` and `PropertyBuilderBase::live()`.
+  A live property: `isModified()` is always `false` (so views never show it in bold and `IsModifiedRole` is `false`);
+  "Reset to default" and `resetToDefault()` leave it alone; `qpb::serialization` neither writes nor reads it. It stays
+  editable unless it is also read-only.
+- `QObjectPropertySource`: metadata key `live` (`Q_CLASSINFO("qpb:used", "live")`).
+- Open decision (D44): should a Q_PROPERTY **without WRITE but with NOTIFY** become live automatically? It is what the
+  RC trial wanted, but it changes 1.2 behaviour (such properties are bold after a change today). Proposal: keep 1.2
+  behaviour by default and add `QObjectPropertySource::setLiveReadOnlyProperties(bool)` (default `false`), so an
+  application opts in with one call. Alternative: treat it as a bug fix (SPEC §9.1 allows fixing behaviour that
+  contradicts the documentation) and call it out in the CHANGELOG.
+
+| ID   | Task                                                                                              | Est. (h) | Done when |
+|------|---------------------------------------------------------------------------------------------------|----------|-----------|
+| M7.1 | SPEC: §4.2 (Live flag), §4.8 (serialization skips live), §4.9 (title, `live`), D43 (titles), D44 (Live); `-vi` | 1 | Decisions recorded |
+| M7.2 | `Flag::Live`, `isLive()`/`setLive()`, builder `live()`; `isModified()`, reset and serialization honour it | 2 | Core tests: modified, reset (single and group), JSON and QSettings skip it |
+| M7.3 | Views: no code change expected (they use `IsModifiedRole` and the shared reset helpers); tests that a live property is never bold and the reset menu ignores it, in tree and form | 1 | Widget tests pass |
+| M7.4 | `QObjectPropertySource`: `qpb:title`, `setTitleProperty()`, `live` key, `setLiveReadOnlyProperties()` (if D44 is accepted); title follows NOTIFY | 3 | Source tests: title set/updated/removed with the object, live metadata |
+| M7.5 | `tests/api_compat/v1_3.cpp` + `api-1.3.txt` (superset of 1.2); `examples/object_editor` shows titles and a live value | 1 | Compat and snapshot tests pass |
+| M7.6 | RC trial round 5: the Devices page uses `qpb:title` and `live`; F8 and F9 closed, no new behaviour change | 1 | Trial tests pass, report updated |
+| M7.7 | Release 1.3.0 (PR, green CI, zip, `qpb-release`)                                                    | 0.5 | Release zip |
+
+Total ≈ 9.5 h.
+
 ---
 
 ## 3. Task dependencies
@@ -185,7 +226,7 @@ M0.* ─► M1.1 ─► M1.2, M1.3 ─► M1.4 ─► M1.5
 M1.* ─► M2.1 ─► M2.2 ─► M2.3
         M2.4 ─► M2.5 ─► M2.6 ─► M2.7 ─► M2.8
 M2.4 ─► M3.1 ─► M3.2 ─► M3.3 ─► M3.4, M3.5 ─► M3.6 ─► M3.7 ─► M3.8
-M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6
+M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7
 ```
 
 ---
