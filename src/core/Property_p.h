@@ -57,7 +57,7 @@ public:
     // Used for initial values.
     QVariant convertInitial(const QVariant& value) const;
 
-    // The value pipeline (docs/SPEC.md §4.6). Returns false if the value was
+    // The value pipeline (docs/SPEC.md section 4.6). Returns false if the value was
     // rejected; emits notifications through the observer.
     bool assign(const QVariant& value);
 

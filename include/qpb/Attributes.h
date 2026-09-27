@@ -10,7 +10,7 @@
 
 namespace qpb {
 
-// Standard attribute keys (docs/SPEC.md §4.4).
+// Standard attribute keys (docs/SPEC.md section 4.4).
 //
 // Attributes are stored per property in a QVariantMap and tune validation,
 // display and editors. Keys a type does not know are ignored, so custom types

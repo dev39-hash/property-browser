@@ -1,4 +1,4 @@
-# qpb — property browser for Qt 6 Widgets.
+# qpb - property browser for Qt 6 Widgets.
 #
 # This folder is a self-contained component. Consuming projects copy it (e.g. to
 # components/qpb/) and use it with:
@@ -6,15 +6,27 @@
 #   add_subdirectory(components/qpb)
 #   target_link_libraries(my_app PRIVATE qpb::widgets)
 #
-# Rules for this file (docs/SPEC.md §6.3): never touch global variables or flags,
+# Rules for this file (docs/SPEC.md section 6.3): never touch global variables or flags,
 # configure only qpb's own targets, and never refer to CMAKE_SOURCE_DIR.
 
 cmake_minimum_required(VERSION 3.21)
 
-file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/VERSION" _qpb_version LIMIT_COUNT 1)
-string(STRIP "${_qpb_version}" _qpb_version)
-project(qpb VERSION ${_qpb_version} LANGUAGES CXX)
-unset(_qpb_version)
+# VERSION holds "MAJOR.MINOR.PATCH" with an optional pre-release suffix such as
+# "-rc1". project() only accepts the numeric part.
+file(STRINGS "${CMAKE_CURRENT_LIST_DIR}/VERSION" QPB_VERSION_STRING LIMIT_COUNT 1)
+string(STRIP "${QPB_VERSION_STRING}" QPB_VERSION_STRING)
+if(NOT QPB_VERSION_STRING MATCHES "^(([0-9]+)\\.([0-9]+)\\.([0-9]+))(-[0-9A-Za-z.]+)?$")
+    message(FATAL_ERROR "qpb: invalid VERSION \"${QPB_VERSION_STRING}\"")
+endif()
+set(QPB_VERSION "${CMAKE_MATCH_1}")
+set(QPB_VERSION_MAJOR "${CMAKE_MATCH_2}")
+set(QPB_VERSION_MINOR "${CMAKE_MATCH_3}")
+set(QPB_VERSION_PATCH "${CMAKE_MATCH_4}")
+# No VERSION here: project(VERSION) in a subdirectory would set the host's
+# CMAKE_PROJECT_VERSION cache entry when the host project has no version.
+project(qpb LANGUAGES CXX)
+# Re-run CMake when VERSION changes (e.g. after replacing the component folder).
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_LIST_DIR}/VERSION")
 
 option(QPB_BUILD_SHARED "Build qpb as shared libraries instead of static ones" OFF)
 
