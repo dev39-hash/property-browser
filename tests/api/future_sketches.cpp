@@ -4,6 +4,10 @@
 // public 1.0 headers only. They are compiled (never linked or run) so the
 // compiler proves that each feature can be added later without changing the
 // 1.0 API. See docs/api-review.md for the conclusions.
+//
+// The features have since been implemented (1.1, 1.2); the sketches stay as
+// application code that must keep compiling: e.g. their unqualified toJson()
+// and save() calls must not become ambiguous with qpb's functions (D40).
 
 #include <qpb/qpb.h>
 

@@ -6,6 +6,7 @@
 class InspectorPage;
 class SettingsPage;
 class PluginsPage;
+class DevicesPage;
 class QTabWidget;
 
 class MainWindow : public QMainWindow
@@ -30,6 +31,10 @@ public:
     {
         return m_plugins;
     }
+    DevicesPage* devices() const
+    {
+        return m_devices;
+    }
 
 private:
     QSettings m_settings;
@@ -37,4 +42,5 @@ private:
     InspectorPage* m_inspector;
     SettingsPage* m_settingsPage;
     PluginsPage* m_plugins;
+    DevicesPage* m_devices;
 };

@@ -198,6 +198,7 @@ Khóa là hằng `qpb::Attr::*` (`QString`). Thuộc tính không nhận ra bị
 | Kiểu       | Attribute (kiểu giá trị)                                                                 | Mặc định              |
 |------------|-------------------------------------------------------------------------------------------|-----------------------|
 | Int        | `minimum`(int) `maximum`(int) `step`(int) `prefix` `suffix`                                | INT_MIN / INT_MAX / 1 |
+| Int64 (1.2)| `minimum` `maximum` `step`(qint64) `prefix` `suffix`                                       | toàn dải qint64 / 1   |
 | Double     | `minimum` `maximum` `step`(double) `decimals`(int) `prefix` `suffix`                       | −∞ / +∞ / 1.0 / 2     |
 | String     | `maxLength`(int) `placeholder` `regularExpression`(QString) `multiline`(bool, **1.1**)    | không giới hạn |
 | Enum       | `options`(`QList<EnumOption>` — `{QString label; QVariant value;}`)                         | —                     |
@@ -211,7 +212,9 @@ chỉ hiện một dòng. String không có attribute này hiển thị như cũ
 **Enum:** `value()` là `value` của option được chọn (int **hoặc** QString, người dùng chọn qua overload).
 Overload `addEnum(id, QStringList labels, int index)` tạo option với `value = index`.
 
-**Integer 64-bit:** 1.0 chỉ hỗ trợ `int` (vì `QSpinBox` là `int`). `qint64` thêm ở 1.2 dưới dạng **kiểu mới** `Types::Int64` (không đổi hành vi `Int` → không breaking).
+**Integer 64-bit:** 1.0 chỉ hỗ trợ `int` (vì `QSpinBox` là `int`). 1.2 thêm **kiểu mới** `Types::Int64` (`"int64"`, lưu
+`qint64`, `addInt64()` / `Int64Builder`), đăng ký sau bảy kiểu của 1.0; hành vi của `Int` không đổi. [D8] Lưu ý: ứng dụng tự
+đăng ký kiểu `"int64"` trước 1.2 giờ nhận `false` từ `registerType()` và dùng kiểu có sẵn (ghi trong CHANGELOG).
 
 ### 4.5 `TypeRegistry` (phần không có UI)
 
@@ -339,6 +342,58 @@ Validation mặc định của kiểu cơ bản:
 | FilePath   | `mustExist` + `FileMode::Open` → `QFileInfo::isFile()`; chuỗi rỗng luôn hợp lệ |
 | DirPath    | `mustExist` → `QFileInfo::isDir()`; chuỗi rỗng luôn hợp lệ                |
 
+### 4.8 Serialization (1.2)
+
+Các hàm tự do trong namespace **`qpb::serialization`** (header `qpb/Serialization.h`, `qpb::core`):
+
+```cpp
+namespace qpb::serialization {
+QJsonObject toJson(const PropertyGroup& group);
+bool fromJson(PropertyGroup& group, const QJsonObject& json);
+void save(const PropertyGroup& group, QSettings& settings);   // key = path tương đối với group
+bool load(PropertyGroup& group, const QSettings& settings);
+}
+```
+
+- Chỉ lưu **giá trị**; ứng dụng tự dựng cây rồi ghi giá trị vào. Group thành object JSON lồng nhau theo id (group không có gì để lưu thì bỏ qua, giống `save()` không ghi key nào cho chúng); key của
+  `QSettings` là path tương đối với group, nằm dưới group hiện tại của settings.
+- **Property read-only không được ghi cũng không được đọc** (ứng dụng tự quản lý, D34). Property ẩn và disabled thì có.
+- Giá trị được khôi phục bằng `Property::setValue()` (chuyển đổi → normalize → validation). Key lạ và key thiếu bị bỏ qua;
+  `fromJson`/`load` trả về `false` nếu có giá trị bị từ chối, các giá trị khác vẫn được áp. Bọc trong
+  `beginBatch()`/`endBatch()` để chỉ có một `batchValueChanged`.
+- Dạng JSON theo kiểu: `TypeHandler::toJson` / `fromJson` (trường tùy chọn mới, 1.2); rỗng → `QJsonValue::fromVariant()` /
+  `toVariant()`. `Int64` ghi số tới 2^53, giá trị lớn hơn ghi dạng chuỗi.
+- Các hàm nằm trong namespace lồng nên argument-dependent lookup không bao giờ tìm thấy chúng: hàm `save(group, settings)`
+  của ứng dụng gọi không kèm namespace vẫn không bị mơ hồ sau khi nâng cấp (quy tắc ở §9.3). [D40, D42]
+
+### 4.9 `QObjectPropertySource` (1.2)
+
+```cpp
+class QObjectPropertySource : public QObject {
+public:
+    explicit QObjectPropertySource(PropertyModel* model, QObject* parent = nullptr);
+    PropertyModel* model() const;
+    PropertyGroup* addObject(QObject* object, PropertyGroup* parentGroup = nullptr, const QString& id = QString());
+    bool removeObject(QObject* object);
+    QList<QObject*> objects() const;
+    PropertyGroup* groupOf(const QObject* object) const;
+    void refresh();   // đọc lại tất cả (Q_PROPERTY không có NOTIFY)
+};
+```
+
+- `addObject` thêm một group (id: tham số, nếu không thì `objectName`, nếu không thì tên class; thêm `_2`, `_3`, ... cho
+  khỏi trùng) với mỗi Q_PROPERTY một property: `bool`→Bool, `int`→Int, `qint64`→Int64, `double`/`float`→Double,
+  `QString`→String, `Q_ENUM`→Enum (key làm nhãn, giá trị int), kiểu khác đã đăng ký trong `TypeRegistry` theo storage type.
+  Flags và kiểu khác bị bỏ qua. Không ghi được → read-only. Giá trị của object là giá trị mặc định.
+- Tập property mặc định: của class và các lớp cha, trừ của `QObject` (`objectName`). `Q_CLASSINFO("qpb:properties", "a,b")`
+  chọn và sắp thứ tự.
+- Metadata `Q_CLASSINFO("qpb:<prop>", "min=0;max=10;suffix= m")`: key `type` (một TypeId, vd. `filepath`), `displayName`,
+  `toolTip`, `readOnly`, `hidden`, `disabled`, `exclude`, và mọi khóa attribute (`min`/`max` = `minimum`/`maximum`); key
+  không có `=giá trị` nghĩa là `true`.
+- Đồng bộ: model → object khi `valueChanged` (`QMetaProperty::write`; nếu object chỉnh hoặc từ chối giá trị, model hiện
+  giá trị của object); object → model qua signal NOTIFY (`Property::setValue`); chặn vòng lặp. Object bị hủy → group bị
+  xóa. Source bị hủy → group vẫn còn, ngừng đồng bộ. [D41]
+
 ---
 
 ## 5. Widgets (`qpb::widgets`)
@@ -388,6 +443,7 @@ property đó. Kiểu lưu trữ và validation vẫn theo `typeId` gốc.
 |----------|---------------------------------------------------------------|-------------------------------------------------------------------------|
 | Bool     | *không tạo editor* trong Tree/List (checkbox vẽ bởi delegate qua `CheckStateRole`); `QCheckBox` trong Form | Click hoặc Space để toggle |
 | Int      | `QSpinBox`                                                    | Áp `min/max/step/prefix/suffix`; `keyboardTracking = false`             |
+| Int64    | `Int64SpinBox` nội bộ (`QAbstractSpinBox` cho qint64) (1.2)   | Như Int; bước tăng/giảm dừng ở giới hạn                                 |
 | Double   | `QDoubleSpinBox`                                              | Như Int + `decimals`; khi không edit hiển thị tối đa `decimals` chữ số thập phân theo `QLocale`, bỏ số 0 thừa |
 | String   | `QLineEdit`; `QPlainTextEdit` khi `multiline` (1.1)           | `maxLength`, `placeholder`, `QRegularExpressionValidator` từ `regularExpression`; nhiều dòng: `placeholder`, cao tối thiểu 4 dòng, Tab chuyển tiếp |
 | Enum     | `QComboBox` (không editable)                                  | Commit ngay khi chọn (`notifyCommit` trên `activated`)                  |
@@ -594,7 +650,7 @@ Sau 1.0, tính năng mới đến dưới dạng **bổ sung** (minor), không s
 | 0.1   | Prototype nội bộ: core + model + Tree view, 7 kiểu. API chưa khóa                                           | —             |
 | **1.0** | §4 toàn bộ; §5.1–5.5; 7 kiểu cơ bản; Tree + List; reset; in đậm khi modified; tooltip; component folder (§6); chính sách API (§9); example quickstart, custom_type, inspector | **Khóa API** |
 | 1.1   | `PropertyFormView` (§5.6); `PropertyFilterProxyModel` (§5.7); attribute `multiline`                          | Bổ sung       |
-| 1.2   | `QObjectPropertySource` (đọc `Q_PROPERTY`, metadata qua `Q_CLASSINFO("qpb:<prop>", "min=0;max=10")`, đồng bộ hai chiều); serialize `toJson/fromJson`, `save/load(QSettings&)`; `Types::Int64`; example `QUndoStack` | Bổ sung |
+| 1.2   | `QObjectPropertySource` (đọc `Q_PROPERTY`, metadata qua `Q_CLASSINFO("qpb:<prop>", "min=0;max=10")`, đồng bộ hai chiều); serialize `qpb::serialization::toJson/fromJson/save/load` (§4.8); `Types::Int64`; example `QUndoStack` | Bổ sung |
 | 2.0   | Chỉ khi thật sự cần phá vỡ API; gom mọi thứ đã deprecate                                                    | Breaking      |
 
 **Thiết kế 1.0 phải "chừa chỗ" cho 1.1/1.2** mà không đổi API: Form view và filter là class mới dùng
@@ -636,6 +692,9 @@ Dù vậy d-pointer vẫn được dùng (§9.3) để giữ header ổn định
 - Không expose kiểu của thư viện bên thứ ba; kiểu trong API chỉ là Qt + std.
 - Không có `inline`/template chứa logic nghiệp vụ trong header (builder chỉ chuyển tiếp sang hàm trong `.cpp`).
 - Mọi header public include được **riêng lẻ** (tự đủ), kiểm tra bằng test biên dịch từng header.
+- Hàm tự do thêm sau 1.0 nằm trong **namespace lồng** (vd. `qpb::serialization`), không đặt trực tiếp trong `qpb`:
+  argument-dependent lookup sẽ tìm thấy chúng với tham số kiểu của qpb và có thể làm lời gọi không kèm namespace của ứng
+  dụng bị mơ hồ. `tests/api/future_sketches.cpp` và `tests/api_compat/v1_2.cpp` có sẵn các hàm như vậy của ứng dụng. [D40]
 
 ### 9.4 Version & deprecation
 
@@ -742,3 +801,6 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D37| Section của form dùng `QToolButton` tiêu đề checkable thay cho `QGroupBox`  | `QGroupBox` không thu gọn được nếu không có check box, mà check box dễ hiểu là "bật/tắt" |
 | D38| Form view dựng lại một lần mỗi vòng event loop khi cấu trúc đổi; truy vấn thì dựng lại ngay | Đổi bộ lọc phát nhiều signal hàng; editor có thể bị thay khi đang commit |
 | D39| Proxy lọc chấp nhận con cháu của group khớp trong `filterAcceptsRow()`      | `autoAcceptChildRows` bỏ qua `filterAcceptsRow()`, làm mất quy tắc của lớp con         |
+| D40| Hàm tự do mới nằm trong namespace lồng (`qpb::serialization`)               | Hàm trong `qpb` nhận kiểu của qpb bị ADL tìm thấy và làm hỏng lời gọi `save(group, settings)` không kèm namespace của ứng dụng (phát hiện nhờ `future_sketches.cpp`) |
+| D41| `QObjectPropertySource` đọc metadata từ `Q_CLASSINFO`, cần một model, xóa group của object đã bị hủy | Không phải sửa class được hiển thị; thay đổi property chỉ quan sát được qua `valueChanged` của model |
+| D42| Serialization bỏ qua property read-only                                      | Ứng dụng tự quản lý chúng; nạp lại sẽ ghi đè vd. version đang chạy bằng giá trị đã lưu |

@@ -42,6 +42,42 @@ IntBuilder& IntBuilder::suffix(const QString& suffix)
     return attribute(Attr::Suffix, suffix);
 }
 
+// --- Int64 ---------------------------------------------------------------------
+
+Int64Builder::Int64Builder(Property& property)
+    : PropertyBuilderBase(property)
+{ }
+
+Int64Builder& Int64Builder::range(qint64 minimum, qint64 maximum)
+{
+    return this->minimum(minimum).maximum(maximum);
+}
+
+Int64Builder& Int64Builder::minimum(qint64 minimum)
+{
+    return attribute(Attr::Minimum, minimum);
+}
+
+Int64Builder& Int64Builder::maximum(qint64 maximum)
+{
+    return attribute(Attr::Maximum, maximum);
+}
+
+Int64Builder& Int64Builder::step(qint64 step)
+{
+    return attribute(Attr::Step, step);
+}
+
+Int64Builder& Int64Builder::prefix(const QString& prefix)
+{
+    return attribute(Attr::Prefix, prefix);
+}
+
+Int64Builder& Int64Builder::suffix(const QString& suffix)
+{
+    return attribute(Attr::Suffix, suffix);
+}
+
 // --- Double --------------------------------------------------------------------
 
 DoubleBuilder::DoubleBuilder(Property& property)

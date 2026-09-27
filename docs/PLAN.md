@@ -169,6 +169,12 @@ is still checked). The search box is the application's `QLineEdit` wired to `set
 M6.1 `QObjectPropertySource` · M6.2 JSON/`QSettings` serialization · M6.3 `Types::Int64` · M6.4 `QUndoStack` example ·
 M6.5 `v1_2.cpp` + snapshot diff · M6.6 release 1.2.0.
 
+**Status:** M6.1–M6.5 done. `QObjectPropertySource` (SPEC §4.9, 8 tests), `qpb::serialization` (§4.8, 10 tests incl. INI
+and native `QSettings`), `Types::Int64` with an internal 64-bit spin box, `examples/object_editor` (QObject source +
+`QUndoStack` + JSON), `tests/api_compat/v1_2.cpp` and `api-1.2.txt` (superset of 1.1). The compile check caught that free
+functions in `qpb` break unqualified application calls through ADL, hence the nested namespace (D40). Decisions D40–D42.
+M6.6: released as `1.2.0`, after RC trial round 4 (docs/rc-trial.md) found and fixed F7.
+
 ---
 
 ## 3. Task dependencies

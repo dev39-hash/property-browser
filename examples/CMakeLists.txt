@@ -20,3 +20,4 @@ qpb_add_example(qpb_example_inspector SOURCES inspector/main.cpp ${_qpb_color_ty
 qpb_add_example(qpb_example_settings_dialog SOURCES settings_dialog/main.cpp)
 qpb_add_example(qpb_example_plugin_config SOURCES plugin_config/main.cpp)
 qpb_add_example(qpb_example_form_view SOURCES form_view/main.cpp)
+qpb_add_example(qpb_example_object_editor SOURCES object_editor/main.cpp object_editor/Light.h)
