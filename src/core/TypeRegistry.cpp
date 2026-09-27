@@ -127,6 +127,15 @@ TypeHandler stringHandler()
 {
     TypeHandler handler;
     handler.storageType = QMetaType::fromType<QString>();
+    handler.displayText = [](const QVariant& value, const Property& property) {
+        QString text = value.toString();
+        if (property.attribute(Attr::Multiline).toBool()) {
+            // One line per cell: line breaks become a pilcrow.
+            text.replace(QLatin1String("\r\n"), QLatin1String("\n"));
+            text.replace(QLatin1Char('\n'), QStringLiteral(u" \u00B6 "));
+        }
+        return text;
+    };
     handler.validate = [](const QVariant& value, const Property& property) {
         const QString text = value.toString();
         if (property.hasAttribute(Attr::MaxLength)) {

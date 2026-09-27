@@ -47,8 +47,20 @@ inline constexpr char DialogDepthProperty[] = "_qpb_dialogDepth";
 // True while an EditorDialogScope exists for editor or one of its ancestors.
 bool isShowingDialog(const QWidget* editor);
 
+// True for multi-line text widgets, where Enter inserts a line break.
+bool isMultilineText(const QObject* object);
+
 // The property behind a (possibly proxied) index, or nullptr.
 const Property* propertyOf(const QModelIndex& index);
+
+// True when a user reset of property (a group: of its leaves) would change
+// something: modified, not read-only, enabled.
+bool isResettableByUser(const Property* property);
+
+// Resets property (a group: its leaves) to the default values as a user edit
+// through model->setData(), in one batch, so read-only and disabled
+// properties are left alone (D34).
+void resetByUser(PropertyModel* model, const Property* property);
 
 // Maps a (possibly proxied) index to its PropertyModel and source index.
 // Returns nullptr if no PropertyModel is found at the bottom of the proxy chain.

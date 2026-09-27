@@ -1,5 +1,4 @@
 #include <qpb/Property.h>
-#include <qpb/PropertyGroup.h>
 #include <qpb/PropertyModel.h>
 #include <qpb/widgets/PropertyDelegate.h>
 #include <qpb/widgets/PropertyTreeView.h>
@@ -8,8 +7,6 @@
 #include <QtGui/qevent.h>
 #include <QtWidgets/qheaderview.h>
 #include <QtWidgets/qmenu.h>
-
-#include <functional>
 
 #include "widgets_p.h"
 
@@ -210,41 +207,16 @@ void PropertyTreeView::contextMenuEvent(QContextMenuEvent* event)
         return;
     }
 
-    // Enabled when resetting would change something.
-    const std::function<bool(const Property*)> resettable = [&](const Property* p) {
-        if (const PropertyGroup* group = p->toGroup()) {
-            for (const Property* child : group->children()) {
-                if (resettable(child))
-                    return true;
-            }
-            return false;
-        }
-        return p->isModified() && !p->isReadOnly() && p->isEnabled();
-    };
-
     QMenu menu(this);
     QAction* reset
         = menu.addAction(property->isGroup() ? tr("Reset group") : tr("Reset to default"));
-    reset->setEnabled(resettable(property));
-    // A user action: reset through setData() so read-only and disabled
-    // properties (possibly maintained by the application) are left alone.
+    reset->setEnabled(detail::isResettableByUser(property));
+    // A user action: read-only and disabled properties (possibly maintained by
+    // the application) are left alone.
     connect(reset, &QAction::triggered, propertyModel,
         [propertyModel, persistent = QPersistentModelIndex(sourceIndex)] {
-            const Property* target = propertyModel->propertyAt(persistent);
-            if (!target)
-                return;
-            const std::function<void(const Property*)> resetUserEditable = [&](const Property* p) {
-                if (const PropertyGroup* group = p->toGroup()) {
-                    for (const Property* child : group->children())
-                        resetUserEditable(child);
-                } else if (p->isModified()) {
-                    propertyModel->setData(propertyModel->indexOf(p, PropertyModel::ValueColumn),
-                        p->defaultValue(), Qt::EditRole);
-                }
-            };
-            propertyModel->beginBatch();
-            resetUserEditable(target);
-            propertyModel->endBatch();
+            if (const Property* target = propertyModel->propertyAt(persistent))
+                detail::resetByUser(propertyModel, target);
         });
     menu.exec(event->globalPos());
     event->accept();

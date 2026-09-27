@@ -7,6 +7,7 @@
 #include <qpb/qpbcore.h>
 #include <qpb/widgets/EditorFactory.h>
 #include <qpb/widgets/PropertyDelegate.h>
+#include <qpb/widgets/PropertyFormView.h>
 #include <qpb/widgets/PropertyTreeView.h>
 
 #endif // QPB_QPB_H
