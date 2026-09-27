@@ -53,6 +53,9 @@ public:
 
     // Creates a detached property of any registered (or not yet registered)
     // type. Attach it with PropertyGroup::add(std::unique_ptr<Property>).
+    // While its type is not registered the value is stored as given and
+    // setValue() fails; once the type is registered the property behaves
+    // like any other.
     // For the built-in types prefer the typed PropertyGroup::add*() functions.
     static std::unique_ptr<Property> create(
         const TypeId& type, const QString& id, const QVariant& value = QVariant());

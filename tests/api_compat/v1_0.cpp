@@ -344,7 +344,14 @@ void tst_ApiCompat_1_0::modelApi()
     QVERIFY(model.data(name).isValid());
     QVERIFY(model.flags(value).testFlag(Qt::ItemIsEditable));
     QVERIFY(model.headerData(0, Qt::Horizontal).isValid());
-    QVERIFY(model.roleNames().contains(qpb::PropertyModel::PathRole));
+    const QHash<int, QByteArray> names = model.roleNames();
+    QCOMPARE(names.value(qpb::PropertyModel::PropertyRole), QByteArray("property"));
+    QCOMPARE(names.value(qpb::PropertyModel::TypeIdRole), QByteArray("typeId"));
+    QCOMPARE(names.value(qpb::PropertyModel::PathRole), QByteArray("path"));
+    QCOMPARE(names.value(qpb::PropertyModel::IsGroupRole), QByteArray("isGroup"));
+    QCOMPARE(names.value(qpb::PropertyModel::IsModifiedRole), QByteArray("isModified"));
+    QCOMPARE(names.value(qpb::PropertyModel::AttributesRole), QByteArray("attributes"));
+    QCOMPARE(names.value(qpb::PropertyModel::IsVisibleRole), QByteArray("isVisible"));
 }
 
 void tst_ApiCompat_1_0::editorFactory()

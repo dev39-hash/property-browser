@@ -83,9 +83,13 @@ During M1:
 - Attribute keys renamed to full words; `Attr::DialogMode` + `qpb::FileMode` avoid a name clash (D26).
 - Header includes checked against Qt 6.5 (a header that only exists in newer Qt was removed).
 
-## 6. To revisit in M4.10 (before the 1.0 freeze)
+## 6. Decisions of the final review (M4.10)
 
-- Behaviour of `Property::create()` / `PropertyGroup::add()` for types registered after the property was created.
-- Whether `PropertyModel` should accept a non-global `TypeRegistry` (additive if needed later).
-- Names returned by `PropertyModel::roleNames()` (become part of the QML-facing contract).
-- Duplicate-id behaviour: settled in M2 as a warning plus returning the existing child (D29); revisit only if the RC trial shows problems.
+| Item | Decision |
+|------|----------|
+| Properties whose type is registered later | Supported: until registration the value is stored unconverted, `setValue()` fails and views show it read-only; afterwards it behaves normally. Documented on `Property::create()`. |
+| Non-global `TypeRegistry` per model | Not in 1.0. Can be added later without breaking anything (e.g. `PropertyModel::setTypeRegistry()`). |
+| `PropertyModel::roleNames()` | Frozen: `property`, `typeId`, `path`, `isGroup`, `isModified`, `attributes`, `isVisible` (plus Qt's defaults); checked by `tests/api_compat/v1_0.cpp`. |
+| Duplicate / invalid ids | Settled in M2 (D29): warning, existing child returned, invalid characters replaced. |
+
+Remaining before `1.0.0`: the RC trial (docs/PLAN.md, RC) and green CI on Windows and macOS.

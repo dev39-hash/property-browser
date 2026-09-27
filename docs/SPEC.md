@@ -83,6 +83,8 @@ Rationale: brainstorm section 11. The design **must not preclude** multi-object 
 - **R4.** No public API without at least one user (example or test).
 - **R5.** Only headers under `qpb/include/qpb/` are public. Everything in namespace `qpb::detail` or under `src/`
   is internal and may change freely. Every change to a public header must follow §9.
+- **R6.** Every file in `qpb/` is ASCII only. MSVC on a non-UTF-8 code page warns (C4819) about other characters,
+  which breaks consumers building with `/WX`. (R1, R2, R5 and R6 are checked by `tools/check_architecture.cmake`.)
 
 ---
 
@@ -529,6 +531,9 @@ Three supported ways to keep the folder in sync (the consumer chooses):
 - **No reliance on static initializers** to register types (the linker may drop them when linking statically).
   Basic types are registered lazily in `TypeRegistry::global()` / `EditorFactory::global()`.
 - Shared builds (`QPB_BUILD_SHARED=ON`) are supported; consumers must then deploy the DLL/.so — documented in the README.
+- `VERSION` holds `MAJOR.MINOR.PATCH` with an optional pre-release suffix (`1.0.0-rc1`); `QPB_VERSION_STR` carries the full
+  string. `project()` is called **without** `VERSION`: in a subdirectory it would set the host's `CMAKE_PROJECT_VERSION`
+  when the host project has none. Editing `VERSION` re-runs CMake (`CMAKE_CONFIGURE_DEPENDS`). [D31, D32]
 
 ## 7. Testing
 
@@ -699,3 +704,6 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D28| Validators receive the property (`(value, property)`) like `TypeHandler::validate` | One signature; validators can read attributes                                  |
 | D29| Duplicate or invalid ids log a warning instead of asserting                 | An assert would abort debug builds of consuming apps; the tree stays consistent either way |
 | D30| Group rows use `QPalette::Button`; read-only values are dimmed             | `AlternateBase` was indistinguishable from alternating rows; read-only needs a visual cue |
+| D31| `project()` without `VERSION` in the component; version from `qpb/VERSION`  | `project(VERSION)` leaked into the host's `CMAKE_PROJECT_VERSION` (found by the consumer leak check) |
+| D32| `VERSION` may carry a pre-release suffix; CMake re-runs when it changes      | Release candidates (`1.0.0-rc1`); replacing the folder must refresh the version header |
+| D33| `qpb/` is ASCII only (rule R6)                                               | MSVC C4819 on non-UTF-8 code pages would break consumers using `/WX`                   |
