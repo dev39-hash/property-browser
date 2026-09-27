@@ -10,8 +10,6 @@ PluginsPage::PluginsPage(QWidget* parent)
     , m_search(new QLineEdit)
 {
     m_proxy.setSourceModel(&m_model);
-    m_proxy.setRecursiveFilteringEnabled(true);
-    m_proxy.setFilterCaseSensitivity(Qt::CaseInsensitive);
     m_view->setMode(qpb::PropertyTreeView::Mode::List);
     m_view->setModel(&m_proxy);
     m_search->setPlaceholderText(tr("Search properties"));
