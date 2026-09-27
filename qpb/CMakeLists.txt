@@ -73,7 +73,15 @@ qpb_add_library(qpb_widgets
     EXPORT_DEFINE QPB_BUILD_WIDGETS_LIB
     OUTPUT_NAME qpbwidgets
     SOURCES
+        include/qpb/widgets/EditorFactory.h
+        include/qpb/widgets/PropertyDelegate.h
+        src/widgets/EditorFactory.cpp
+        src/widgets/PathEdit.cpp
+        src/widgets/PathEdit_p.h
+        src/widgets/PropertyDelegate.cpp
         src/widgets/qpbwidgets.cpp
+        src/widgets/widgets_p.cpp
+        src/widgets/widgets_p.h
 )
 target_link_libraries(qpb_widgets PUBLIC qpb_core Qt6::Widgets)
 add_library(qpb::widgets ALIAS qpb_widgets)
