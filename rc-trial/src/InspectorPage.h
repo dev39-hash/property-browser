@@ -12,6 +12,7 @@ class QListWidget;
 struct SceneObject
 {
     QString name;
+    bool isCamera = false; // lights have no camera settings
     bool visible = true;
     double x = 0, y = 0, z = 0;
     int fov = 60;
@@ -44,6 +45,7 @@ public:
     }
 
 private:
+    std::unique_ptr<qpb::PropertyGroup> buildTree(int row) const;
     void showObject(int row);
     void apply(const QString& path, const QVariant& value);
 
