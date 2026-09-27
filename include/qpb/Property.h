@@ -43,6 +43,10 @@ public:
         ReadOnly = 0x1, // value cannot be edited
         Disabled = 0x2, // shown greyed out, cannot be edited
         Hidden = 0x4, // not shown by views (still part of the model)
+        // Since 1.3. The value is maintained by the application (a status, a
+        // counter), not a setting: never "modified", skipped by group resets
+        // and by qpb::serialization. See isLive().
+        Live = 0x8,
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
@@ -104,11 +108,12 @@ public:
     // Value restored by resetToDefault(). Defaults to the value at creation.
     QVariant defaultValue() const;
     void setDefaultValue(const QVariant& value);
-    // True when value() differs from defaultValue(). Always false for groups.
+    // True when value() differs from defaultValue(). Always false for groups
+    // and, since 1.3, for live properties (isLive()).
     bool isModified() const;
     // Sets the value back to defaultValue() through the value pipeline, like
-    // setValue(). For a group, resets all descendants. Returns false if any
-    // reset was rejected.
+    // setValue(). For a group, resets all descendants except live ones (since
+    // 1.3). Returns false if any reset was rejected.
     bool resetToDefault();
 
     // Optional extra validation, run after the type's validation.
@@ -134,6 +139,8 @@ public:
     void setReadOnly(bool readOnly);
     void setEnabled(bool enabled);
     void setVisible(bool visible);
+    // Since 1.3.
+    void setLive(bool live);
 
     // Effective state: read-only if this property or any ancestor is read-only.
     bool isReadOnly() const;
@@ -141,6 +148,8 @@ public:
     bool isEnabled() const;
     // Effective state: visible only if this property and all ancestors are visible.
     bool isVisible() const;
+    // Effective state: live if this property or any ancestor is live. Since 1.3.
+    bool isLive() const;
 
 protected:
     explicit Property(std::unique_ptr<detail::PropertyPrivate> d);

@@ -203,9 +203,22 @@ void QObjectPropertySourcePrivate::notified()
     ObjectBinding* binding = bindingOf(sender());
     if (!binding)
         return;
-    const QStringList ids = binding->notified.value(senderSignalIndex());
+    const int signal = senderSignalIndex();
+    const QStringList ids = binding->notified.value(signal);
     for (const QString& id : ids)
         read(*binding, id);
+    if (binding->title.isValid() && binding->title.notifySignalIndex() == signal)
+        readTitle(*binding);
+}
+
+void QObjectPropertySourcePrivate::readTitle(ObjectBinding& binding)
+{
+    PropertyGroup* group = groupOf(binding);
+    if (!group || !binding.object)
+        return;
+    const QString title = binding.title.read(binding.object).toString();
+    if (!title.isEmpty())
+        group->setDisplayName(title);
 }
 
 } // namespace detail
@@ -290,11 +303,17 @@ PropertyGroup* QObjectPropertySource::addObject(
                 property->setVisible(!detail::flag(metadata, "hidden"));
             else if (key == QLatin1String("disabled"))
                 property->setEnabled(!detail::flag(metadata, "disabled"));
+            else if (key == QLatin1String("live"))
+                property->setLive(detail::flag(metadata, "live"));
             else
                 property->setAttribute(key, it.value());
         }
-        if (!metaProperty.isWritable())
+        if (!metaProperty.isWritable()) {
             property->setReadOnly(true);
+            // 1.3: values the object changes by itself are not settings.
+            if (d->liveReadOnly && metaProperty.hasNotifySignal())
+                property->setLive(true);
+        }
         // Attributes may change the value (e.g. clamping): start from the object's.
         property->setValue(value);
         property->setDefaultValue(property->value());
@@ -307,6 +326,23 @@ PropertyGroup* QObjectPropertySource::addObject(
             }
             binding->notified[signal] << property->id();
         }
+    }
+
+    // Group title (1.3): the class's "qpb:title", else setTitleProperty().
+    QString titleName = d->titleProperty;
+    const int titleInfo = meta->indexOfClassInfo("qpb:title");
+    if (titleInfo >= 0)
+        titleName = QString::fromUtf8(meta->classInfo(titleInfo).value()).trimmed();
+    const int titleIndex
+        = titleName.isEmpty() ? -1 : meta->indexOfProperty(titleName.toLatin1().constData());
+    if (titleIndex >= 0 && meta->property(titleIndex).isReadable()) {
+        binding->title = meta->property(titleIndex);
+        const int signal = binding->title.notifySignalIndex();
+        if (signal >= 0 && !binding->notified.contains(signal)) {
+            binding->connections << connect(object, binding->title.notifySignal(), d.get(), slot);
+            binding->notified.insert(signal, {});
+        }
+        d->readTitle(*binding);
     }
 
     binding->connections << connect(object, &QObject::destroyed, d.get(), [this, object] {
@@ -348,6 +384,26 @@ void QObjectPropertySource::refresh()
         for (auto it = binding->properties.constBegin(); it != binding->properties.constEnd(); ++it)
             d->read(*binding, it.key());
     }
+}
+
+void QObjectPropertySource::setTitleProperty(const QString& name)
+{
+    d->titleProperty = name;
+}
+
+QString QObjectPropertySource::titleProperty() const
+{
+    return d->titleProperty;
+}
+
+void QObjectPropertySource::setLiveReadOnlyProperties(bool live)
+{
+    d->liveReadOnly = live;
+}
+
+bool QObjectPropertySource::liveReadOnlyProperties() const
+{
+    return d->liveReadOnly;
 }
 
 } // namespace qpb

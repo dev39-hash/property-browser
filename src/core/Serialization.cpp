@@ -17,7 +17,13 @@ const TypeHandler* handlerOf(const Property& property)
     return TypeRegistry::global().handler(property.typeId());
 }
 
-// Visits the non-read-only leaves under group with their path relative to it.
+// Read-only and live properties are maintained by the application (D42, D44).
+bool isStored(const Property& property)
+{
+    return !property.isReadOnly() && !property.isLive();
+}
+
+// Visits the stored leaves under group with their path relative to it.
 void forEachLeaf(const PropertyGroup& group, const QString& prefix,
     const std::function<void(Property&, const QString&)>& visit)
 {
@@ -25,7 +31,7 @@ void forEachLeaf(const PropertyGroup& group, const QString& prefix,
         const QString key = prefix + child->id();
         if (const PropertyGroup* childGroup = child->toGroup())
             forEachLeaf(*childGroup, key + QLatin1Char('/'), visit);
-        else if (!child->isReadOnly())
+        else if (isStored(*child))
             visit(*child, key);
     }
 }
@@ -41,7 +47,7 @@ QJsonObject toJson(const PropertyGroup& group)
             const QJsonObject values = toJson(*childGroup);
             if (!values.isEmpty())
                 json.insert(child->id(), values);
-        } else if (!child->isReadOnly()) {
+        } else if (isStored(*child)) {
             const TypeHandler* handler = handlerOf(*child);
             json.insert(child->id(),
                 handler && handler->toJson ? handler->toJson(child->value(), *child)
@@ -63,7 +69,7 @@ bool fromJson(PropertyGroup& group, const QJsonObject& json)
                 accepted = fromJson(*childGroup, it.value().toObject()) && accepted;
             continue;
         }
-        if (child->isReadOnly())
+        if (!isStored(*child))
             continue;
         const TypeHandler* handler = handlerOf(*child);
         const QVariant value = handler && handler->fromJson ? handler->fromJson(it.value(), *child)
