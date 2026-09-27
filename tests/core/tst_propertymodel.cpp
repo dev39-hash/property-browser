@@ -61,6 +61,7 @@ private slots:
     void setDataUnchangedValueIsSilent();
     void setDataRejected();
     void setDataCheckState();
+    void userVersusApplicationWrites();
     void propertySetValueNotifiesModel();
     void setValueByPath();
 
@@ -296,6 +297,30 @@ void tst_PropertyModel::setDataCheckState()
     QCOMPARE(values.count(), 1);
     QVERIFY(
         !model.setData(valueIndex(model, QStringLiteral("fov")), Qt::Checked, Qt::CheckStateRole));
+}
+
+// Views (setData) respect read-only and disabled; application code does not
+// (SPEC D34, found in the RC trial).
+void tst_PropertyModel::userVersusApplicationWrites()
+{
+    PropertyModel model(createTree());
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    Property* fov = model.find(QStringLiteral("fov"));
+    Property* visible = model.find(QStringLiteral("visible"));
+    fov->setReadOnly(true);
+    visible->setEnabled(false);
+
+    QVERIFY(!model.setData(valueIndex(model, QStringLiteral("fov")), 90));
+    QVERIFY(!model.setData(
+        valueIndex(model, QStringLiteral("visible")), Qt::Unchecked, Qt::CheckStateRole));
+    QCOMPARE(values.count(), 0);
+
+    QVERIFY(model.setValue(QStringLiteral("fov"), 90));
+    QVERIFY(visible->setValue(false));
+    QCOMPARE(values.count(), 2);
+    QCOMPARE(fov->value(), QVariant(90));
+    QVERIFY(model.resetToDefault(model.indexOf(fov)));
+    QCOMPARE(fov->value(), QVariant(60));
 }
 
 void tst_PropertyModel::propertySetValueNotifiesModel()

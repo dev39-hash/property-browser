@@ -142,6 +142,9 @@ with a new rule R6 and `tools/count_lines.cmake` (M4.3, M4.6), Windows (MSVC) an
 
 ### RC — Trial before freezing (1–2 weeks, alongside other work)
 
+**Status:** round 1 (`1.0.0-rc1`) found two behaviour problems, fixed in `1.0.0-rc2`; see [`rc-trial.md`](rc-trial.md).
+The trial application lives in `rc-trial/` and is rerun against every release candidate.
+
 | ID    | Task                                                                                         | Done when |
 |-------|----------------------------------------------------------------------------------------------|-----------|
 | RC.1  | Build the three reference scenarios (M0.1) as a standalone application outside this repo, embedding `1.0.0-rc1` via `components/qpb/`; also any real project that appears by then | All scenarios work |

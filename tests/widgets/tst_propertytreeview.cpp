@@ -72,7 +72,6 @@ struct Fixture
         layout->addWidget(view);
         layout->addWidget(other);
         view->setModel(&model);
-        view->setNameColumnWidth(140);
         window.resize(420, 420);
         window.show();
     }
@@ -149,6 +148,8 @@ private slots:
     void hiddenRowsFollowVisibility();
     void insertedGroupsAreExpandedAndSpanned();
     void contextMenuResets();
+    void contextMenuLeavesReadOnlyAlone();
+    void nameColumnFitsContents();
     void worksThroughProxyModel();
     void screenshot();
 
@@ -174,7 +175,6 @@ void tst_PropertyTreeView::defaults()
     QVERIFY(view->propertyDelegate());
     QCOMPARE(view->itemDelegate(), view->propertyDelegate());
     QCOMPARE(view->mode(), PropertyTreeView::Mode::Tree);
-    QCOMPARE(view->nameColumnWidth(), 140);
     QVERIFY(view->editTriggers().testFlag(QAbstractItemView::CurrentChanged));
     QVERIFY(view->alternatingRowColors());
     const QModelIndex transform = f->model.indexOf(f->model.find(QStringLiteral("Transform")));
@@ -438,6 +438,53 @@ void tst_PropertyTreeView::contextMenuResets()
     QVERIFY(openMenu(camera, true)); // "Reset group"
     QCOMPARE(f->stored(QStringLiteral("Camera/projection")), QVariant(0));
     QVERIFY(!openMenu(camera, false));
+}
+
+// "Reset group" is a user action: read-only children maintained by the
+// application keep their values.
+void tst_PropertyTreeView::contextMenuLeavesReadOnlyAlone()
+{
+    Property* x = f->model.find(QStringLiteral("Transform/x"));
+    Property* locked = f->model.find(QStringLiteral("Transform/locked"));
+    QVERIFY(x->setValue(5.0));
+    QVERIFY(locked->setValue(7.0)); // application write to a read-only property
+    const QModelIndex transform = f->model.indexOf(f->model.find(QStringLiteral("Transform")));
+    QTimer::singleShot(0, this, [] {
+        auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+        if (menu) {
+            menu->actions().first()->trigger();
+            menu->close();
+        }
+    });
+    const QPoint position = f->view->visualRect(transform).center();
+    QContextMenuEvent event(
+        QContextMenuEvent::Mouse, position, f->view->viewport()->mapToGlobal(position));
+    QApplication::sendEvent(f->view->viewport(), &event);
+    QCOMPARE(x->value(), QVariant(0.0));
+    QCOMPARE(locked->value(), QVariant(7.0));
+}
+
+void tst_PropertyTreeView::nameColumnFitsContents()
+{
+    PropertyTreeView view;
+    PropertyModel model(createTree());
+    Property* fov = model.find(QStringLiteral("Camera/fov"));
+    fov->setDisplayName(QStringLiteral("A rather long display name"));
+    view.resize(600, 300);
+    view.setModel(&model);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+    const int needed = view.fontMetrics().horizontalAdvance(fov->displayName());
+    QVERIFY2(view.nameColumnWidth() > needed,
+        qPrintable(QStringLiteral("%1 <= %2").arg(view.nameColumnWidth()).arg(needed)));
+
+    // Growing names refit the column; an explicit width is kept.
+    fov->setDisplayName(QStringLiteral("An even longer display name for the field of view"));
+    QVERIFY(view.nameColumnWidth()
+        > view.fontMetrics().horizontalAdvance(QStringLiteral("An even longer display name")));
+    view.setNameColumnWidth(80);
+    model.root()->addInt(QStringLiteral("aVeryLongPropertyIdentifierIndeed"), 1);
+    QCOMPARE(view.nameColumnWidth(), 80);
 }
 
 void tst_PropertyTreeView::worksThroughProxyModel()
