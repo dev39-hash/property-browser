@@ -119,6 +119,14 @@ because it cannot change after 1.0.
 
 ### M4 — Hardening & API freeze (≈ 22h)
 
+**Status:** everything that can be done without publishing is done; `1.0.0-rc1` itself (M4.9: tag, GitHub Release,
+pushing `qpb-release`) waits for the maintainer. M4.1/M4.2 came with M3. New in M4: `tests/api_compat/v1_0.cpp` (M4.4),
+consumer scenarios for shared builds, host-setting leaks and in-place upgrades (M4.5), `tools/check_architecture.cmake`
+with a new rule R6 and `tools/count_lines.cmake` (M4.3, M4.6), Windows (MSVC) and macOS CI jobs (M4.7),
+`tools/api_snapshot.py` with the baseline `tests/api_compat/api-1.0.txt` (M4.8), `tools/make_release.sh` and
+[`RELEASING.md`](RELEASING.md) (M4.9), README integration and upgrade guide plus the final review in
+[`api-review.md`](api-review.md) (M4.10). The checks found two real problems in the component's CMake (D31, D32).
+
 | ID    | Task                                                                                         | h | Done when |
 |-------|----------------------------------------------------------------------------------------------|---|-----------|
 | M4.1  | Mode::List (D4) + switch button in the inspector                                              | 2 | Tree↔List keeps values and selection |
@@ -166,6 +174,8 @@ M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6
 ---
 
 ## 4. Release process (every 1.x release)
+
+Step-by-step guide and tooling: [`RELEASING.md`](RELEASING.md), `tools/make_release.sh`.
 
 1. Update `qpb/VERSION` and add an entry to `qpb/CHANGELOG.md` (Added / Changed / Deprecated / Fixed / **Upgrade notes**).
 2. Green CI: unit tests, `api_compat/*` of **all** previous releases, `tests/consumer`, `check_arch`, API snapshot diff has additions only.
