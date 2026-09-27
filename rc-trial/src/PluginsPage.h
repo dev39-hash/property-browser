@@ -2,7 +2,6 @@
 
 #include <qpb/qpb.h>
 
-#include <QSortFilterProxyModel>
 #include <QStringList>
 #include <QWidget>
 
@@ -30,7 +29,7 @@ public:
     {
         return m_model;
     }
-    QSortFilterProxyModel& proxy()
+    qpb::PropertyFilterProxyModel& proxy()
     {
         return m_proxy;
     }
@@ -45,7 +44,7 @@ public:
 
 private:
     qpb::PropertyModel m_model;
-    QSortFilterProxyModel m_proxy;
+    qpb::PropertyFilterProxyModel m_proxy; // round 4: was a configured QSortFilterProxyModel
     qpb::PropertyTreeView* m_view;
     QLineEdit* m_search;
 };

@@ -175,7 +175,7 @@ M6.5 `v1_2.cpp` + diff snapshot · M6.6 release 1.2.0.
 `QSettings` INI và native), `Types::Int64` với spin box 64-bit nội bộ, `examples/object_editor` (QObject source +
 `QUndoStack` + JSON), `tests/api_compat/v1_2.cpp` và `api-1.2.txt` (chứa trọn 1.1). Bước kiểm tra biên dịch phát hiện hàm
 tự do trong `qpb` làm hỏng lời gọi không kèm namespace của ứng dụng qua ADL, nên dùng namespace lồng (D40). Quyết định
-D40–D42. M6.6: đã phát hành `1.2.0`.
+D40–D42. M6.6: đã phát hành `1.2.0`, sau vòng thử RC 4 (docs/rc-trial.md) phát hiện và sửa F7.
 
 ---
 
