@@ -6,6 +6,19 @@ All notable changes to qpb are documented here. Each release has the sections
 From 1.0.0 on, releases within a major version never require changes to consuming code or CMake.
 Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC trial shows a problem.
 
+## Unreleased
+
+### Added
+- `QObjectPropertySource` (`qpb/QObjectPropertySource.h`): shows the Q_PROPERTYs of QObjects in a `PropertyModel` and keeps
+  both in sync; ranges, display names and path types come from `Q_CLASSINFO("qpb:<property>", "min=0;max=10")`.
+- `qpb::serialization::toJson/fromJson/save/load` (`qpb/Serialization.h`): property values to and from JSON and
+  `QSettings`; `TypeHandler::toJson` / `fromJson` for types with their own JSON form.
+- `Types::Int64` with `PropertyGroup::addInt64()` / `Int64Builder` and a 64-bit spin box editor.
+
+### Upgrade notes
+- Nothing to do, unless the application registered its own type with the ID `"int64"`: `registerType()` now returns
+  false for it and the built-in type is used.
+
 ## 1.1.0 - 2026-09-27
 
 First feature release of 1.x: additions only; code written for 1.0 builds and behaves the same.

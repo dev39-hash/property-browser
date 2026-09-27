@@ -43,6 +43,8 @@ public:
 
     BoolBuilder addBool(const QString& id, bool value);
     IntBuilder addInt(const QString& id, int value);
+    // Since 1.2.
+    Int64Builder addInt64(const QString& id, qint64 value);
     DoubleBuilder addDouble(const QString& id, double value);
     StringBuilder addString(const QString& id, const QString& value);
 

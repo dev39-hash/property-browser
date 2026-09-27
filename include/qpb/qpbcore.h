@@ -9,6 +9,8 @@
 #include <qpb/PropertyFilterProxyModel.h>
 #include <qpb/PropertyGroup.h>
 #include <qpb/PropertyModel.h>
+#include <qpb/QObjectPropertySource.h>
+#include <qpb/Serialization.h>
 #include <qpb/TypeRegistry.h>
 #include <qpb/Types.h>
 #include <qpb/ValidationResult.h>

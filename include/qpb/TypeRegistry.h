@@ -5,6 +5,7 @@
 #include <qpb/ValidationResult.h>
 #include <qpb/qpbglobal.h>
 
+#include <QtCore/qjsonvalue.h>
 #include <QtCore/qlist.h>
 #include <QtCore/qmetatype.h>
 #include <QtCore/qstring.h>
@@ -41,6 +42,12 @@ struct TypeHandler
     std::function<QVariant(const QVariant& value, const Property& property)> normalize;
     // Accepts or rejects a normalized value. Empty: every value is accepted.
     std::function<ValidationResult(const QVariant& value, const Property& property)> validate;
+    // Since 1.2. JSON form of a value for qpb::toJson(). Empty:
+    // QJsonValue::fromVariant() (types convertible to QString are stored as text).
+    std::function<QJsonValue(const QVariant& value, const Property& property)> toJson;
+    // Since 1.2. Value for JSON read by qpb::fromJson(); it is then set with
+    // Property::setValue() (conversion, validation). Empty: QJsonValue::toVariant().
+    std::function<QVariant(const QJsonValue& json, const Property& property)> fromJson;
 };
 
 // Registry of property types, keyed by TypeId (docs/SPEC.md section 4.5).
