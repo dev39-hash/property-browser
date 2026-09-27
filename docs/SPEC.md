@@ -1,64 +1,66 @@
-# qpb — Property Browser cho Qt 6: Đặc tả kỹ thuật (1.0 → 1.2)
+# qpb — Property Browser for Qt 6: Technical Specification (1.0 → 1.2)
 
-> Nguồn: [`brainstorm.md`](brainstorm.md) (hướng B — *Explicit model + pluggable views/types*).
-> Trạng thái: **Draft 2** — thêm mục tiêu ổn định API (§9) và phân phối dạng component folder (§6). Các mục đánh dấu **[Giả định]** lấy từ mục 13 của brainstorm,
-> chưa được xác nhận; đổi giả định nào thì cập nhật mục đó và [Phụ lục B](#phụ-lục-b--nhật-ký-quyết-định).
+> Source: [`brainstorm-vi.md`](brainstorm-vi.md) (direction B — *explicit model + pluggable views/types*).
+> Vietnamese translation: [`SPEC-vi.md`](SPEC-vi.md). This English document is authoritative.
+> Status: **Draft 3** — C++17, Qt 6.5, namespace `qpb` and CMake-only are confirmed. Items still marked
+> **[Assumption]** are unconfirmed; when one changes, update that item and [Appendix B](#appendix-b--decision-log).
 
 ---
 
-## 1. Mục tiêu & phi mục tiêu
+## 1. Goals and non-goals
 
-### 1.1 Mục tiêu
+### 1.1 Goals
 
-- **G1.** Lập trình viên *khai báo* một cây thuộc tính một lần (builder API) và nhận panel chỉnh sửa hoàn chỉnh.
-- **G2.** Một nguồn dữ liệu (`PropertyModel`, chuẩn `QAbstractItemModel`), nhiều cách hiển thị: **Tree**, **List**, **Form**.
-- **G3.** Mở rộng kiểu dữ liệu và editor **từ phía người dùng**, không sửa thư viện.
-- **G4.** Tích hợp nhanh: panel 10 thuộc tính ≤ 30 dòng code; ≤ 30 phút kể cả CMake.
-- **G5. API cố định.** Từ bản 1.0, nâng cấp thư viện **không bắt project đang dùng phải sửa code**
-  (trong cùng major version). Chính sách chi tiết ở §9.
-- **G6. Phân phối dạng component folder.** Project dùng thư viện chép folder `qpb/` vào
-  (vd. `components/qpb/`), thêm 2 dòng CMake. Cập nhật = thay folder + build lại. Chi tiết ở §6.
-- **G7. Viết mới hoàn toàn.** Không wrap, không fork, không chép code từ QtPropertyBrowser/QtnProperty.
+- **G1.** Developers *declare* a property tree once (builder API) and get a complete editing panel.
+- **G2.** One data source (`PropertyModel`, a standard `QAbstractItemModel`), several presentations: **Tree**, **List**, **Form**.
+- **G3.** Data types and editors are extended **from the user side**, without modifying the library.
+- **G4.** Fast integration: a 10-property panel in ≤ 30 lines of code; ≤ 30 minutes including CMake.
+- **G5. Stable API.** From 1.0 on, upgrading the library **never forces consuming projects to change code**
+  (within the same major version). Detailed policy in §9.
+- **G6. Distributed as a component folder.** A consuming project copies the `qpb/` folder in
+  (e.g. `components/qpb/`) and adds two lines of CMake. Updating = replace the folder + rebuild. Details in §6.
+- **G7. Written from scratch.** No wrapping, no forking, no code copied from QtPropertyBrowser/QtnProperty.
 
-### 1.2 Phi mục tiêu (không làm trong 1.x)
+### 1.2 Non-goals (not in 1.x)
 
-Qt Quick/QML view · Python binding · multi-object editing · undo/redo tích hợp sẵn ·
-kiểu phức hợp trong core (color, font, vector, array) · Qt 5 · DSL/code generator ·
-theme riêng (dùng QSS) · conditional visibility khai báo bằng biểu thức.
+Qt Quick/QML views · Python bindings · multi-object editing · built-in undo/redo ·
+compound types in core (color, font, vector, array) · Qt 5 · DSL/code generator ·
+custom theming system (QSS is enough) · declarative conditional visibility expressions · qmake support.
 
-Lý do chi tiết: brainstorm mục 11. Thiết kế **không được cấm** multi-object editing và QML về sau
-(→ core không phụ thuộc QtWidgets, `Property` không giả định có đúng một object nguồn).
+Rationale: brainstorm section 11. The design **must not preclude** multi-object editing or QML later
+(→ core does not depend on QtWidgets, `Property` does not assume exactly one source object).
 
-### 1.3 Tiêu chí chấp nhận cấp dự án
+### 1.3 Project-level acceptance criteria
 
-| #  | Tiêu chí                                                         | Kiểm chứng bằng                                        |
+| #  | Criterion                                                        | Verified by                                            |
 |----|------------------------------------------------------------------|--------------------------------------------------------|
-| S1 | Panel 10 thuộc tính ≤ 30 dòng                                     | `examples/quickstart/main.cpp` (đếm dòng, không tính include) |
-| S2 | Kiểu `QColor` ≤ 100 dòng, nằm ngoài lib                           | `examples/custom_type/`                                |
-| S3 | Chuyển Tree ↔ List ↔ Form không đổi model                         | `examples/inspector` có nút chuyển view + test         |
-| S4 | Dùng trong ≥ 2 project thật trong 6 tháng sau 1.0                 | Theo dõi ngoài repo                                    |
-| S5 | Nâng 1.x → 1.y không phải sửa code consumer                        | Bộ test tương thích API (§9.5) pass trên mọi bản 1.y  |
-| S6 | Cập nhật thư viện = thay folder `components/qpb/` + build lại      | `tests/consumer` build lại sau khi thay folder, không đổi CMake của consumer |
+| S1 | 10-property panel in ≤ 30 lines                                  | `examples/quickstart/main.cpp` (line count, excluding includes) |
+| S2 | `QColor` type in ≤ 100 lines, outside the library                 | `examples/custom_type/`                                |
+| S3 | Switching Tree ↔ List ↔ Form does not change the model            | `examples/inspector` view switcher + test              |
+| S4 | Used in ≥ 2 real projects within 6 months after 1.0               | Tracked outside the repo                               |
+| S5 | Upgrading 1.x → 1.y requires no consumer code changes             | API compatibility tests (§9.5) pass on every 1.y       |
+| S6 | Updating the library = replace `components/qpb/` + rebuild        | `tests/consumer` rebuilds after the folder is replaced, with no change to the consumer's CMake |
 
 ---
 
-## 2. Ràng buộc kỹ thuật
+## 2. Technical constraints
 
-| Hạng mục        | Quyết định                                                                                   |
+| Area            | Decision                                                                                     |
 |-----------------|----------------------------------------------------------------------------------------------|
-| Ngôn ngữ        | **C++17**. API public **không** dùng designated initializer (là C++20). [Giả định]           |
-| Qt              | Tối thiểu **6.5**; môi trường phát triển/CI chính **6.8 LTS**. Chỉ dùng Core, Gui, Widgets, Test. [Giả định] |
-| Build           | CMake ≥ 3.21; target `qpb::core`, `qpb::widgets`. Cách tích hợp **chính**: `add_subdirectory(components/qpb)` (§6) |
-| Namespace       | `qpb` [Giả định]                                                                              |
-| Thư viện        | **Static mặc định** (`QPB_BUILD_SHARED=OFF`), không theo `BUILD_SHARED_LIBS` của consumer; export macro `QPB_CORE_EXPORT`, `QPB_WIDGETS_EXPORT` vẫn có cho trường hợp shared |
-| License         | MIT [Giả định]                                                                                |
-| Nền tảng        | Linux, Windows (MSVC 2019+), macOS                                                            |
-| Phụ thuộc       | `qpb::core` → Qt6::Core **duy nhất**. `qpb::widgets` → `qpb::core`, Qt6::Widgets. Không phụ thuộc thư viện bên thứ ba |
-| Nâng yêu cầu    | Tăng C++ standard, Qt tối thiểu, CMake tối thiểu = **breaking change** (chỉ ở major mới)       |
+| Language        | **C++17** (confirmed). The public API does **not** rely on designated initializers (C++20)   |
+| Qt              | Minimum **6.5** (confirmed); primary development/CI version **6.8 LTS**. Only Core, Gui, Widgets, Test |
+| Build           | **CMake only** (confirmed; no qmake), CMake ≥ 3.21; targets `qpb::core`, `qpb::widgets`. **Primary** integration: `add_subdirectory(components/qpb)` (§6) |
+| Namespace       | `qpb` (confirmed)                                                                             |
+| Library type    | **Static by default** (`QPB_BUILD_SHARED=OFF`), independent of the consumer's `BUILD_SHARED_LIBS`; export macros `QPB_CORE_EXPORT`, `QPB_WIDGETS_EXPORT` still exist for the shared case |
+| License         | MIT [Assumption]                                                                              |
+| Platforms       | Linux, Windows (MSVC 2019+), macOS                                                            |
+| Dependencies    | `qpb::core` → Qt6::Core **only**. `qpb::widgets` → `qpb::core`, Qt6::Widgets. No third-party libraries |
+| Raising minimums| Raising the C++ standard, minimum Qt or minimum CMake is a **breaking change** (new major only) |
+| Language of code/docs | English. Files with a `-vi` suffix are Vietnamese reference translations              |
 
 ---
 
-## 3. Kiến trúc
+## 3. Architecture
 
 ```text
 ┌─────────────────────────────── qpb::widgets (Qt6::Widgets) ───────────────────────────────┐
@@ -66,30 +68,30 @@ Lý do chi tiết: brainstorm mục 11. Thiết kế **không được cấm** m
 │   (mode Tree/List)  ├── PropertyDelegate ──┐                                              │
 │                     │                      ├── EditorFactory  (typeId → EditorHandler)    │
 │  PropertyFormView ──┴──────────────────────┘                                              │
-├─────────────────────────────── qpb::core (chỉ Qt6::Core) ─────────────────────────────────┤
+├─────────────────────────────── qpb::core (Qt6::Core only) ────────────────────────────────┤
 │  PropertyModel : QAbstractItemModel                                                       │
-│  Property / PropertyGroup (cây dữ liệu)     TypeRegistry (typeId → TypeHandler)           │
-│  Attributes (khóa chuẩn)   Validation                                                     │
+│  Property / PropertyGroup (data tree)       TypeRegistry (typeId → TypeHandler)           │
+│  Attributes (standard keys)   Validation                                                  │
 └───────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Luật kiến trúc (bắt buộc, kiểm tra khi review):**
+**Architecture rules (mandatory, checked in review):**
 
-- **R1.** View không `switch`/`if` theo `typeId` hay `QMetaType`. Mọi hành vi phụ thuộc kiểu đi qua `TypeRegistry` hoặc `EditorFactory`.
-- **R2.** `qpb::core` không include bất kỳ header nào của QtWidgets/QtGui (ngoại trừ `Qt::ItemDataRole` nằm trong QtCore).
-- **R3.** Mọi thay đổi giá trị đến từ UI đều đi qua `PropertyModel::setData` (→ validation → signal). View không ghi thẳng vào `Property`.
-- **R4.** Không public API nào chưa có ít nhất một nơi sử dụng (example hoặc test).
-- **R5.** Chỉ header trong `qpb/include/qpb/` là public. Mọi thứ trong namespace `qpb::detail` hoặc
-  thư mục `src/` là nội bộ, đổi tự do. Mọi thay đổi public header phải tuân §9.
+- **R1.** Views never `switch`/`if` on `typeId` or `QMetaType`. All type-dependent behaviour goes through `TypeRegistry` or `EditorFactory`.
+- **R2.** `qpb::core` includes no QtWidgets/QtGui header (`Qt::ItemDataRole` lives in QtCore).
+- **R3.** Every value change coming from the UI goes through `PropertyModel::setData` (→ validation → signal). Views never write to a `Property` directly.
+- **R4.** No public API without at least one user (example or test).
+- **R5.** Only headers under `qpb/include/qpb/` are public. Everything in namespace `qpb::detail` or under `src/`
+  is internal and may change freely. Every change to a public header must follow §9.
 
 ---
 
 ## 4. Core (`qpb::core`)
 
-### 4.1 Định danh kiểu (`TypeId`)
+### 4.1 Type identifiers (`TypeId`)
 
-Kiểu được định danh bằng **ID logic** (chuỗi), không phải `QMetaType`, vì nhiều kiểu logic cùng
-kiểu lưu trữ (`String`, `FilePath`, `DirPath` đều là `QString`).
+Types are identified by a **logical ID** (string), not by `QMetaType`, because several logical types share one
+storage type (`String`, `FilePath`, `DirPath` are all `QString`).
 
 ```cpp
 namespace qpb {
@@ -107,43 +109,43 @@ inline const TypeId Group    = QStringLiteral("group");
 }
 ```
 
-Kiểu do người dùng đăng ký dùng ID tự chọn; khuyến nghị có tiền tố (`"myapp.color"`) để tránh va chạm.
-ID bắt đầu bằng `qpb.` hoặc trùng 8 ID ở trên là dành riêng.
+User-registered types use IDs of their choosing; a prefix is recommended (`"myapp.color"`) to avoid collisions.
+IDs starting with `qpb.` or equal to one of the 8 IDs above are reserved.
 
 ### 4.2 `Property`
 
-Nút trong cây. Không phải `QObject` (nhẹ, không cần moc). Được sở hữu bởi group cha
-(`std::unique_ptr`); gốc được sở hữu bởi `PropertyModel` sau khi gắn vào model.
-Dữ liệu nằm sau **d-pointer** (`std::unique_ptr<detail::PropertyPrivate>`), header chỉ có hàm (xem §9.3).
-Không copy được; không có constructor public (tạo qua `PropertyGroup::add*` hoặc `Property::create`).
+A node in the tree. Not a `QObject` (lightweight, no moc). Owned by its parent group
+(`std::unique_ptr`); the root is owned by `PropertyModel` once attached.
+Data lives behind a **d-pointer** (`std::unique_ptr<detail::PropertyPrivate>`); the header only has functions (see §9.3).
+Non-copyable; no public constructor (created via `PropertyGroup::add*` or `Property::create`).
 
-| Thành phần        | Kiểu                   | Ghi chú                                                                 |
+| Member            | Type                   | Notes                                                                   |
 |-------------------|------------------------|-------------------------------------------------------------------------|
-| `id()`            | `QString`              | Bắt buộc, duy nhất trong cùng một group cha; không chứa `/`             |
-| `path()`          | `QString`              | Nối các `id` từ con của gốc: `"Transform/x"`; gốc có path rỗng          |
-| `displayName()`   | `QString`              | Mặc định = `id`                                                         |
-| `typeId()`        | `TypeId`               | Bất biến sau khi tạo                                                    |
-| `value()`         | `QVariant`             | Group: luôn invalid                                                     |
-| `defaultValue()`  | `QVariant`             | Mặc định = giá trị lúc tạo                                              |
-| `attributes()`    | `QVariantMap`          | Xem 4.4                                                                 |
+| `id()`            | `QString`              | Required, unique within its parent group; must not contain `/`          |
+| `path()`          | `QString`              | `id`s joined from the root's child down: `"Transform/x"`; the root's path is empty |
+| `displayName()`   | `QString`              | Defaults to `id`                                                        |
+| `typeId()`        | `TypeId`               | Immutable after creation                                                |
+| `value()`         | `QVariant`             | Groups: always invalid                                                  |
+| `defaultValue()`  | `QVariant`             | Defaults to the value at creation                                       |
+| `attributes()`    | `QVariantMap`          | See 4.4                                                                 |
 | `toolTip()`       | `QString`              |                                                                         |
-| `isReadOnly()`    | `bool`                 | Hiệu lực = bản thân **hoặc** bất kỳ tổ tiên nào readOnly                 |
-| `isEnabled()`     | `bool`                 | Hiệu lực = bản thân **và** mọi tổ tiên enabled                           |
-| `isVisible()`     | `bool`                 | Ẩn group ⇒ ẩn toàn bộ con                                               |
-| `parent()`        | `PropertyGroup*`       | `nullptr` với gốc                                                       |
-| `isModified()`    | `bool`                 | `value() != defaultValue()` (so sánh `QVariant`)                        |
-| `validator`       | `std::function<ValidationResult(const QVariant&)>` | Tùy chọn, chạy sau validation của kiểu          |
+| `isReadOnly()`    | `bool`                 | Effective = itself **or** any ancestor is read-only                     |
+| `isEnabled()`     | `bool`                 | Effective = itself **and** all ancestors are enabled                    |
+| `isVisible()`     | `bool`                 | Hiding a group hides all its children                                   |
+| `parent()`        | `PropertyGroup*`       | `nullptr` for the root                                                  |
+| `isModified()`    | `bool`                 | `value() != defaultValue()` (`QVariant` comparison)                     |
+| `validator`       | `std::function<ValidationResult(const QVariant&)>` | Optional, runs after type validation         |
 
-Setter tương ứng (`setDisplayName`, `setToolTip`, `setReadOnly`, `setEnabled`, `setVisible`,
-`setAttribute`, `setValidator`, `setDefaultValue`) **thông báo cho model** nếu property đã gắn vào model
-(xem 4.6), để view cập nhật.
+The corresponding setters (`setDisplayName`, `setToolTip`, `setReadOnly`, `setEnabled`, `setVisible`,
+`setAttribute`, `setValidator`, `setDefaultValue`) **notify the model** when the property is attached to one
+(see 4.6), so views update.
 
-`setValue()` trên `Property` là **API cho code ứng dụng** (vd. nạp dữ liệu). Nó chạy qua cùng pipeline
-validation + signal như `PropertyModel::setData` (R3), trả về `bool`.
+`Property::setValue()` is the **application-code API** (e.g. loading data). It runs through the same
+validation + signal pipeline as `PropertyModel::setData` (R3) and returns `bool`.
 
-### 4.3 `PropertyGroup` và builder API
+### 4.3 `PropertyGroup` and the builder API
 
-`PropertyGroup : Property` với `typeId() == Types::Group`, có danh sách con có thứ tự.
+`PropertyGroup : Property` with `typeId() == Types::Group`, holding an ordered list of children.
 
 ```cpp
 class PropertyGroup : public Property {
@@ -159,7 +161,7 @@ public:
     EnumBuilder              addEnum  (const QString& id, const QList<EnumOption>& options, const QVariant& v);
     PathBuilder              addFilePath(const QString& id, const QString& v);
     PathBuilder              addDirPath (const QString& id, const QString& v);
-    Property&                add(const TypeId& type, const QString& id, const QVariant& v); // kiểu tùy biến
+    Property&                add(const TypeId& type, const QString& id, const QVariant& v); // custom type
     Property&                add(std::unique_ptr<Property> p);
 
     bool remove(const QString& id);
@@ -169,56 +171,57 @@ public:
 };
 ```
 
-- Thêm `id` trùng trong cùng group: **assert trong debug**, trả về property đã tồn tại trong release (không tạo mới).
-- `PropertyBuilder<T>` là wrapper nhẹ quanh `Property&`, trả về `*this` cho mỗi setter:
-  `displayName`, `toolTip`, `readOnly`, `enabled`, `visible`, `validator`, và setter theo kiểu
+- Adding a duplicate `id` to the same group: **asserts in debug**; in release returns the existing property (nothing new is created).
+- `PropertyBuilder<T>` is a thin wrapper around `Property&` whose setters return `*this`:
+  `displayName`, `toolTip`, `readOnly`, `enabled`, `visible`, `validator`, plus type-specific setters
   (`range`, `step`, `decimals`, `prefix`, `suffix`, `maxLength`, `placeholder`, `regex`, `filter`, `mode`, `defaultDir`, `mustExist`).
-  Setter không hợp lệ với kiểu (vd. `regex` trên `int`) **không biên dịch được** (chỉ khai báo trên specialization tương ứng).
-- Builder chuyển ngầm được sang `Property&`.
+  A setter that does not apply to the type (e.g. `regex` on `int`) **does not compile** (declared only on the matching specialization).
+- A builder converts implicitly to `Property&`.
 
-### 4.4 Attribute chuẩn
+### 4.4 Standard attributes
 
-Khóa là hằng `qpb::Attr::*` (`QString`). Thuộc tính không nhận ra bị bỏ qua (không lỗi), cho phép kiểu tùy biến có attribute riêng.
+Keys are the constants `qpb::Attr::*` (`QString`). Unknown attributes are ignored (no error), so custom types can have their own.
 
-| Kiểu       | Attribute (kiểu giá trị)                                                                 | Mặc định              |
+| Type       | Attributes (value type)                                                                  | Default               |
 |------------|-------------------------------------------------------------------------------------------|-----------------------|
 | Int        | `min`(int) `max`(int) `step`(int) `prefix` `suffix`                                        | INT_MIN / INT_MAX / 1 |
 | Double     | `min` `max` `step`(double) `decimals`(int) `prefix` `suffix`                               | −∞ / +∞ / 1.0 / 2     |
-| String     | `maxLength`(int) `placeholder` `regex`(QString) `multiline`(bool, **1.1**)                | không giới hạn        |
+| String     | `maxLength`(int) `placeholder` `regex`(QString) `multiline`(bool, **1.1**)                | unlimited             |
 | Enum       | `options`(`QList<EnumOption>` — `{QString label; QVariant value;}`)                         | —                     |
 | FilePath   | `filter`(QString) `mode`(`"open"`/`"save"`) `defaultDir` `mustExist`(bool)                  | `"open"`, false       |
 | DirPath    | `defaultDir` `mustExist`(bool)                                                             | false                 |
-| (mọi kiểu) | `editorId`(TypeId) — ghi đè editor cho riêng property này (xem 5.2)                         | —                     |
+| (any type) | `editorId`(TypeId) — overrides the editor for this property only (see 5.2)                  | —                     |
 
-**Enum:** `value()` là `value` của option được chọn (int **hoặc** QString, người dùng chọn qua overload).
-Overload `addEnum(id, QStringList labels, int index)` tạo option với `value = index`.
+**Enum:** `value()` is the `value` of the selected option (int **or** QString, chosen by overload).
+The overload `addEnum(id, QStringList labels, int index)` creates options with `value = index`.
 
-**Integer 64-bit:** 1.0 chỉ hỗ trợ `int` (vì `QSpinBox` là `int`). `qint64` thêm ở 1.2 dưới dạng **kiểu mới** `Types::Int64` (không đổi hành vi `Int` → không breaking).
+**64-bit integers:** 1.0 supports only `int` (`QSpinBox` is `int`). `qint64` arrives in 1.2 as a **new type**
+`Types::Int64` (the behaviour of `Int` does not change → not breaking).
 
-### 4.5 `TypeRegistry` (phần không có UI)
+### 4.5 `TypeRegistry` (UI-free part)
 
 ```cpp
 struct TypeHandler {
-    int storageType = QMetaType::UnknownType;                           // kiểu QVariant mong đợi
+    int storageType = QMetaType::UnknownType;                           // expected QVariant type
     std::function<QString(const QVariant&, const Property&)> displayText; // null → QVariant::toString()
-    std::function<ValidationResult(const QVariant&, const Property&)> validate; // null → luôn hợp lệ
-    std::function<QVariant(const QVariant&, const Property&)> normalize;  // null → giữ nguyên (vd. clamp)
+    std::function<ValidationResult(const QVariant&, const Property&)> validate; // null → always valid
+    std::function<QVariant(const QVariant&, const Property&)> normalize;  // null → unchanged (e.g. clamp)
 };
 
 class TypeRegistry {
 public:
     static TypeRegistry& global();
-    bool registerType(const TypeId& id, TypeHandler h);   // false nếu id đã có (không ghi đè)
-    void replaceType (const TypeId& id, TypeHandler h);   // ghi đè có chủ đích
-    const TypeHandler* handler(const TypeId& id) const;   // nullptr nếu chưa đăng ký
-    template <class T> bool registerType(const TypeId& id, TypeHandler h); // tự set storageType
+    bool registerType(const TypeId& id, TypeHandler h);   // false if id already exists (no overwrite)
+    void replaceType (const TypeId& id, TypeHandler h);   // deliberate overwrite
+    const TypeHandler* handler(const TypeId& id) const;   // nullptr if not registered
+    template <class T> bool registerType(const TypeId& id, TypeHandler h); // sets storageType
 };
 ```
 
-- 7 kiểu cơ bản được đăng ký khi `TypeRegistry::global()` được gọi lần đầu.
-- Cấu hình bằng gán từng trường (C++17), không dùng designated initializer.
-- `TypeRegistry` **không thread-safe**; đăng ký trong luồng chính trước khi tạo model.
-- Property có `typeId` chưa đăng ký: vẫn hiển thị (text = `QVariant::toString()`), **read-only**, `qWarning` một lần.
+- The 7 basic types are registered the first time `TypeRegistry::global()` is called.
+- Handlers are configured by assigning fields (C++17), not with designated initializers.
+- `TypeRegistry` is **not thread-safe**; register on the main thread before creating models.
+- A property whose `typeId` is not registered is still shown (text = `QVariant::toString()`), **read-only**, with a single `qWarning`.
 
 ### 4.6 `PropertyModel`
 
@@ -234,9 +237,9 @@ public:
         IsGroupRole,                     // bool
         IsModifiedRole,                  // bool
         AttributesRole,                  // QVariantMap
-        IsVisibleRole,                   // bool (hiệu lực, đã tính tổ tiên)
-        // Qt::UserRole+1 … Qt::UserRole+99 dành cho qpb (thêm role mới ở cuối, không đổi số cũ)
-        UserRole = Qt::UserRole + 100    // role của ứng dụng bắt đầu từ đây
+        IsVisibleRole,                   // bool (effective, ancestors included)
+        // Qt::UserRole+1 … Qt::UserRole+99 are reserved for qpb (new roles are appended, numbers never change)
+        UserRole = Qt::UserRole + 100    // application roles start here
     };
 
     explicit PropertyModel(QObject* parent = nullptr);
@@ -249,54 +252,54 @@ public:
     Property* find(const QString& path) const;
 
     bool setValue(const QString& path, const QVariant& v);
-    void resetToDefault(const QModelIndex& idx);          // group ⇒ reset đệ quy
+    void resetToDefault(const QModelIndex& idx);          // group ⇒ recursive reset
 
-    void beginBatch();                                    // lồng được
+    void beginBatch();                                    // nestable
     void endBatch();
 
 signals:
     void valueChanged(const QString& path, const QVariant& newValue, const QVariant& oldValue);
     void validationFailed(const QString& path, const QVariant& rejected, const QString& message);
-    void batchValueChanged(const QStringList& paths);     // chỉ phát khi endBatch() ngoài cùng
+    void batchValueChanged(const QStringList& paths);     // emitted only by the outermost endBatch()
 };
 ```
 
-**Ánh xạ dữ liệu → role:**
+**Data → role mapping:**
 
-| Cột   | Role                    | Giá trị                                                                  |
-|-------|-------------------------|--------------------------------------------------------------------------|
-| Name  | `DisplayRole`           | `displayName()`                                                          |
-| Name  | `ToolTipRole`           | `toolTip()`                                                              |
-| Name  | `FontRole`              | Không set trong core (view in đậm dựa trên `IsModifiedRole`, có từ 1.0)  |
-| Value | `DisplayRole`           | `TypeHandler::displayText` (Bool: rỗng, dùng `CheckStateRole`)           |
-| Value | `EditRole`              | `value()`                                                                |
-| Value | `CheckStateRole`        | Chỉ Bool: `Qt::Checked`/`Qt::Unchecked`                                  |
-| Cả hai| role tùy biến ở trên    | như bảng enum                                                             |
+| Column | Role                   | Value                                                                    |
+|--------|------------------------|--------------------------------------------------------------------------|
+| Name   | `DisplayRole`          | `displayName()`                                                          |
+| Name   | `ToolTipRole`          | `toolTip()`                                                              |
+| Name   | `FontRole`             | Not set by core (the view renders bold based on `IsModifiedRole`, from 1.0) |
+| Value  | `DisplayRole`          | `TypeHandler::displayText` (Bool: empty, uses `CheckStateRole`)          |
+| Value  | `EditRole`             | `value()`                                                                |
+| Value  | `CheckStateRole`       | Bool only: `Qt::Checked`/`Qt::Unchecked`                                 |
+| Both   | custom roles above     | as in the enum                                                           |
 
-**`flags()`:** `ItemIsEnabled` theo `isEnabled()` hiệu lực; `ItemIsSelectable` luôn có;
-cột Value: `ItemIsEditable` (không phải Bool) hoặc `ItemIsUserCheckable` (Bool) khi không read-only và kiểu đã đăng ký.
-Group không có cờ edit.
+**`flags()`:** `ItemIsEnabled` per effective `isEnabled()`; `ItemIsSelectable` always;
+Value column: `ItemIsEditable` (non-Bool) or `ItemIsUserCheckable` (Bool) when not read-only and the type is registered.
+Groups are never editable.
 
-**Thuộc tính ẩn (`visible = false`):** model **vẫn chứa** hàng đó; view tự ẩn (`setRowHidden`), để
-`QSortFilterProxyModel` và index ổn định. Model thông báo đổi visibility qua `dataChanged` với role `IsVisibleRole`.
+**Hidden properties (`visible = false`):** the model **still contains** the row; views hide it (`setRowHidden`), keeping
+`QSortFilterProxyModel` and indexes stable. Visibility changes are announced via `dataChanged` with `IsVisibleRole`.
 
-**Pipeline ghi giá trị** (`setData(ValueColumn, EditRole|CheckStateRole)`, `setValue`, `Property::setValue`):
+**Value write pipeline** (`setData(ValueColumn, EditRole|CheckStateRole)`, `setValue`, `Property::setValue`):
 
-1. Property read-only / disabled / kiểu chưa đăng ký → trả `false`, không signal.
-2. Chuyển đổi `QVariant` sang `storageType` (`QVariant::convert`); thất bại → `validationFailed`, trả `false`.
-3. `normalize` (vd. Int/Double clamp theo `min`/`max`, làm tròn `decimals`).
-4. `TypeHandler::validate` → `Property::validator`. Lỗi → `validationFailed(path, v, message)`, trả `false`, giá trị cũ giữ nguyên.
-5. Giá trị bằng giá trị cũ → trả `true`, **không** signal.
-6. Ghi giá trị; `dataChanged(nameIdx, valueIdx)`; `valueChanged(path, new, old)`.
-   Trong batch: `valueChanged` vẫn phát từng cái; đồng thời gom path để phát `batchValueChanged` khi batch kết thúc.
+1. Read-only / disabled property or unregistered type → return `false`, no signal.
+2. Convert the `QVariant` to `storageType` (`QVariant::convert`); on failure → `validationFailed`, return `false`.
+3. `normalize` (e.g. Int/Double clamped to `min`/`max`, rounded to `decimals`).
+4. `TypeHandler::validate` → `Property::validator`. Error → `validationFailed(path, v, message)`, return `false`, old value kept.
+5. Value equals the old value → return `true`, **no** signal.
+6. Store the value; `dataChanged(nameIdx, valueIdx)`; `valueChanged(path, new, old)`.
+   Inside a batch: `valueChanged` is still emitted per change; paths are collected and `batchValueChanged` is emitted when the batch ends.
 
-**Thay đổi cấu trúc khi model đang sống:** mỗi nút giữ con trỏ nội bộ tới một `detail::TreeObserver`
-(interface trong core, `PropertyModel` implement). `PropertyGroup::add*` / `remove` gọi
-`observer->aboutToInsert/inserted/aboutToRemove/removed`, model chuyển thành `beginInsertRows`/`endInsertRows`/...
-Setter metadata gọi `observer->changed(node, roles)` → `dataChanged`. Nút chưa gắn model: observer null, không tốn gì.
-Xóa property đang được edit: view đóng editor trước (Qt xử lý qua `rowsAboutToBeRemoved`).
+**Structural changes while the model is live:** each node holds an internal pointer to a `detail::TreeObserver`
+(an interface in core, implemented by `PropertyModel`). `PropertyGroup::add*` / `remove` call
+`observer->aboutToInsert/inserted/aboutToRemove/removed`, which the model turns into `beginInsertRows`/`endInsertRows`/...
+Metadata setters call `observer->changed(node, roles)` → `dataChanged`. Detached nodes have a null observer and pay nothing.
+Removing a property that is being edited: the view closes the editor first (Qt handles this via `rowsAboutToBeRemoved`).
 
-**Ownership:** `PropertyModel` sở hữu gốc. Con trỏ `Property*` trả ra hợp lệ tới khi nút bị `remove` hoặc `setRoot`.
+**Ownership:** `PropertyModel` owns the root. Returned `Property*` pointers stay valid until the node is removed or `setRoot` is called.
 
 ### 4.7 Validation
 
@@ -309,15 +312,15 @@ struct ValidationResult {
 };
 ```
 
-Validation mặc định của kiểu cơ bản:
+Default validation of the basic types:
 
-| Kiểu       | Kiểm tra                                                                  |
+| Type       | Check                                                                     |
 |------------|---------------------------------------------------------------------------|
-| Int/Double | Sau normalize luôn trong khoảng → luôn hợp lệ (clamp thay vì từ chối)     |
-| String     | `maxLength`; `regex` (khớp toàn bộ, `QRegularExpression::anchoredPattern`) |
-| Enum       | Giá trị thuộc `options`                                                   |
-| FilePath   | `mustExist` + mode `open` → `QFileInfo::isFile()`; chuỗi rỗng luôn hợp lệ |
-| DirPath    | `mustExist` → `QFileInfo::isDir()`; chuỗi rỗng luôn hợp lệ                |
+| Int/Double | Always in range after normalize → always valid (clamp instead of reject)  |
+| String     | `maxLength`; `regex` (full match, `QRegularExpression::anchoredPattern`)  |
+| Enum       | Value is one of `options`                                                 |
+| FilePath   | `mustExist` + mode `open` → `QFileInfo::isFile()`; empty string is always valid |
+| DirPath    | `mustExist` → `QFileInfo::isDir()`; empty string is always valid          |
 
 ---
 
@@ -327,11 +330,11 @@ Validation mặc định của kiểu cơ bản:
 
 ```cpp
 struct EditorHandler {
-    std::function<QWidget*(QWidget* parent, const Property&)> createEditor;   // bắt buộc
-    std::function<void(QWidget*, const QVariant&, const Property&)> setEditorData; // bắt buộc
-    std::function<QVariant(QWidget*, const Property&)> editorData;            // bắt buộc
-    std::function<void(QPainter*, const QStyleOptionViewItem&, const QVariant&, const Property&)> paint; // tùy chọn
-    std::function<void(QWidget*, const Property&)> applyAttributes;          // tùy chọn, gọi sau createEditor và khi attribute đổi
+    std::function<QWidget*(QWidget* parent, const Property&)> createEditor;   // required
+    std::function<void(QWidget*, const QVariant&, const Property&)> setEditorData; // required
+    std::function<QVariant(QWidget*, const Property&)> editorData;            // required
+    std::function<void(QPainter*, const QStyleOptionViewItem&, const QVariant&, const Property&)> paint; // optional
+    std::function<void(QWidget*, const Property&)> applyAttributes;          // optional, called after createEditor and when attributes change
 };
 
 class EditorFactory {
@@ -341,44 +344,44 @@ public:
     void replaceEditor (const TypeId& id, EditorHandler h);
     const EditorHandler* handler(const TypeId& id) const;
 
-    QWidget* createEditor(QWidget* parent, const Property& p) const; // dùng attribute editorId nếu có
-    // Editor phát tín hiệu này khi người dùng "chốt" giá trị (vd. chọn xong file) để view commit ngay.
+    QWidget* createEditor(QWidget* parent, const Property& p) const; // honours the editorId attribute
+    // An editor calls this when the user "commits" a value (e.g. finished picking a file) so the view commits immediately.
     static void notifyCommit(QWidget* editor);
 };
 ```
 
-- Tra handler theo thứ tự: `attributes["editorId"]` → `typeId()`. Không tìm thấy → không có editor (ô chỉ hiển thị).
-- Editor custom muốn commit ngay (không chờ focus-out) gọi `EditorFactory::notifyCommit(this)`; delegate và form view lắng nghe.
+- Handler lookup order: `attributes["editorId"]` → `typeId()`. Not found → no editor (display-only cell).
+- A custom editor that wants to commit immediately (without waiting for focus-out) calls `EditorFactory::notifyCommit(this)`; the delegate and form view listen for it.
 
-### 5.2 Ghi đè editor cho một property
+### 5.2 Overriding the editor of a single property
 
-Đăng ký một editor dưới ID riêng (vd. `"myapp.slider"`) rồi set `attribute editorId = "myapp.slider"` cho
-property đó. Kiểu lưu trữ và validation vẫn theo `typeId` gốc.
+Register an editor under its own ID (e.g. `"myapp.slider"`) and set the attribute `editorId = "myapp.slider"` on
+that property. Storage type and validation still follow the original `typeId`.
 
-### 5.3 Editor mặc định
+### 5.3 Default editors
 
-| Kiểu     | Widget                                                        | Hành vi                                                                 |
+| Type     | Widget                                                        | Behaviour                                                               |
 |----------|---------------------------------------------------------------|-------------------------------------------------------------------------|
-| Bool     | *không tạo editor* trong Tree/List (checkbox vẽ bởi delegate qua `CheckStateRole`); `QCheckBox` trong Form | Click hoặc Space để toggle |
-| Int      | `QSpinBox`                                                    | Áp `min/max/step/prefix/suffix`; `keyboardTracking = false`             |
-| Double   | `QDoubleSpinBox`                                              | Như Int + `decimals`; khi không edit hiển thị tối đa `decimals` chữ số thập phân theo `QLocale`, bỏ số 0 thừa |
-| String   | `QLineEdit`                                                   | `maxLength`, `placeholder`, `QRegularExpressionValidator` từ `regex`    |
-| Enum     | `QComboBox` (không editable)                                  | Commit ngay khi chọn (`notifyCommit` trên `activated`)                  |
-| FilePath | `qpb::PathEdit` = `QLineEdit` + `QToolButton "…"`             | Nút mở `QFileDialog::getOpenFileName`/`getSaveFileName` theo `mode`; chọn xong → `notifyCommit` |
-| DirPath  | `qpb::PathEdit` (chế độ thư mục)                              | `QFileDialog::getExistingDirectory`                                    |
+| Bool     | *no editor* in Tree/List (checkbox painted by the delegate via `CheckStateRole`); `QCheckBox` in Form | Toggle with click or Space |
+| Int      | `QSpinBox`                                                    | Applies `min/max/step/prefix/suffix`; `keyboardTracking = false`        |
+| Double   | `QDoubleSpinBox`                                              | Like Int + `decimals`; when not editing, shows at most `decimals` fractional digits via `QLocale`, trailing zeros removed |
+| String   | `QLineEdit`                                                   | `maxLength`, `placeholder`, `QRegularExpressionValidator` from `regex`  |
+| Enum     | `QComboBox` (not editable)                                    | Commits on selection (`notifyCommit` on `activated`)                    |
+| FilePath | `qpb::PathEdit` = `QLineEdit` + `QToolButton "…"`             | Button opens `QFileDialog::getOpenFileName`/`getSaveFileName` per `mode`; on selection → `notifyCommit` |
+| DirPath  | `qpb::PathEdit` (directory mode)                              | `QFileDialog::getExistingDirectory`                                     |
 
-Hiển thị đường dẫn dài trong ô (không edit): elide ở giữa (`Qt::ElideMiddle`), tooltip là đường dẫn đầy đủ.
+Long paths in a (non-editing) cell are elided in the middle (`Qt::ElideMiddle`); the tooltip shows the full path.
 
 ### 5.4 `PropertyDelegate : QStyledItemDelegate`
 
-- `createEditor/setEditorData/setModelData` ủy quyền cho `EditorFactory`. `setModelData` gọi `model->setData`;
-  nếu trả `false` (validation lỗi) thì editor vẫn đóng, model giữ giá trị cũ, view hiển thị thông báo lỗi
-  (tooltip tại ô, `QToolTip::showText`) — hành vi 1.0. [Quyết định D5]
-- `paint`: dùng `EditorHandler::paint` nếu có; Bool vẽ checkbox căn giữa trái; group vẽ nền `QPalette::AlternateBase`, chữ đậm.
-- **Focus khi mở dialog:** `PathEdit` đặt cờ `dialogOpen` trong lúc dialog modal hiển thị. `PropertyDelegate::eventFilter`
-  bỏ qua `FocusOut` của editor có cờ này, nên editor không bị đóng/commit giữa chừng. [Quyết định D6]
-- Phím: **Enter** commit + đóng; **Esc** hủy; **Tab/Shift+Tab** commit rồi mở editor ở ô Value kế tiếp/trước đó có thể edit
-  (bỏ qua group và read-only); focus-out commit.
+- `createEditor/setEditorData/setModelData` delegate to `EditorFactory`. `setModelData` calls `model->setData`;
+  if it returns `false` (validation error) the editor still closes, the model keeps the old value, and the view shows the error
+  (tooltip at the cell, `QToolTip::showText`) — 1.0 behaviour. [Decision D5]
+- `paint`: uses `EditorHandler::paint` when present; Bool paints a left-aligned checkbox; groups paint a `QPalette::AlternateBase` background with bold text.
+- **Focus while a dialog is open:** `PathEdit` sets a `dialogOpen` flag while the modal dialog is shown. `PropertyDelegate::eventFilter`
+  ignores `FocusOut` for editors with that flag, so the editor is not committed/closed half-way. [Decision D6]
+- Keys: **Enter** commits + closes; **Esc** cancels; **Tab/Shift+Tab** commit and open the editor on the next/previous editable Value cell
+  (skipping groups and read-only properties); focus-out commits.
 
 ### 5.5 `PropertyTreeView : QTreeView`
 
@@ -387,58 +390,59 @@ class PropertyTreeView : public QTreeView {
 public:
     enum class Mode { Tree, List };
     explicit PropertyTreeView(QWidget* parent = nullptr);
-    void setModel(QAbstractItemModel* model) override; // chấp nhận PropertyModel hoặc proxy của nó
+    void setModel(QAbstractItemModel* model) override; // accepts a PropertyModel or a proxy of one
     void setMode(Mode m);  Mode mode() const;
     void setNameColumnWidth(int px);
 };
 ```
 
-- Mặc định: `editTriggers = CurrentChanged | SelectedClicked | EditKeyPressed`; 2 cột; header có thể resize;
-  `alternatingRowColors = true`; `setUniformRowHeights(true)`; ẩn hàng theo `IsVisibleRole` và cập nhật khi `dataChanged`/insert.
-- **Mode::Tree:** group có thể thu gọn, mặc định mở; group hàng dùng `setFirstColumnSpanned(true)`.
-- **Mode::List:** *không dùng proxy làm phẳng*. Cùng model, `rootIsDecorated = false`, `indentation = 0`,
-  `itemsExpandable = false`, `expandAll()` và giữ expand khi có hàng mới; group hiển thị như section header (spanned, không thu gọn được). [Quyết định D4]
-- Context menu trên ô property: **Reset to default** (disabled nếu không modified hoặc read-only); trên group: **Reset group**.
-- Chuyển mode không tạo lại model, không mất giá trị, không mất selection hiện tại.
+- Defaults: `editTriggers = CurrentChanged | SelectedClicked | EditKeyPressed`; 2 columns; resizable header;
+  `alternatingRowColors = true`; `setUniformRowHeights(true)`; rows hidden per `IsVisibleRole`, updated on `dataChanged`/insert.
+- **Mode::Tree:** groups are collapsible, expanded by default; group rows use `setFirstColumnSpanned(true)`.
+- **Mode::List:** *no flattening proxy*. Same model, `rootIsDecorated = false`, `indentation = 0`,
+  `itemsExpandable = false`, `expandAll()` kept on new rows; groups render as section headers (spanned, not collapsible). [Decision D4]
+- Context menu on a property: **Reset to default** (disabled when not modified or read-only); on a group: **Reset group**.
+- Switching mode does not recreate the model and loses neither values nor the current selection.
 
 ### 5.6 `PropertyFormView : QScrollArea` (1.1)
 
-- Dựng `QFormLayout` cho mỗi group; group lồng thành `QGroupBox` có thể thu gọn (checkable-less, nút ▸ ở tiêu đề).
-- Mỗi property có một editor **thường trực** tạo bởi `EditorFactory` (Bool dùng `QCheckBox`).
-- Commit: editor phát tín hiệu thay đổi → `model->setData` (spinbox: `editingFinished`; line edit: `editingFinished`;
-  combo/checkbox/path: ngay lập tức hoặc qua `notifyCommit`). Validation lỗi → khôi phục giá trị cũ trên editor + tooltip lỗi.
-- Đồng bộ ngược: lắng nghe `dataChanged` → `setEditorData` (chặn vòng lặp bằng `QSignalBlocker`);
-  `rowsInserted/rowsRemoved/modelReset/layoutChanged` → dựng lại phần bị ảnh hưởng (1.1 cho phép dựng lại toàn bộ group chứa nó).
-- Tôn trọng `visible` (ẩn cả label + editor), `enabled`, `readOnly`.
-- Không dùng `QDataWidgetMapper` (không hỗ trợ cây).
+- Builds a `QFormLayout` per group; nested groups become collapsible `QGroupBox`es (not checkable, ▸ button in the title).
+- Every property has a **persistent** editor created by `EditorFactory` (Bool uses `QCheckBox`).
+- Commit: editor change signal → `model->setData` (spin box: `editingFinished`; line edit: `editingFinished`;
+  combo/checkbox/path: immediately or via `notifyCommit`). Validation error → restore the old value in the editor + error tooltip.
+- Reverse sync: `dataChanged` → `setEditorData` (loops blocked with `QSignalBlocker`);
+  `rowsInserted/rowsRemoved/modelReset/layoutChanged` → rebuild the affected part (1.1 may rebuild the whole containing group).
+- Honours `visible` (hides label + editor), `enabled`, `readOnly`.
+- Does not use `QDataWidgetMapper` (no tree support).
 
-### 5.7 Tìm kiếm / lọc (1.1)
+### 5.7 Search / filter (1.1)
 
-`PropertyFilterProxyModel : QSortFilterProxyModel` với `recursiveFilteringEnabled = true`, lọc theo `displayName`
-(không phân biệt hoa thường). Group hiển thị nếu có con khớp. `PropertyTreeView` và `PropertyFormView` làm việc với proxy.
+`PropertyFilterProxyModel : QSortFilterProxyModel` with `recursiveFilteringEnabled = true`, filtering on `displayName`
+(case-insensitive). A group is shown when a child matches. `PropertyTreeView` and `PropertyFormView` work with the proxy.
 
 ---
 
-## 6. Phân phối dạng component folder
+## 6. Distribution as a component folder
 
-### 6.1 Cấu trúc repo
+### 6.1 Repository layout
 
-Folder `qpb/` là **đơn vị phân phối**: tự chứa, chép nguyên vào project khác là dùng được.
-Mọi thứ ngoài `qpb/` chỉ phục vụ phát triển thư viện.
+The `qpb/` folder is the **unit of distribution**: self-contained, usable once copied into another project.
+Everything outside `qpb/` exists only to develop the library.
 
 ```text
-property-browser/                  (repo phát triển)
-├── qpb/                           ← COMPONENT FOLDER: chép nguyên folder này
-│   ├── CMakeLists.txt             # project(qpb VERSION x.y.z), chỉ build 2 lib
-│   ├── VERSION                    # "1.0.0" — nguồn duy nhất của version
+property-browser/                  (development repo)
+├── qpb/                           ← COMPONENT FOLDER: copy this folder as-is
+│   ├── CMakeLists.txt             # project(qpb VERSION x.y.z), builds the two libraries only
+│   ├── VERSION                    # "1.0.0" — single source of the version
 │   ├── LICENSE
-│   ├── CHANGELOG.md               # kèm hướng dẫn nâng cấp mỗi bản
-│   ├── include/qpb/               # header public (duy nhất) — §9
-│   │   ├── qpb.h                  # umbrella header: include tất cả
-│   │   ├── qpbglobal.h            # export macro, QPB_VERSION*, QPB_DEPRECATED
+│   ├── CHANGELOG.md               # includes upgrade notes for every release
+│   ├── cmake/                     # internal CMake helpers and templates
+│   ├── include/qpb/               # public headers (only these) — §9
+│   │   ├── qpb.h                  # umbrella header: includes everything
+│   │   ├── qpbglobal.h            # export macros, QPB_VERSION*, QPB_DEPRECATED*
 │   │   ├── Property.h  PropertyGroup.h  PropertyModel.h  TypeRegistry.h ...
 │   │   └── widgets/PropertyTreeView.h  EditorFactory.h ...
-│   └── src/                       # nội bộ: *.cpp, *_p.h
+│   └── src/                       # internal: *.cpp, *_p.h
 │       ├── core/
 │       └── widgets/
 ├── CMakeLists.txt                 # dev: add_subdirectory(qpb) + tests + examples
@@ -448,148 +452,151 @@ property-browser/                  (repo phát triển)
 └── docs/
 ```
 
-`tests/` và `examples/` dùng `qpb` **đúng như một consumer** (`add_subdirectory(../qpb)` + link `qpb::widgets`),
-nên mọi lỗi tích hợp lộ ra ngay trong repo.
+`tests/` and `examples/` use `qpb` **exactly like a consumer** (link `qpb::core` / `qpb::widgets` only),
+so integration problems show up inside the repo.
 
-### 6.2 Cách dùng trong project khác
+### 6.2 Using it from another project
 
 ```text
 my-app/
 ├── CMakeLists.txt
 ├── components/
-│   └── qpb/        ← chép từ property-browser/qpb (hoặc git subtree/submodule)
+│   └── qpb/        ← copied from property-browser/qpb (or git subtree/submodule)
 └── src/
 ```
 
 ```cmake
-# my-app/CMakeLists.txt — chỉ cần 2 dòng
+# my-app/CMakeLists.txt — two lines are enough
 find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets)
 add_subdirectory(components/qpb)
-target_link_libraries(my_app PRIVATE qpb::widgets)   # qpb::core được kéo theo
+target_link_libraries(my_app PRIVATE qpb::widgets)   # pulls in qpb::core
 ```
 
 ```cpp
-#include <qpb/qpb.h>   // hoặc include từng header
+#include <qpb/qpb.h>   // or include individual headers
 ```
 
-**Cập nhật thư viện:** xóa `components/qpb/`, chép bản mới vào, build lại. Đọc `CHANGELOG.md` mục của bản mới.
-Không cần sửa CMake hay code của consumer khi cùng major version (G5, S6).
+**Updating the library:** delete `components/qpb/`, copy the new version in, rebuild. Read the new release's section in `CHANGELOG.md`.
+No change to the consumer's CMake or code within the same major version (G5, S6).
 
-Ba cách giữ folder đồng bộ (đều được hỗ trợ, do consumer chọn):
+Three supported ways to keep the folder in sync (the consumer chooses):
 
-| Cách             | Lệnh cập nhật                                                    | Ghi chú                                  |
+| Method           | Update command                                                   | Notes                                    |
 |------------------|------------------------------------------------------------------|------------------------------------------|
-| Chép tay         | Tải `qpb-x.y.z.zip` từ GitHub Release, giải nén đè               | Đơn giản nhất                            |
-| `git subtree`    | `git subtree pull --prefix components/qpb <remote> qpb-release --squash` | Cần nhánh `qpb-release` chỉ chứa folder `qpb/` (tạo bằng `git subtree split`) |
-| `git submodule`  | Trỏ tới repo + dùng `add_subdirectory(components/property-browser/qpb)` | Kéo cả repo dev; tests/examples không build khi là subproject |
+| Manual copy      | Download `qpb-x.y.z.zip` from the GitHub Release, extract over it | Simplest                                 |
+| `git subtree`    | `git subtree pull --prefix components/qpb <remote> qpb-release --squash` | Needs a `qpb-release` branch containing only `qpb/` (created with `git subtree split`) |
+| `git submodule`  | Point to the repo and use `add_subdirectory(components/property-browser/qpb)` | Pulls the whole dev repo; tests/examples are not built as a subproject |
 
-### 6.3 Yêu cầu với `qpb/CMakeLists.txt` (để không "làm bẩn" project chủ)
+### 6.3 Requirements for `qpb/CMakeLists.txt` (do not pollute the host project)
 
-- Dùng `CMAKE_CURRENT_SOURCE_DIR`/`CMAKE_CURRENT_BINARY_DIR`, **không bao giờ** `CMAKE_SOURCE_DIR`.
-- Không đổi biến global (`CMAKE_CXX_STANDARD`, `CMAKE_CXX_FLAGS`, `CMAKE_AUTOMOC`, output dir...).
-  Mọi thiết lập qua `target_*` và `set_target_properties(... AUTOMOC ON)` trên target của qpb.
-- `target_compile_features(qpb_core PUBLIC cxx_std_17)` — chỉ yêu cầu *tối thiểu*, consumer dùng C++20 vẫn được.
-- Cờ cảnh báo và `QT_NO_CAST_FROM_ASCII` là **PRIVATE**; header public phải sạch cảnh báo dưới
-  `-Wall -Wextra -Wpedantic` / `/W4` của consumer.
-- Chỉ gọi `find_package(Qt6 6.5 ... Core Widgets)` nếu target `Qt6::Widgets` chưa tồn tại.
-- Tên target có tiền tố `qpb_`; alias `qpb::core`, `qpb::widgets`. Option có tiền tố `QPB_`.
-- Không có tests/examples trong folder `qpb/`; không `install()` mặc định (option `QPB_INSTALL`, OFF).
-- **Không dùng Qt resource (`.qrc`)** trong 1.x: static lib cần `Q_INIT_RESOURCE` ở phía consumer → vi phạm "2 dòng CMake".
-  Icon lấy từ `QStyle::standardIcon` hoặc vẽ bằng code.
-- **Không dựa vào static initializer** để đăng ký kiểu (linker có thể loại bỏ khi link static).
-  Kiểu cơ bản đăng ký lười trong `TypeRegistry::global()` / `EditorFactory::global()`.
-- Build shared (`QPB_BUILD_SHARED=ON`) vẫn hỗ trợ; khi đó consumer phải deploy thêm DLL/so — ghi rõ trong README.
+- Use `CMAKE_CURRENT_SOURCE_DIR`/`CMAKE_CURRENT_BINARY_DIR`, **never** `CMAKE_SOURCE_DIR`.
+- Do not change global variables (`CMAKE_CXX_STANDARD`, `CMAKE_CXX_FLAGS`, `CMAKE_AUTOMOC`, output dirs, ...).
+  Everything goes through `target_*` and `set_target_properties(... AUTOMOC ON)` on qpb's own targets.
+- `target_compile_features(qpb_core PUBLIC cxx_std_17)` — a *minimum* only; consumers on C++20 still work.
+- Warning flags and `QT_NO_CAST_FROM_ASCII` are **PRIVATE**; public headers must be warning-free under the consumer's
+  `-Wall -Wextra -Wpedantic` / `/W4`.
+- Call `find_package(Qt6 6.5 ... Core Widgets)` only if the `Qt6::Widgets` target does not exist yet; otherwise verify the Qt version.
+- Target names use the `qpb_` prefix; aliases `qpb::core`, `qpb::widgets`. Options use the `QPB_` prefix.
+- No tests/examples inside `qpb/`; no `install()` by default (option `QPB_INSTALL`, OFF).
+- **No Qt resources (`.qrc`)** in 1.x: a static library would need `Q_INIT_RESOURCE` on the consumer side → breaks "two lines of CMake".
+  Icons come from `QStyle::standardIcon` or are painted in code.
+- **No reliance on static initializers** to register types (the linker may drop them when linking statically).
+  Basic types are registered lazily in `TypeRegistry::global()` / `EditorFactory::global()`.
+- Shared builds (`QPB_BUILD_SHARED=ON`) are supported; consumers must then deploy the DLL/.so — documented in the README.
 
-## 7. Kiểm thử
+## 7. Testing
 
-| Tầng          | Công cụ                        | Nội dung bắt buộc                                                                 |
+| Layer         | Tool                           | Required content                                                                  |
 |---------------|--------------------------------|-----------------------------------------------------------------------------------|
-| Core          | Qt Test (không cần GUI)        | builder, path/find, trạng thái hiệu lực kế thừa, registry, pipeline validation   |
-| Model         | Qt Test + `QAbstractItemModelTester` (mode Fatal) | mọi thao tác cấu trúc/giá trị; signal (`QSignalSpy`); batch       |
-| Widgets       | Qt Test, `QT_QPA_PLATFORM=offscreen` | tạo/commit/hủy editor cho 7 kiểu; Enter/Esc/Tab; focus-out; mode Tree↔List; reset menu; PathEdit không đóng khi dialog mở (dialog được thay bằng hook test) |
-| Example       | build trong CI                  | S1 và S2 được đo tự động bằng script đếm dòng                                     |
-| API compat    | chỉ biên dịch + chạy             | §9.5: mã client của mọi bản 1.x đã phát hành vẫn build và chạy đúng               |
-| Consumer      | CMake project mẫu `tests/consumer` | Chép `qpb/` vào `components/`, build; kiểm tra không rò rỉ biến global; build với C++17 và C++20; static và shared |
+| Core          | Qt Test (no GUI)               | builder, path/find, inherited effective state, registry, validation pipeline      |
+| Model         | Qt Test + `QAbstractItemModelTester` (Fatal mode) | every structural/value operation; signals (`QSignalSpy`); batches |
+| Widgets       | Qt Test, `QT_QPA_PLATFORM=offscreen` | create/commit/cancel editors for all 7 types; Enter/Esc/Tab; focus-out; Tree↔List; reset menu; PathEdit does not close while a dialog is open (dialog replaced by a test hook) |
+| Examples      | built in CI                    | S1 and S2 measured automatically by a line-count script                            |
+| API compat    | compile + run only             | §9.5: client code of every released 1.x still builds and behaves correctly        |
+| Consumer      | sample CMake project `tests/consumer` | copy `qpb/` into `components/`, build; no leaked global variables; C++17 and C++20; static and shared |
 
-`PathEdit` expose một hook tĩnh (`setDialogProviderForTesting`) để test thay `QFileDialog` bằng hàm trả giá trị cố định.
+`PathEdit` exposes a static hook (`setDialogProviderForTesting`) so tests can replace `QFileDialog` with a function returning a fixed value.
 
-CI (khi có): GitHub Actions, ma trận Ubuntu/Windows/macOS × Qt 6.5 / 6.8, qua `jurplel/install-qt-action`.
-
----
-
-## 8. Phiên bản & phạm vi theo bản
-
-Vì mục tiêu là API cố định cho nhiều project, **bản đầu tiên cho project thật dùng là 1.0**.
-Các bản 0.x chỉ dùng nội bộ trong repo (examples) để thử API; API 0.x có thể đổi.
-Sau 1.0, tính năng mới đến dưới dạng **bổ sung** (minor), không sửa cái đã có.
-
-| Bản   | Nội dung                                                                                                   | Loại thay đổi |
-|-------|------------------------------------------------------------------------------------------------------------|---------------|
-| 0.1   | Prototype nội bộ: core + model + Tree view, 7 kiểu. API chưa khóa                                           | —             |
-| **1.0** | §4 toàn bộ; §5.1–5.5; 7 kiểu cơ bản; Tree + List; reset; in đậm khi modified; tooltip; component folder (§6); chính sách API (§9); example quickstart, custom_type, inspector | **Khóa API** |
-| 1.1   | `PropertyFormView` (§5.6); `PropertyFilterProxyModel` (§5.7); attribute `multiline`                          | Bổ sung       |
-| 1.2   | `QObjectPropertySource` (đọc `Q_PROPERTY`, metadata qua `Q_CLASSINFO("qpb:<prop>", "min=0;max=10")`, đồng bộ hai chiều); serialize `toJson/fromJson`, `save/load(QSettings&)`; `Types::Int64`; example `QUndoStack` | Bổ sung |
-| 2.0   | Chỉ khi thật sự cần phá vỡ API; gom mọi thứ đã deprecate                                                    | Breaking      |
-
-**Thiết kế 1.0 phải "chừa chỗ" cho 1.1/1.2** mà không đổi API: Form view và filter là class mới dùng
-`PropertyModel` có sẵn; `QObjectPropertySource` chỉ cần API public của `PropertyGroup`/`PropertyModel`
-(`add`, `setValue`, `valueChanged`); `Int64` là `TypeId` mới; serialize là hàm tự do mới.
-Việc kiểm tra điều này là một task riêng trong PLAN (M3 — API review).
+CI: GitHub Actions, matrix Ubuntu/Windows/macOS × Qt 6.5 / 6.8, via `jurplel/install-qt-action`.
 
 ---
 
-## 9. Chính sách ổn định API
+## 8. Versions and scope
 
-### 9.1 Cam kết
+Because the goal is a stable API across many projects, **the first release for real projects is 1.0**.
+0.x releases are only used inside this repo (examples) to try out the API; the 0.x API may change.
+After 1.0, new features arrive as **additions** (minor releases); existing API is never altered.
 
-Trong cùng major version (1.x): code consumer đã build được với 1.a sẽ **build được và chạy đúng như cũ** với 1.b (b > a)
-chỉ bằng cách thay folder `qpb/`. Ngoại lệ duy nhất: sửa bug mà hành vi cũ trái với tài liệu — phải ghi rõ trong CHANGELOG.
+| Version | Content                                                                                                  | Change type   |
+|---------|----------------------------------------------------------------------------------------------------------|---------------|
+| 0.1     | Internal prototype: core + model + tree view, 7 types. API not frozen                                    | —             |
+| **1.0** | All of §4; §5.1–5.5; 7 basic types; Tree + List; reset; bold when modified; tooltips; component folder (§6); API policy (§9); examples quickstart, custom_type, inspector | **API freeze** |
+| 1.1     | `PropertyFormView` (§5.6); `PropertyFilterProxyModel` (§5.7); `multiline` attribute                      | Additive      |
+| 1.2     | `QObjectPropertySource` (reads `Q_PROPERTY`, metadata via `Q_CLASSINFO("qpb:<prop>", "min=0;max=10")`, two-way sync); serialization `toJson/fromJson`, `save/load(QSettings&)`; `Types::Int64`; `QUndoStack` example | Additive |
+| 2.0     | Only if breaking the API is truly necessary; removes everything deprecated                               | Breaking      |
 
-Vì consumer luôn **build lại từ source**, cam kết là **tương thích source (API)**, không phải tương thích nhị phân (ABI).
-Dù vậy d-pointer vẫn được dùng (§9.3) để giữ header ổn định và tự do sửa nội bộ.
+**The 1.0 design must leave room for 1.1/1.2** without API changes: the form view and filter are new classes on top of the
+existing `PropertyModel`; `QObjectPropertySource` needs only the public API of `PropertyGroup`/`PropertyModel`
+(`add`, `setValue`, `valueChanged`); `Int64` is a new `TypeId`; serialization is a set of new free functions.
+Checking this is a dedicated task in the plan (M1.3).
 
-### 9.2 Thay đổi được phép / không được phép trong 1.x
+---
 
-| Được phép (minor/patch)                                                  | Không được phép (chỉ ở major)                                     |
+## 9. API stability policy
+
+### 9.1 Commitment
+
+Within a major version (1.x): consumer code that builds against 1.a **builds and behaves the same** against 1.b (b > a)
+by only replacing the `qpb/` folder. The single exception: fixing a bug where the old behaviour contradicted the documentation —
+this must be called out in the CHANGELOG.
+
+Because consumers always **rebuild from source**, the commitment is **source (API) compatibility**, not binary (ABI) compatibility.
+D-pointers are still used (§9.3) to keep headers stable and internals free to change.
+
+### 9.2 Allowed / forbidden changes within 1.x
+
+| Allowed (minor/patch)                                                    | Forbidden (major only)                                            |
 |--------------------------------------------------------------------------|-------------------------------------------------------------------|
-| Thêm class, hàm tự do, header mới                                        | Xóa hoặc đổi tên bất kỳ thứ gì public                             |
-| Thêm hàm thành viên **không ảo** mới; thêm overload không gây mơ hồ      | Đổi kiểu tham số/giá trị trả về, thêm tham số (kể cả có default) |
-| Thêm giá trị enum **ở cuối**                                             | Đổi giá trị số của enum/role đã có                                |
-| Thêm trường `std::function` vào `TypeHandler`/`EditorHandler` (mặc định rỗng = hành vi cũ) | Thêm hàm **pure virtual** vào class người dùng có thể kế thừa     |
-| Thêm hàm virtual **có cài đặt mặc định giữ hành vi cũ**                  | Đổi hành vi mặc định đã ghi trong tài liệu                        |
-| Thêm attribute, `TypeId`, signal mới                                     | Đổi chữ ký signal/slot đã có                                      |
-| Thêm option CMake (mặc định giữ hành vi cũ)                              | Đổi tên target, option, đường dẫn include; tăng yêu cầu C++/Qt/CMake |
-| Deprecate (kèm thay thế)                                                  | Xóa thứ đã deprecate                                              |
+| Add classes, free functions, new headers                                 | Remove or rename anything public                                  |
+| Add new **non-virtual** member functions; add non-ambiguous overloads    | Change parameter/return types, add parameters (even defaulted)    |
+| Append enum values **at the end**                                        | Change the numeric value of an existing enum/role                 |
+| Add `std::function` fields to `TypeHandler`/`EditorHandler` (empty = old behaviour) | Add a **pure virtual** function to a class users may subclass |
+| Add virtual functions **whose default implementation keeps the old behaviour** | Change documented default behaviour                         |
+| Add attributes, `TypeId`s, new signals                                   | Change the signature of an existing signal/slot                   |
+| Add CMake options (defaults keep the old behaviour)                      | Rename targets, options, include paths; raise the C++/Qt/CMake minimum |
+| Deprecate (with a replacement)                                           | Remove deprecated items                                           |
 
-### 9.3 Quy tắc thiết kế header public
+### 9.3 Public header design rules
 
-- Class có trạng thái (`Property`, `PropertyGroup`, `PropertyModel`, `TypeRegistry`, `EditorFactory`, view) dùng d-pointer;
-  không có data member public/protected ngoài d-pointer. Header không include `*_p.h`.
-- Struct cấu hình (`TypeHandler`, `EditorHandler`, `EnumOption`, `ValidationResult`) là aggregate chỉ để **thêm trường ở cuối**;
-  tài liệu khuyên gán từng trường, không khởi tạo theo vị trí (`{a, b, c}`).
-- Không expose kiểu của thư viện bên thứ ba; kiểu trong API chỉ là Qt + std.
-- Không có `inline`/template chứa logic nghiệp vụ trong header (builder chỉ chuyển tiếp sang hàm trong `.cpp`).
-- Mọi header public include được **riêng lẻ** (tự đủ), kiểm tra bằng test biên dịch từng header.
+- Stateful classes (`Property`, `PropertyGroup`, `PropertyModel`, `TypeRegistry`, `EditorFactory`, views) use a d-pointer;
+  no public/protected data members besides the d-pointer. Headers never include `*_p.h`.
+- Configuration structs (`TypeHandler`, `EditorHandler`, `EnumOption`, `ValidationResult`) are aggregates that only **grow at the end**;
+  documentation recommends assigning fields one by one, never positional initialization (`{a, b, c}`).
+- No third-party types in the API; only Qt and std types.
+- No business logic in `inline` functions/templates in headers (builders only forward to functions in `.cpp` files).
+- Every public header is **self-contained** (includable on its own), verified by a per-header compile test.
 
-### 9.4 Version & deprecation
+### 9.4 Versioning and deprecation
 
-- `qpbglobal.h` cung cấp `QPB_VERSION_MAJOR/MINOR/PATCH`, `QPB_VERSION_STR`, `QPB_VERSION_CHECK(maj, min, pat)` (sinh từ file `VERSION`),
-  và hàm runtime `qpb::version()`.
-- API bị thay thế được đánh dấu `QPB_DEPRECATED_X("dùng X thay thế")` (map sang `[[deprecated]]`), giữ **đến hết 1.x**.
-  Consumer muốn chủ động dọn có thể định nghĩa `QPB_DISABLE_DEPRECATED` để biến chúng thành lỗi biên dịch.
-- `CHANGELOG.md` mỗi bản có mục *Added / Changed / Deprecated / Fixed* và *Upgrade notes* (thường là "không cần làm gì").
+- `qpbglobal.h` provides `QPB_VERSION_MAJOR/MINOR/PATCH`, `QPB_VERSION_STR`, `QPB_VERSION`, `QPB_VERSION_CHECK(maj, min, pat)`
+  (generated from the `VERSION` file) and the runtime function `qpb::version()`.
+- Superseded API is marked `QPB_DEPRECATED_X("use X instead")` (maps to `[[deprecated]]`) and kept **until the end of 1.x**.
+  Deprecated declarations are wrapped in `#if !defined(QPB_DISABLE_DEPRECATED)`, so a consumer who wants to clean up early
+  can define `QPB_DISABLE_DEPRECATED` and get compile errors wherever deprecated API is still used.
+- Every `CHANGELOG.md` entry has *Added / Changed / Deprecated / Fixed* and *Upgrade notes* (usually "nothing to do").
 
-### 9.5 Kiểm chứng tự động
+### 9.5 Automated verification
 
-- `tests/api_compat/v1_0.cpp`, `v1_1.cpp`, …: mỗi bản phát hành thêm một file dùng **toàn bộ** API public của bản đó
-  (cả signal, builder, handler). File cũ **không bao giờ được sửa**; mọi bản sau phải build (warning deprecate cho phép) và chạy pass.
-- Test "header tự đủ": mỗi header public được include một mình trong một `.cpp` riêng.
-- `tools/api_snapshot`: xuất danh sách symbol public (bằng cách parse header hoặc `abi-dumper` nếu có) và diff với snapshot của bản trước
-  → CI báo nếu có xóa/đổi. (Có thể dùng từ 1.1; ở 1.0 chỉ tạo snapshot gốc.)
+- `tests/api_compat/v1_0.cpp`, `v1_1.cpp`, …: each release adds one file exercising **all** public API of that release
+  (signals, builders and handlers included). Old files are **never edited**; every later release must build them
+  (deprecation warnings allowed) and pass.
+- "Self-contained header" test: every public header is included alone in its own `.cpp`.
+- `tools/api_snapshot`: exports the list of public symbols (by parsing headers, or with `abi-dumper` when available) and diffs it
+  against the previous release's snapshot → CI flags removals/changes. (Used from 1.1; 1.0 only creates the baseline.)
 
 ---
 
-## Phụ lục A — Ví dụ API cuối cùng (1.0)
+## Appendix A — Final API example (1.0)
 
 ```cpp
 #include <qpb/qpb.h>
@@ -615,7 +622,7 @@ QObject::connect(&model, &PropertyModel::valueChanged,
                  [](const QString& path, const QVariant& v, const QVariant&) { qDebug() << path << "=" << v; });
 ```
 
-Đăng ký `QColor` (C++17, ngoài lib):
+Registering `QColor` (C++17, outside the library):
 
 ```cpp
 TypeHandler t;
@@ -632,23 +639,25 @@ EditorFactory::global().registerEditor("app.color", e);
 root->add("app.color", "tint", QColor(Qt::white));
 ```
 
-## Phụ lục B — Nhật ký quyết định
+## Appendix B — Decision log
 
-| #  | Quyết định                                                                 | Lý do                                                                                  |
+| #  | Decision                                                                   | Rationale                                                                              |
 |----|----------------------------------------------------------------------------|----------------------------------------------------------------------------------------|
-| D1 | `TypeId` là chuỗi logic, không phải `QMetaType`                             | String/FilePath/DirPath cùng lưu `QString`; Enum có thể int hoặc string                 |
-| D2 | Tách `TypeRegistry` (core) và `EditorFactory` (widgets)                     | Giữ core không phụ thuộc QtWidgets (mở đường QML, test headless)                        |
-| D3 | C++17, cấu hình handler bằng gán trường                                     | Designated initializer là C++20; MSVC `/std:c++17` từ chối                              |
-| D4 | List mode = cùng `QTreeView`, không proxy làm phẳng                         | Rẻ hơn nhiều; index và editor giữ nguyên khi đổi mode                                  |
-| D5 | Validation lỗi từ delegate: đóng editor, giữ giá trị cũ, hiện tooltip lỗi    | Delegate chuẩn đóng editor trước khi biết kết quả `setData`; đơn giản cho 1.0          |
-| D6 | `PathEdit` chặn `FocusOut` khi dialog đang mở                               | Tránh commit/đóng editor khi `QFileDialog` modal lấy focus                              |
-| D7 | Model sở hữu cây; nút báo thay đổi cấu trúc qua `TreeObserver` nội bộ       | Cho phép thêm/xóa property khi model đang sống mà vẫn giữ builder API                   |
-| D8 | Int chỉ `int` ở 1.0; `qint64` là kiểu mới `Int64` ở 1.2                      | `QSpinBox` chỉ hỗ trợ `int`; thêm kiểu mới không phá API                               |
-| D9 | Int/Double clamp thay vì từ chối                                            | Khớp hành vi `QSpinBox`; giá trị từ code ứng dụng cũng nhất quán                       |
-| D10| Property ẩn vẫn nằm trong model; view ẩn hàng                               | Index ổn định, filter proxy hoạt động bình thường                                      |
-| D11| Signal truyền `path` (QString), không truyền `Property&`                    | An toàn với queued connection, không cần đăng ký metatype                              |
-| D12| Bản đầu cho project thật là 1.0 (khóa API); 0.x chỉ nội bộ                  | Mục tiêu G5: project đã dùng không phải sửa code                                        |
-| D13| Cam kết tương thích **source**, không phải ABI                               | Consumer luôn build lại từ folder component                                            |
-| D14| Phân phối bằng folder `qpb/` tự chứa + `add_subdirectory`                   | Mục tiêu G6; `find_package`/install thành tùy chọn                                    |
-| D15| Static lib mặc định, không dùng `.qrc`, không static initializer            | Tránh phải deploy DLL, `Q_INIT_RESOURCE` và lỗi linker bỏ object khi link static       |
-| D16| Viết mới hoàn toàn, không wrap/fork                                          | Mục tiêu G7; kiểm soát trọn API để có thể cam kết ổn định                               |
+| D1 | `TypeId` is a logical string, not a `QMetaType`                            | String/FilePath/DirPath all store `QString`; Enum may be int or string                 |
+| D2 | Split `TypeRegistry` (core) from `EditorFactory` (widgets)                 | Keeps core free of QtWidgets (room for QML, headless tests)                            |
+| D3 | C++17, handlers configured by field assignment                             | Designated initializers are C++20; MSVC `/std:c++17` rejects them                      |
+| D4 | List mode = same `QTreeView`, no flattening proxy                          | Much cheaper; indexes and editors survive a mode switch                                |
+| D5 | Validation error from the delegate: close editor, keep old value, show error tooltip | The standard delegate closes the editor before `setData` returns; simple for 1.0 |
+| D6 | `PathEdit` suppresses `FocusOut` while its dialog is open                  | Prevents commit/close when the modal `QFileDialog` takes focus                         |
+| D7 | The model owns the tree; nodes report structural changes via an internal `TreeObserver` | Allows adding/removing properties on a live model while keeping the builder API |
+| D8 | Int is `int` only in 1.0; `qint64` is a new `Int64` type in 1.2             | `QSpinBox` only supports `int`; adding a new type does not break the API               |
+| D9 | Int/Double clamp instead of rejecting                                      | Matches `QSpinBox`; values set from application code behave the same                  |
+| D10| Hidden properties stay in the model; views hide the rows                   | Stable indexes; filter proxies work normally                                           |
+| D11| Signals carry the `path` (QString), not `Property&`                        | Safe with queued connections, no metatype registration needed                          |
+| D12| The first release for real projects is 1.0 (API freeze); 0.x is internal  | Goal G5: consuming projects never have to change code                                  |
+| D13| Commitment is **source** compatibility, not ABI                            | Consumers always rebuild from the component folder                                     |
+| D14| Distribution as a self-contained `qpb/` folder + `add_subdirectory`         | Goal G6; `find_package`/install become optional                                       |
+| D15| Static library by default, no `.qrc`, no static initializers                | Avoids DLL deployment, `Q_INIT_RESOURCE`, and the linker dropping objects in static builds |
+| D16| Written from scratch, no wrap/fork                                          | Goal G7; full control of the API makes the stability commitment possible              |
+| D17| C++17, Qt ≥ 6.5, namespace `qpb`, CMake only — confirmed                   | Settled before M1 because they are frozen until 2.0                                    |
+| D18| Code and docs in English; `-vi` files are reference translations only      | Project convention                                                                     |
