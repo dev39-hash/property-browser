@@ -355,7 +355,7 @@ bool load(PropertyGroup& group, const QSettings& settings);
 }
 ```
 
-- Chỉ lưu **giá trị**; ứng dụng tự dựng cây rồi ghi giá trị vào. Group thành object JSON lồng nhau theo id; key của
+- Chỉ lưu **giá trị**; ứng dụng tự dựng cây rồi ghi giá trị vào. Group thành object JSON lồng nhau theo id (group không có gì để lưu thì bỏ qua, giống `save()` không ghi key nào cho chúng); key của
   `QSettings` là path tương đối với group, nằm dưới group hiện tại của settings.
 - **Property read-only không được ghi cũng không được đọc** (ứng dụng tự quản lý, D34). Property ẩn và disabled thì có.
 - Giá trị được khôi phục bằng `Property::setValue()` (chuyển đổi → normalize → validation). Key lạ và key thiếu bị bỏ qua;

@@ -357,7 +357,7 @@ bool load(PropertyGroup& group, const QSettings& settings);
 ```
 
 - Only **values** are stored; the application builds the tree, then values are written into it. Groups become nested
-  JSON objects keyed by id; `QSettings` keys are paths relative to the group, under the settings' current group.
+  JSON objects keyed by id (groups with nothing to store are left out, as `save()` writes no key for them); `QSettings` keys are paths relative to the group, under the settings' current group.
 - **Read-only properties are neither written nor read** (the application maintains them, D34). Hidden and disabled
   properties are.
 - Values are restored with `Property::setValue()` (conversion → normalize → validation). Unknown keys and missing keys are

@@ -46,3 +46,25 @@ warnings from qpb.
 
 No API or behaviour change was needed: the exit criterion is met, and `1.0.0` is released with the content of
 `1.0.0-rc2` (RC.3).
+
+## Round 4 — `1.2.0` before release
+
+The trial application moved to the API of 1.1 and 1.2 the way a consuming project would upgrade: the settings page stores
+its values with `qpb::serialization` instead of its own loops, can switch to a `PropertyFormView`, and gained a multi-line
+field, a 64-bit cache size and JSON export/import; the plugins page uses `PropertyFilterProxyModel` instead of a
+configured `QSortFilterProxyModel`; a new **Devices** page (scenario 4) shows application `QObject`s through
+`QObjectPropertySource` in a form. The unchanged round-3 application was also built against the 1.2.0 zip first:
+15 of 15 tests pass, so upgrading needs no code change.
+
+22 trial tests pass (static, GCC) after the fix below.
+
+| # | Finding | Kind | Outcome |
+|---|---------|------|---------|
+| F7 | `serialization::toJson()` wrote `"About": {}` for a group whose properties are all read-only, while `save()` writes no key for it. | Behaviour | **Fixed before 1.2.0 was released:** groups with nothing to store are left out of the JSON too. |
+| F8 | A `QObjectPropertySource` group is titled with the object name (`studio_mic`); showing the device's own name means calling `setDisplayName()` on the group and keeping it up to date by hand. | Ergonomics | Kept for 1.2. A display-name option can be added later without breaking anything. |
+| F9 | Live read-only values coming from an object (`used`) are bold ("modified") as soon as they change, which reads as a user edit. | Ergonomics | Kept; the application can call `setDefaultValue()`. To reconsider with F8. |
+| F10 | Dependencies between properties (autosave enables autosaveMinutes) are still wired by hand through `valueChanged`, in both views. | Ergonomics | Kept, as F3: no API change needed for 1.x. |
+
+Otherwise the new API behaved as specified: the form view follows the dependency and the multi-line field, the filter
+shows all plugin settings when the plugin name is searched, device edits reach the objects, values a device refuses
+(recording while disabled) are replaced by the device's value, and a deleted device disappears from the form.

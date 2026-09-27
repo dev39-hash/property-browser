@@ -30,6 +30,10 @@ std::unique_ptr<PropertyGroup> createSettings()
     limits.addInt64(QStringLiteral("big"), 1);
     limits.addString(QStringLiteral("notes"), QString()).multiline();
     root->addString(QStringLiteral("version"), QStringLiteral("1.2")).readOnly();
+    root->addGroup(QStringLiteral("About"))
+        .addString(QStringLiteral("build"), QStringLiteral("42"))
+        .readOnly();
+    root->addGroup(QStringLiteral("Empty"));
     return root;
 }
 
@@ -82,7 +86,8 @@ void tst_Serialization::jsonLayout()
     auto root = createSettings();
     modify(*root);
     const QJsonObject json = serialization::toJson(*root);
-    QCOMPARE(json.keys(), QStringList({"General", "Limits"})); // no read-only "version"
+    // No read-only "version"; no "About" (read-only only) or "Empty" group.
+    QCOMPARE(json.keys(), QStringList({"General", "Limits"}));
     const QJsonObject general = json.value(QStringLiteral("General")).toObject();
     QCOMPARE(general.value(QStringLiteral("language")).toString(), QStringLiteral("vi"));
     QCOMPARE(general.value(QStringLiteral("autosave")).toBool(), false);
