@@ -37,8 +37,16 @@ class QObjectPropertySourcePrivate;
 //   Q_CLASSINFO("qpb:lut", "type=filepath;filter=LUT (*.cube)")
 //
 // Keys of a property's class info: type (a TypeId), displayName, toolTip,
-// readOnly, hidden, disabled, exclude, and any attribute key (min and max
-// stand for minimum and maximum). A key without "=value" means true.
+// readOnly, hidden, disabled, exclude, live (1.3, see Property::Flag::Live),
+// and any attribute key (min and max stand for minimum and maximum). A key
+// without "=value" means true.
+//
+// Since 1.3 the group's display name can follow a Q_PROPERTY of the object
+// (its id stays the object name):
+//
+//   Q_CLASSINFO("qpb:title", "name")
+//
+// or, for classes the application cannot change, setTitleProperty("name").
 class QPB_CORE_EXPORT QObjectPropertySource : public QObject
 {
     Q_OBJECT
@@ -71,6 +79,19 @@ public:
     // Reads every property of every object again (for Q_PROPERTYs without a
     // NOTIFY signal).
     void refresh();
+
+    // Since 1.3. Q_PROPERTY whose value titles the group of objects added
+    // afterwards, updated through its NOTIFY signal; empty (the default) for
+    // none. A class's Q_CLASSINFO("qpb:title", ...) takes precedence.
+    void setTitleProperty(const QString& name);
+    QString titleProperty() const;
+
+    // Since 1.3. When true, Q_PROPERTYs of objects added afterwards that have
+    // a NOTIFY signal but no WRITE accessor become live properties
+    // (Property::Flag::Live): values the object maintains, never shown as
+    // modified nor saved. Default false (the behaviour of 1.2).
+    void setLiveReadOnlyProperties(bool live);
+    bool liveReadOnlyProperties() const;
 
 private:
     std::unique_ptr<detail::QObjectPropertySourcePrivate> d;
