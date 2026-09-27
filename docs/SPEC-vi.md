@@ -38,7 +38,7 @@ Lý do chi tiết: brainstorm mục 11. Thiết kế **không được cấm** m
 | S1 | Panel 10 thuộc tính ≤ 30 dòng                                     | `examples/quickstart/main.cpp` (đếm dòng, không tính include) |
 | S2 | Kiểu `QColor` ≤ 100 dòng, nằm ngoài lib                           | `examples/custom_type/`                                |
 | S3 | Chuyển Tree ↔ List ↔ Form không đổi model                         | `examples/inspector` có nút chuyển view + test         |
-| S4 | Dùng trong ≥ 2 project thật trong 6 tháng sau 1.0                 | Theo dõi ngoài repo                                    |
+| S4 | 3 kịch bản tham chiếu (`docs/use-cases.md`) làm được chỉ bằng API public | Ứng dụng RC độc lập (PLAN RC.1); project thật theo dõi ngoài repo khi có |
 | S5 | Nâng 1.x → 1.y không phải sửa code consumer                        | Bộ test tương thích API (§9.5) pass trên mọi bản 1.y  |
 | S6 | Cập nhật thư viện = thay folder `components/qpb/` + build lại      | `tests/consumer` build lại sau khi thay folder, không đổi CMake của consumer |
 
@@ -658,3 +658,5 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D16| Viết mới hoàn toàn, không wrap/fork                                          | Mục tiêu G7; kiểm soát trọn API để có thể cam kết ổn định                               |
 | D17| C++17, Qt ≥ 6.5, namespace `qpb`, chỉ CMake — đã xác nhận                   | Chốt trước M1 vì bị khóa đến 2.0                                                       |
 | D18| Code và tài liệu dùng tiếng Anh; bản `-vi` chỉ để tham khảo                  | Quy ước dự án                                                                          |
+| D19| "Custom property table" = người dùng tự dựng property table bằng API public (G1, G3) | Bạn đã làm rõ; không phải tính năng riêng                                        |
+| D20| Thiết kế API và giai đoạn RC dùng kịch bản tham chiếu thay cho project thật  | Hiện chưa có project thật nào dùng thư viện                                            |

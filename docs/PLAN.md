@@ -30,7 +30,7 @@ before tagging 1.0.
 | **M2** Core + Model              | 2–3      | `qpb::core` fully implemented, tests pass including `QAbstractItemModelTester`           |
 | **M3** Tree view + editors       | 4–5      | Inspector edits all 7 types with full keyboard support → internal tag `0.1.0`            |
 | **M4** Hardening & API freeze    | 6        | List mode, reset, compatibility tests, release packaging → `1.0.0-rc1`                   |
-| **RC** Trial                     | 7–8      | rc1 runs in ≥ 1 real project with no API change → tag `1.0.0`                            |
+| **RC** Trial                     | 7–8      | rc1 runs the reference scenarios in a standalone app with no API change → tag `1.0.0`    |
 | **M5** 1.1                       | after 1.0| Form view + filter (additive only)                                                        |
 | **M6** 1.2                       | after 1.1| QObject adapter, serialization, Int64 (additive only)                                    |
 
@@ -44,12 +44,12 @@ Every task has an estimate (focused hours) and a **Done when** criterion.
 
 ### M0 — Component skeleton (≈ 8h)
 
-**Status:** done except M0.1 (template in `docs/use-cases.md`, waiting for the maintainer's input).
+**Status:** done. No real consuming project is available, so M0.1 uses the reference scenarios in `docs/use-cases.md`.
 The optional `QPB_INSTALL` option from SPEC §6.3 is not added yet: there are no install rules to switch on (R4).
 
 | ID    | Task                                                                                                  | h | Done when |
 |-------|-------------------------------------------------------------------------------------------------------|---|-----------|
-| M0.1  | Write `docs/use-cases.md`: ≥ 3 real projects/panels that will use qpb, with the property list of one panel | 1 | File exists; used as input for M1 |
+| M0.1  | Write `docs/use-cases.md`: 3 reference scenarios (no real project is available) with full property lists | 1 | File exists; used as input for M1 |
 | M0.2  | Create the repo layout from SPEC §6.1: `qpb/{CMakeLists.txt,VERSION,LICENSE,CHANGELOG.md,include/qpb,src}`, dev root CMake | 2 | `cmake -S . -B build && cmake --build build` works |
 | M0.3  | `qpb/CMakeLists.txt` follows **all** of SPEC §6.3 (no globals, static by default, conditional `find_package`, no `.qrc`) | 2 | §6.3 checklist reviewed line by line |
 | M0.4  | `qpbglobal.h` driven by `VERSION`: `QPB_VERSION*`, `QPB_VERSION_CHECK`, export macros, `QPB_DEPRECATED_X`, `QPB_DISABLE_DEPRECATED` | 1 | Test checks `qpb::version()` |
@@ -63,7 +63,7 @@ Goal: settle the shape of the API **before** any implementation depends on it, b
 | ID    | Task                                                                                                  | h | Done when |
 |-------|-------------------------------------------------------------------------------------------------------|---|-----------|
 | M1.1  | Write all 1.0 public headers (declarations + doc comments only): `Property`, `PropertyGroup`, builders, `Attr`, `Types`, `TypeRegistry`, `ValidationResult`, `PropertyModel`, `EditorFactory`, `PropertyDelegate`, `PropertyTreeView`, `qpb.h` | 4 | Every header follows SPEC §9.3 (d-pointer, no public data members, no inline logic) |
-| M1.2  | Write against the headers (compile only, no linking): `examples/quickstart` (≤ 30 lines), `examples/custom_type` (QColor), and a real panel from M0.1 | 2 | Compiles to object files; ergonomics self-assessed |
+| M1.2  | Write against the headers (compile only, no linking): `examples/quickstart` (≤ 30 lines), `examples/custom_type` (QColor), and the reference scenarios from M0.1 | 2 | Compiles to object files; ergonomics self-assessed |
 | M1.3  | **Future-proofing check:** sketch (do not implement) headers for `PropertyFormView`, `PropertyFilterProxyModel`, `QObjectPropertySource`, serialization and `Int64` using only the 1.0 public API | 2 | Nothing in the 1.0 API needs adding/changing; if it does → change the API **now** |
 | M1.4  | API review against SPEC §9.2–9.3 checklists; record new decisions in SPEC Appendix B                  | 1 | Checklist signed off; SPEC updated |
 | M1.5  | "Self-contained header" test (each public header included on its own) added to CTest                  | 1 | CTest passes |
@@ -121,7 +121,7 @@ because it cannot change after 1.0.
 
 | ID    | Task                                                                                         | Done when |
 |-------|----------------------------------------------------------------------------------------------|-----------|
-| RC.1  | Integrate `1.0.0-rc1` into ≥ 1 real project from M0.1 via `components/qpb/`                   | Real panel works |
+| RC.1  | Build the three reference scenarios (M0.1) as a standalone application outside this repo, embedding `1.0.0-rc1` via `components/qpb/`; also any real project that appears by then | All scenarios work |
 | RC.2  | Record every API pain point. If the API must change → change it, ship `rc2`, repeat RC        | One RC round needs no API change |
 | RC.3  | Tag `1.0.0` (same content as the last RC, only `VERSION` changes)                              | Tag + release zip |
 
@@ -200,5 +200,5 @@ M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6
 | Language of code and docs                 | **Settled: English** (`-vi` files for reference)|
 | How consumers sync the component folder   | Open — default: manual copy from the release zip |
 | License                                   | Open — assumed MIT                              |
-| Meaning of "custom property table"        | Open — assumed (a) runtime-defined property set; settle before M1.1 |
+| Meaning of "custom property table"        | **Settled:** users build their own property tables with the library's public API (G1, G3); no extra concept |
 | Primary data source                       | Open — assumed explicit builder; settle before M1.3 |
