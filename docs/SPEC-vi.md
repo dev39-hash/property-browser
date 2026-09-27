@@ -147,7 +147,9 @@ Setter tương ứng (`setDisplayName`, `setToolTip`, `setReadOnly`, `setEnabled
 (xem 4.6), để view cập nhật.
 
 `setValue()` trên `Property` là **API cho code ứng dụng** (vd. nạp dữ liệu). Nó chạy qua cùng pipeline
-validation + signal như `PropertyModel::setData` (R3), trả về `bool`.
+chuyển kiểu, validation và signal như `PropertyModel::setData` (R3), trả về `bool`. Read-only và disabled chỉ giới hạn
+**người dùng** (sửa qua view, tức `setData`): code ứng dụng vẫn đặt và reset được giá trị của các property đó, ví dụ một ô
+trạng thái read-only do ứng dụng cập nhật. [D34]
 
 ### 4.3 `PropertyGroup` và builder API
 
@@ -297,7 +299,7 @@ Group không có cờ edit.
 
 **Pipeline ghi giá trị** (`setData(ValueColumn, EditRole|CheckStateRole)`, `setValue`, `Property::setValue`):
 
-1. Property read-only / disabled / kiểu chưa đăng ký → trả `false`, không signal.
+1. Group hoặc kiểu chưa đăng ký → trả `false`, không signal. Riêng `setData` (người dùng sửa): property read-only hoặc disabled → `false`. [D34]
 2. Chuyển đổi `QVariant` sang `storageType` (`QVariant::convert`); thất bại → `validationFailed`, trả `false`.
 3. `normalize` (vd. Int/Double clamp theo `min`/`max`, làm tròn `decimals`).
 4. `TypeHandler::validate` → `Property::validator`. Lỗi → `validationFailed(path, v, message)`, trả `false`, giá trị cũ giữ nguyên.
@@ -420,6 +422,7 @@ public:
 };
 ```
 
+- Cột tên tự giãn theo nội dung (tối đa 60% view) cho tới khi độ rộng được đặt bằng `setNameColumnWidth()` hoặc kéo header. [D35]
 - Mặc định: `editTriggers = CurrentChanged | SelectedClicked | EditKeyPressed`; 2 cột; header có thể resize;
   `alternatingRowColors = true`; `setUniformRowHeights(true)`; ẩn hàng theo `IsVisibleRole` và cập nhật khi `dataChanged`/insert.
 - **Mode::Tree:** group có thể thu gọn, mặc định mở; group hàng dùng `setFirstColumnSpanned(true)`.
@@ -704,3 +707,5 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D31| Component gọi `project()` không kèm `VERSION`; version lấy từ `qpb/VERSION`  | `project(VERSION)` ghi đè `CMAKE_PROJECT_VERSION` của project chủ (test rò rỉ phát hiện) |
 | D32| `VERSION` có thể có hậu tố pre-release; CMake chạy lại khi file đổi         | Bản release candidate (`1.0.0-rc1`); thay folder phải cập nhật header version          |
 | D33| `qpb/` chỉ dùng ASCII (luật R6)                                              | MSVC cảnh báo C4819 trên code page không phải UTF-8 làm hỏng consumer dùng `/WX`        |
+| D34| Read-only/disabled chỉ chặn người dùng sửa (`setData`), không chặn code ứng dụng | RC: ứng dụng không cập nhật được ô trạng thái read-only của chính nó; reset group phụ thuộc thứ tự |
+| D35| Cột tên tự giãn theo nội dung cho tới khi độ rộng được đặt rõ ràng           | RC: ảnh chụp cho thấy tên bị cắt ở độ rộng mặc định                                   |
