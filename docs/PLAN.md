@@ -58,6 +58,9 @@ The optional `QPB_INSTALL` option from SPEC §6.3 is not added yet: there are no
 
 ### M1 — 1.0 API design (≈ 10h) — *API-first*
 
+**Status:** done. Headers in `qpb/include/qpb/`, compile-only examples in `examples/`, future-proofing sketches and
+self-contained header checks in `tests/api/`, review in [`api-review.md`](api-review.md). Examples link once M2/M3 implement the API.
+
 Goal: settle the shape of the API **before** any implementation depends on it, because it cannot change after 1.0.
 
 | ID    | Task                                                                                                  | h | Done when |

@@ -60,6 +60,9 @@ Option `QPB_INSTALL` (tùy chọn, SPEC §6.3) chưa thêm vì chưa có install
 
 ### M1 — Thiết kế API 1.0 (≈ 10h) — *API-first*
 
+**Trạng thái:** xong. Header ở `qpb/include/qpb/`, example chỉ biên dịch ở `examples/`, phác thảo tương lai và kiểm tra
+header tự đủ ở `tests/api/`, review ở [`api-review.md`](api-review.md). Example sẽ link được khi M2/M3 cài đặt xong API.
+
 Mục tiêu: chốt hình dạng API **trước khi** có code cài đặt để phụ thuộc vào, vì sau 1.0 không còn sửa được.
 
 | ID    | Task                                                                                                  | Giờ | Done khi |
