@@ -30,7 +30,8 @@ class PropertyGroup;
 namespace serialization {
 
 // The values of group's descendants: every group becomes a nested object keyed
-// by its id, every other property its value (TypeHandler::toJson).
+// by its id, every other property its value (TypeHandler::toJson). Groups with
+// nothing to store (empty, or read-only properties only) are left out.
 QPB_CORE_EXPORT QJsonObject toJson(const PropertyGroup& group);
 
 // Sets the values found in json on group's descendants. Keys without a
