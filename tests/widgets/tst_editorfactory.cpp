@@ -10,6 +10,7 @@
 
 #include <memory>
 
+#include "widgets/Int64SpinBox_p.h"
 #include "widgets/PathEdit_p.h"
 
 using namespace qpb;
@@ -33,6 +34,7 @@ class tst_EditorFactory : public QObject
 private slots:
     void builtinEditorsAreRegistered();
     void intEditor();
+    void int64Editor();
     void doubleEditor();
     void stringEditor();
     void enumEditor();
@@ -71,6 +73,59 @@ void tst_EditorFactory::intEditor()
     QCOMPARE(spinBox->suffix(), QStringLiteral(" px"));
     QVERIFY(!spinBox->keyboardTracking());
     QCOMPARE(roundTrip(spinBox, p, 12), QVariant(12));
+}
+
+// Since 1.2: values beyond the range of int.
+void tst_EditorFactory::int64Editor()
+{
+    QVERIFY(EditorFactory::global().contains(Types::Int64));
+    const qint64 big = qint64(1) << 40;
+    auto root = PropertyGroup::create(QStringLiteral("r"));
+    Property& p = root->addInt64(QStringLiteral("n"), 5)
+                      .range(-big, big)
+                      .step(big / 2)
+                      .suffix(QStringLiteral(" B"));
+    std::unique_ptr<QWidget> editor(EditorFactory::global().createEditor(nullptr, p));
+    auto* spinBox = qobject_cast<detail::Int64SpinBox*>(editor.get());
+    QVERIFY(spinBox);
+    QCOMPARE(spinBox->minimum(), -big);
+    QCOMPARE(spinBox->maximum(), big);
+    QCOMPARE(spinBox->singleStep(), big / 2);
+    QCOMPARE(spinBox->suffix(), QStringLiteral(" B"));
+    QVERIFY(!spinBox->keyboardTracking());
+    QCOMPARE(roundTrip(spinBox, p, big - 1), QVariant::fromValue(big - 1));
+
+    // Steps stop at the limits.
+    spinBox->setValue(0);
+    spinBox->stepBy(3);
+    QCOMPARE(spinBox->value(), big);
+    spinBox->stepBy(-5);
+    QCOMPARE(spinBox->value(), -big);
+
+    // Typed text is parsed when the value is read (with the suffix, clamped).
+    auto* lineEdit = spinBox->findChild<QLineEdit*>();
+    lineEdit->setText(QStringLiteral("123456789012 B"));
+    QCOMPARE(EditorFactory::global().handlerFor(p)->editorData(spinBox, p),
+        QVariant::fromValue(qint64(123456789012)));
+    lineEdit->setText(QStringLiteral("99999999999999 B"));
+    QCOMPARE(
+        EditorFactory::global().handlerFor(p)->editorData(spinBox, p), QVariant::fromValue(big));
+
+    int position = 0;
+    QString text = QStringLiteral("12x");
+    QCOMPARE(spinBox->validate(text, position), QValidator::Invalid);
+    text = QStringLiteral("-");
+    QCOMPARE(spinBox->validate(text, position), QValidator::Intermediate);
+    text = QStringLiteral("42 B");
+    QCOMPARE(spinBox->validate(text, position), QValidator::Acceptable);
+
+    // No limits at all: the full qint64 range without overflow.
+    Property& full = root->addInt64(QStringLiteral("full"), 0);
+    std::unique_ptr<QWidget> fullEditor(EditorFactory::global().createEditor(nullptr, full));
+    auto* fullBox = static_cast<detail::Int64SpinBox*>(fullEditor.get());
+    fullBox->setValue(std::numeric_limits<qint64>::max() - 1);
+    fullBox->stepBy(10);
+    QCOMPARE(fullBox->value(), std::numeric_limits<qint64>::max());
 }
 
 void tst_EditorFactory::doubleEditor()

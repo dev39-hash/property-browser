@@ -16,7 +16,7 @@ namespace qpb {
 // IDs below are reserved.
 using TypeId = QString;
 
-// Built-in type IDs. The seven value types are registered automatically in
+// Built-in type IDs. The value types are registered automatically in
 // TypeRegistry::global() (and their editors in EditorFactory::global()).
 namespace Types {
 
@@ -37,6 +37,9 @@ inline constexpr QLatin1StringView FilePath {"filepath"};
 inline constexpr QLatin1StringView DirPath {"dirpath"};
 // A PropertyGroup. Groups have no value.
 inline constexpr QLatin1StringView Group {"group"};
+// qint64. See Attr::Minimum, Maximum, Step, Prefix, Suffix (qint64 values).
+// Since 1.2; registered after the seven types of 1.0.
+inline constexpr QLatin1StringView Int64 {"int64"};
 
 } // namespace Types
 

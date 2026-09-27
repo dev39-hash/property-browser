@@ -2,7 +2,8 @@
 
 A property browser library for Qt 6 Widgets (namespace `qpb`): declare properties once, display them as a tree, a
 flat list or (since 1.1) a form on top of a single `QAbstractItemModel`, filter them with a search box, and add data types
-and editors without modifying the library.
+and editors without modifying the library. Since 1.2 it can also edit the Q_PROPERTYs of QObjects directly and save values
+to JSON or `QSettings`.
 
 Status: 1.1.0 released. The public API is stable within a major version (see below).
 
@@ -21,7 +22,8 @@ QObject::connect(&model, &qpb::PropertyModel::valueChanged,
 ```
 
 More in [`examples/`](examples): quickstart, a custom `QColor` type, an inspector, a settings dialog, a runtime
-plugin configuration, and (1.1) a form view and a tree view sharing one search filter.
+plugin configuration, (1.1) a form view and a tree view sharing one search filter, and (1.2) an editor for QObjects
+with undo/redo and JSON files.
 
 ## Using qpb in a project
 

@@ -25,3 +25,13 @@ qpb_add_test(tst_propertyfilterproxymodel
     SOURCES tst_propertyfilterproxymodel.cpp
     LIBRARIES qpb::core
 )
+
+qpb_add_test(tst_serialization
+    SOURCES tst_serialization.cpp
+    LIBRARIES qpb::core
+)
+
+qpb_add_test(tst_qobjectpropertysource
+    SOURCES tst_qobjectpropertysource.cpp
+    LIBRARIES qpb::core
+)

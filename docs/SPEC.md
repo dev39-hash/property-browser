@@ -198,6 +198,7 @@ Keys are the constants `qpb::Attr::*` (`QString`). Unknown attributes are ignore
 | Type       | Attributes (value type)                                                                  | Default               |
 |------------|-------------------------------------------------------------------------------------------|-----------------------|
 | Int        | `minimum`(int) `maximum`(int) `step`(int) `prefix` `suffix`                                | INT_MIN / INT_MAX / 1 |
+| Int64 (1.2)| `minimum` `maximum` `step`(qint64) `prefix` `suffix`                                       | full qint64 range / 1 |
 | Double     | `minimum` `maximum` `step`(double) `decimals`(int) `prefix` `suffix`                       | −∞ / +∞ / 1.0 / 2     |
 | String     | `maxLength`(int) `placeholder` `regularExpression`(QString) `multiline`(bool, **1.1**)    | unlimited |
 | Enum       | `options`(`QList<EnumOption>` — `{QString label; QVariant value;}`)                         | —                     |
@@ -211,8 +212,10 @@ shows one line. Strings without the attribute display as before. [D36]
 **Enum:** `value()` is the `value` of the selected option (int **or** QString, chosen by overload).
 The overload `addEnum(id, QStringList labels, int index)` creates options with `value = index`.
 
-**64-bit integers:** 1.0 supports only `int` (`QSpinBox` is `int`). `qint64` arrives in 1.2 as a **new type**
-`Types::Int64` (the behaviour of `Int` does not change → not breaking).
+**64-bit integers:** 1.0 supports only `int` (`QSpinBox` is `int`). 1.2 adds the **new type** `Types::Int64` (`"int64"`,
+storage `qint64`, `addInt64()` / `Int64Builder`), registered after the seven types of 1.0; the behaviour of `Int` does not
+change. [D8] Note: an application that registered its own `"int64"` type before 1.2 now gets `false` from `registerType()`
+and uses the built-in one (called out in the CHANGELOG).
 
 ### 4.5 `TypeRegistry` (UI-free part)
 
@@ -340,6 +343,59 @@ Default validation of the basic types:
 | FilePath   | `mustExist` + `FileMode::Open` → `QFileInfo::isFile()`; empty string is always valid |
 | DirPath    | `mustExist` → `QFileInfo::isDir()`; empty string is always valid          |
 
+### 4.8 Serialization (1.2)
+
+Free functions in the namespace **`qpb::serialization`** (header `qpb/Serialization.h`, `qpb::core`):
+
+```cpp
+namespace qpb::serialization {
+QJsonObject toJson(const PropertyGroup& group);
+bool fromJson(PropertyGroup& group, const QJsonObject& json);
+void save(const PropertyGroup& group, QSettings& settings);   // keys = paths relative to group
+bool load(PropertyGroup& group, const QSettings& settings);
+}
+```
+
+- Only **values** are stored; the application builds the tree, then values are written into it. Groups become nested
+  JSON objects keyed by id; `QSettings` keys are paths relative to the group, under the settings' current group.
+- **Read-only properties are neither written nor read** (the application maintains them, D34). Hidden and disabled
+  properties are.
+- Values are restored with `Property::setValue()` (conversion → normalize → validation). Unknown keys and missing keys are
+  ignored; `fromJson`/`load` return `false` if a value was rejected, and still apply the others. Wrap them in
+  `beginBatch()`/`endBatch()` for one `batchValueChanged`.
+- JSON form per type: `TypeHandler::toJson` / `fromJson` (new optional fields, 1.2); empty → `QJsonValue::fromVariant()` /
+  `toVariant()`. `Int64` writes numbers up to 2^53 and larger values as strings.
+- The functions are in a nested namespace so argument-dependent lookup never finds them: an application's own unqualified
+  `save(group, settings)` stays unambiguous after an upgrade (rule in §9.3). [D40, D42]
+
+### 4.9 `QObjectPropertySource` (1.2)
+
+```cpp
+class QObjectPropertySource : public QObject {
+public:
+    explicit QObjectPropertySource(PropertyModel* model, QObject* parent = nullptr);
+    PropertyModel* model() const;
+    PropertyGroup* addObject(QObject* object, PropertyGroup* parentGroup = nullptr, const QString& id = QString());
+    bool removeObject(QObject* object);
+    QList<QObject*> objects() const;
+    PropertyGroup* groupOf(const QObject* object) const;
+    void refresh();   // re-read everything (Q_PROPERTYs without NOTIFY)
+};
+```
+
+- `addObject` adds a group (id: argument, else `objectName`, else class name; made unique with `_2`, `_3`, ...) with one
+  property per Q_PROPERTY: `bool`→Bool, `int`→Int, `qint64`→Int64, `double`/`float`→Double, `QString`→String, `Q_ENUM`→Enum
+  (keys as labels, int values), any other type registered in `TypeRegistry` by its storage type. Flags and other types are
+  skipped. Not writable → read-only. The object's values are the defaults.
+- Default property set: the object's class and its bases, except `QObject`'s own (`objectName`).
+  `Q_CLASSINFO("qpb:properties", "a,b")` selects and orders them.
+- Metadata `Q_CLASSINFO("qpb:<prop>", "min=0;max=10;suffix= m")`: keys `type` (a TypeId, e.g. `filepath`), `displayName`,
+  `toolTip`, `readOnly`, `hidden`, `disabled`, `exclude`, and any attribute key (`min`/`max` = `minimum`/`maximum`); a key
+  without `=value` means `true`.
+- Sync: model → object on `valueChanged` (`QMetaProperty::write`; if the object adjusts or refuses the value, the model
+  shows the object's value); object → model on the NOTIFY signal (`Property::setValue`); loops are blocked. Object
+  destroyed → its group is removed. Source destroyed → groups stay, sync stops. [D41]
+
 ---
 
 ## 5. Widgets (`qpb::widgets`)
@@ -389,6 +445,7 @@ that property. Storage type and validation still follow the original `typeId`.
 |----------|---------------------------------------------------------------|-------------------------------------------------------------------------|
 | Bool     | *no editor* in Tree/List (checkbox painted by the delegate via `CheckStateRole`); `QCheckBox` in Form | Toggle with click or Space |
 | Int      | `QSpinBox`                                                    | Applies `min/max/step/prefix/suffix`; `keyboardTracking = false`        |
+| Int64    | internal `Int64SpinBox` (a `QAbstractSpinBox` for qint64) (1.2) | Like Int; steps saturate at the limits                               |
 | Double   | `QDoubleSpinBox`                                              | Like Int + `decimals`; when not editing, shows at most `decimals` fractional digits via `QLocale`, trailing zeros removed |
 | String   | `QLineEdit`; `QPlainTextEdit` when `multiline` (1.1)          | `maxLength`, `placeholder`, `QRegularExpressionValidator` from `regularExpression`; multi-line: `placeholder`, at least 4 lines tall, Tab moves on |
 | Enum     | `QComboBox` (not editable)                                    | Commits on selection (`notifyCommit` on `activated`)                    |
@@ -595,7 +652,7 @@ After 1.0, new features arrive as **additions** (minor releases); existing API i
 | 0.1     | Internal prototype: core + model + tree view, 7 types. API not frozen                                    | —             |
 | **1.0** | All of §4; §5.1–5.5; 7 basic types; Tree + List; reset; bold when modified; tooltips; component folder (§6); API policy (§9); examples quickstart, custom_type, inspector | **API freeze** |
 | 1.1     | `PropertyFormView` (§5.6); `PropertyFilterProxyModel` (§5.7); `multiline` attribute                      | Additive      |
-| 1.2     | `QObjectPropertySource` (reads `Q_PROPERTY`, metadata via `Q_CLASSINFO("qpb:<prop>", "min=0;max=10")`, two-way sync); serialization `toJson/fromJson`, `save/load(QSettings&)`; `Types::Int64`; `QUndoStack` example | Additive |
+| 1.2     | `QObjectPropertySource` (reads `Q_PROPERTY`, metadata via `Q_CLASSINFO("qpb:<prop>", "min=0;max=10")`, two-way sync); serialization `qpb::serialization::toJson/fromJson/save/load` (§4.8); `Types::Int64`; `QUndoStack` example | Additive |
 | 2.0     | Only if breaking the API is truly necessary; removes everything deprecated                               | Breaking      |
 
 **The 1.0 design must leave room for 1.1/1.2** without API changes: the form view and filter are new classes on top of the
@@ -638,6 +695,9 @@ D-pointers are still used (§9.3) to keep headers stable and internals free to c
 - No third-party types in the API; only Qt and std types.
 - No business logic in `inline` functions/templates in headers (builders only forward to functions in `.cpp` files).
 - Every public header is **self-contained** (includable on its own), verified by a per-header compile test.
+- Free functions added after 1.0 go into a **nested namespace** (e.g. `qpb::serialization`), never directly into `qpb`:
+  argument-dependent lookup would find them for arguments of qpb types and could make an application's own unqualified call
+  ambiguous. `tests/api/future_sketches.cpp` and `tests/api_compat/v1_2.cpp` contain such application functions. [D40]
 
 ### 9.4 Versioning and deprecation
 
@@ -745,3 +805,6 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D37| Form sections use a checkable title `QToolButton` instead of `QGroupBox`    | `QGroupBox` cannot collapse without a check box, which reads as "enabled"              |
 | D38| The form view rebuilds once per event-loop pass on structural changes; queries rebuild at once | A filter change emits many row signals; editors may be replaced while committing |
 | D39| The filter proxy matches descendants of a matching group in `filterAcceptsRow()` | `autoAcceptChildRows` bypasses `filterAcceptsRow()`, which would ignore subclass rules |
+| D40| New free functions live in nested namespaces (`qpb::serialization`)          | Functions in `qpb` taking qpb types are found by ADL and broke an unqualified `save(group, settings)` of application code (found by `future_sketches.cpp`) |
+| D41| `QObjectPropertySource` reads metadata from `Q_CLASSINFO`, needs a model, and removes groups of destroyed objects | No change to the classes being shown; property changes are only observable through the model's `valueChanged` |
+| D42| Serialization skips read-only properties                                     | They are maintained by the application; loading them would overwrite e.g. the running version with a stored one |

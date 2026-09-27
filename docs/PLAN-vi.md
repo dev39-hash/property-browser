@@ -171,6 +171,12 @@ Quyết định D36–D39 trong SPEC. M5.6: đã phát hành `1.1.0`.
 M6.1 `QObjectPropertySource` · M6.2 serialize JSON/`QSettings` · M6.3 `Types::Int64` · M6.4 example `QUndoStack` ·
 M6.5 `v1_2.cpp` + diff snapshot · M6.6 release 1.2.0.
 
+**Trạng thái:** M6.1–M6.5 xong. `QObjectPropertySource` (SPEC §4.9, 8 test), `qpb::serialization` (§4.8, 10 test gồm
+`QSettings` INI và native), `Types::Int64` với spin box 64-bit nội bộ, `examples/object_editor` (QObject source +
+`QUndoStack` + JSON), `tests/api_compat/v1_2.cpp` và `api-1.2.txt` (chứa trọn 1.1). Bước kiểm tra biên dịch phát hiện hàm
+tự do trong `qpb` làm hỏng lời gọi không kèm namespace của ứng dụng qua ADL, nên dùng namespace lồng (D40). Quyết định
+D40–D42. Còn lại: M6.6 (release 1.2.0) sau khi merge.
+
 ---
 
 ## 3. Phụ thuộc giữa các task
