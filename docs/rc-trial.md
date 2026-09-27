@@ -44,4 +44,5 @@ warnings from qpb.
 | F5 | Tab / Shift+Tab chain the editors and skip check boxes (Bool properties), so keyboard users reach them with the arrow keys and toggle them with Space. | Documented behaviour (SPEC 5.5) | Kept for 1.0. Adding check boxes to the Tab chain later changes no code in consuming projects. |
 | F6 | Rejected values (duplicate name, missing directory) keep the old value, emit `validationFailed` with the validator's message, and the view shows it as a tool tip. | Confirmation | Works as specified; nothing to change. |
 
-No API or behaviour change was needed: the exit criterion for tagging `1.0.0` (RC.3) is met.
+No API or behaviour change was needed: the exit criterion is met, and `1.0.0` is released with the content of
+`1.0.0-rc2` (RC.3).
