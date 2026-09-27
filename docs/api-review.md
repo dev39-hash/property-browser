@@ -68,6 +68,14 @@ Conclusion: no planned 1.1/1.2 feature requires changing or removing 1.0 API.
 
 ## 5. Changes made during the review
 
+During M3 (implementation):
+
+- `PropertyTreeView::moveCursor()` override declared, so Tab / Shift+Tab skip non-editable rows (additive override).
+- `EditorDialogScope` holds a `QPointer` (private member; no API change) so an editor destroyed during a dialog is safe.
+
+During M1:
+
+
 - Added `EditorDialogScope`: custom editors that open dialogs need the focus protection the internal path editor uses (D24).
 - Added `TypeRegistry::types()`/`contains()` and `EditorFactory::handlerFor()`/`editors()`: required by the QObject source and form view sketches.
 - Added `qpb/qpbcore.h` so core-only consumers never include QtWidgets (D27).
@@ -75,9 +83,13 @@ Conclusion: no planned 1.1/1.2 feature requires changing or removing 1.0 API.
 - Attribute keys renamed to full words; `Attr::DialogMode` + `qpb::FileMode` avoid a name clash (D26).
 - Header includes checked against Qt 6.5 (a header that only exists in newer Qt was removed).
 
-## 6. To revisit in M4.10 (before the 1.0 freeze)
+## 6. Decisions of the final review (M4.10)
 
-- Behaviour of `Property::create()` / `PropertyGroup::add()` for types registered after the property was created.
-- Whether `PropertyModel` should accept a non-global `TypeRegistry` (additive if needed later).
-- Names returned by `PropertyModel::roleNames()` (become part of the QML-facing contract).
-- Duplicate-id behaviour (assert in debug, return existing child) once real usage exists.
+| Item | Decision |
+|------|----------|
+| Properties whose type is registered later | Supported: until registration the value is stored unconverted, `setValue()` fails and views show it read-only; afterwards it behaves normally. Documented on `Property::create()`. |
+| Non-global `TypeRegistry` per model | Not in 1.0. Can be added later without breaking anything (e.g. `PropertyModel::setTypeRegistry()`). |
+| `PropertyModel::roleNames()` | Frozen: `property`, `typeId`, `path`, `isGroup`, `isModified`, `attributes`, `isVisible` (plus Qt's defaults); checked by `tests/api_compat/v1_0.cpp`. |
+| Duplicate / invalid ids | Settled in M2 (D29): warning, existing child returned, invalid characters replaced. |
+
+Remaining before `1.0.0`: the RC trial (docs/PLAN.md, RC) and green CI on Windows and macOS.
