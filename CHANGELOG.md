@@ -16,7 +16,10 @@ Versions below 1.0 are internal pre-releases; their API may change without notic
   `qpb/qpb.h` and `qpb/qpbcore.h`.
 - `qpb::core` implemented: `Property`, `PropertyGroup`, builders, `TypeRegistry` with the seven built-in types
   (conversion, clamping/rounding, validation, display text) and `PropertyModel` (roles, flags, value pipeline,
-  live structural changes, batches, reset to default). The widgets module is still declarations only.
+  live structural changes, batches, reset to default).
+- `qpb::widgets` implemented: `EditorFactory` with editors for the seven built-in types, `EditorDialogScope`,
+  `PropertyDelegate` (Enter/Escape/Tab/focus-out, dialog focus protection, check boxes, validation tool tip,
+  group/modified/read-only painting) and `PropertyTreeView` (Tree and List modes, hidden rows, reset context menu).
 
 ### Upgrade notes
 - Not applicable (first pre-release).

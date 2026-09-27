@@ -36,8 +36,22 @@ public:
         return nullptr;
     }
 
+    // True while the view still has editor open. When the view closes an
+    // editor it forgets it first, then moves the focus (the editor is still
+    // visible at that point): events from that phase must be ignored.
+    static bool isOpen(QWidget* editor)
+    {
+        const QWidget* viewport = editor->parentWidget();
+        const auto* view
+            = qobject_cast<const QAbstractItemView*>(viewport ? viewport->parentWidget() : nullptr);
+        const auto index = editor->property(EditorIndexProperty).value<QPersistentModelIndex>();
+        return view && index.isValid() && view->indexWidget(index) == editor;
+    }
+
     void commitAndClose(QWidget* editor, QAbstractItemDelegate::EndEditHint hint)
     {
+        if (!isOpen(editor))
+            return;
         emit q->commitData(editor);
         emit q->closeEditor(editor, hint);
     }
@@ -54,6 +68,8 @@ public:
 
     bool handleFocusOut(QWidget* editor)
     {
+        if (!isOpen(editor))
+            return false;
         // Focus moving between the editor's own child widgets.
         for (QWidget* widget = QApplication::focusWidget(); widget;
              widget = widget->parentWidget()) {
@@ -102,6 +118,8 @@ QWidget* PropertyDelegate::createEditor(
     editor->setAutoFillBackground(true);
     editor->setProperty(
         detail::EditorOwnerProperty, QVariant::fromValue(static_cast<QObject*>(d->q)));
+    editor->setProperty(
+        detail::EditorIndexProperty, QVariant::fromValue(QPersistentModelIndex(index)));
     // The view filters the editor itself; child widgets (e.g. the line edit of
     // a path editor) need the filter too for keys and focus changes.
     const QList<QWidget*> children = editor->findChildren<QWidget*>();
@@ -141,9 +159,15 @@ void PropertyDelegate::setModelData(
     disconnect(connection);
 
     if (!accepted && !d->lastError.isEmpty()) {
-        QWidget* viewport = editor->parentWidget();
+        // Shown once the editor has closed: focus returning to the view would
+        // otherwise hide the tool tip immediately.
         const QPoint position = editor->mapToGlobal(QPoint(0, editor->height()));
-        QToolTip::showText(position, d->lastError, viewport);
+        QTimer::singleShot(0, this,
+            [position, message = d->lastError,
+                viewport = QPointer<QWidget>(editor->parentWidget())] {
+                if (viewport)
+                    QToolTip::showText(position, message, viewport);
+            });
     }
 }
 
@@ -163,10 +187,17 @@ void PropertyDelegate::paint(
     if (isGroup) {
         opt.font.setBold(true);
         if (!(opt.state & QStyle::State_Selected))
-            opt.backgroundBrush = opt.palette.alternateBase();
+            opt.backgroundBrush = opt.palette.button();
     } else if (index.column() == PropertyModel::NameColumn
         && index.data(PropertyModel::IsModifiedRole).toBool()) {
         opt.font.setBold(true);
+    } else if (index.column() == PropertyModel::ValueColumn) {
+        // Read-only values (enabled, but neither editable nor checkable) are dimmed.
+        const Qt::ItemFlags flags = index.flags();
+        if (flags.testFlag(Qt::ItemIsEnabled) && !flags.testFlag(Qt::ItemIsEditable)
+            && !flags.testFlag(Qt::ItemIsUserCheckable)) {
+            opt.palette.setColor(QPalette::Text, opt.palette.color(QPalette::PlaceholderText));
+        }
     }
     if (index.column() == PropertyModel::ValueColumn)
         opt.textElideMode = Qt::ElideMiddle;
