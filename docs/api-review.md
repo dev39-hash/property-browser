@@ -92,4 +92,5 @@ During M1:
 | `PropertyModel::roleNames()` | Frozen: `property`, `typeId`, `path`, `isGroup`, `isModified`, `attributes`, `isVisible` (plus Qt's defaults); checked by `tests/api_compat/v1_0.cpp`. |
 | Duplicate / invalid ids | Settled in M2 (D29): warning, existing child returned, invalid characters replaced. |
 
-Remaining before `1.0.0`: the RC trial (docs/PLAN.md, RC) and green CI on Windows and macOS.
+Both remaining conditions for `1.0.0` are met: the RC trial ([rc-trial.md](rc-trial.md)) needed no API change after
+`1.0.0-rc2`, and CI is green on Linux, Windows and macOS.

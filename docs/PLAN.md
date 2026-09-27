@@ -143,8 +143,8 @@ with a new rule R6 and `tools/count_lines.cmake` (M4.3, M4.6), Windows (MSVC) an
 ### RC — Trial before freezing (1–2 weeks, alongside other work)
 
 **Status:** round 1 (`1.0.0-rc1`) found two behaviour problems, fixed in `1.0.0-rc2`. Rounds 2 and 3 (`1.0.0-rc2`,
-round 3 with wider API coverage and static/shared/Clang builds) needed no API or behaviour change, so RC.2 is done and
-RC.3 (tag `1.0.0`) is next; see [`rc-trial.md`](rc-trial.md).
+round 3 with wider API coverage and static/shared/Clang builds) needed no API or behaviour change, so RC.2 is done. RC.3: `1.0.0` has the
+content of `1.0.0-rc2` with only `VERSION` and `CHANGELOG.md` changed; see [`rc-trial.md`](rc-trial.md).
 The trial application lives in `rc-trial/` and is rerun against every release candidate.
 
 | ID    | Task                                                                                         | Done when |
