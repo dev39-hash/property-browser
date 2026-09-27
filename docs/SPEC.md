@@ -37,7 +37,7 @@ Rationale: brainstorm section 11. The design **must not preclude** multi-object 
 | S1 | 10-property panel in ≤ 30 lines                                  | `examples/quickstart/main.cpp` (line count, excluding includes) |
 | S2 | `QColor` type in ≤ 100 lines, outside the library                 | `examples/custom_type/`                                |
 | S3 | Switching Tree ↔ List ↔ Form does not change the model            | `examples/inspector` view switcher + test              |
-| S4 | Used in ≥ 2 real projects within 6 months after 1.0               | Tracked outside the repo                               |
+| S4 | The three reference scenarios (`docs/use-cases.md`) are implementable with the public API only | Standalone RC application (PLAN RC.1); real projects tracked outside the repo when they exist |
 | S5 | Upgrading 1.x → 1.y requires no consumer code changes             | API compatibility tests (§9.5) pass on every 1.y       |
 | S6 | Updating the library = replace `components/qpb/` + rebuild        | `tests/consumer` rebuilds after the folder is replaced, with no change to the consumer's CMake |
 
@@ -661,3 +661,5 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D16| Written from scratch, no wrap/fork                                          | Goal G7; full control of the API makes the stability commitment possible              |
 | D17| C++17, Qt ≥ 6.5, namespace `qpb`, CMake only — confirmed                   | Settled before M1 because they are frozen until 2.0                                    |
 | D18| Code and docs in English; `-vi` files are reference translations only      | Project convention                                                                     |
+| D19| "Custom property table" = users build property tables with the public API (G1, G3) | Clarified by the maintainer; no separate feature                                  |
+| D20| API design and the RC trial use reference scenarios instead of real projects | No real consuming project is available yet                                          |

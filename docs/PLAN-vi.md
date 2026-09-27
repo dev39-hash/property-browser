@@ -32,7 +32,7 @@ có thêm giai đoạn **dùng thử (RC)** trong một project thật trước 
 | **M2** Core + Model              | 2–3      | `qpb::core` cài đặt đủ, pass test kể cả `QAbstractItemModelTester`                       |
 | **M3** Tree view + editor        | 4–5      | Inspector sửa được 7 kiểu, bàn phím đầy đủ → tag nội bộ `0.1.0`                          |
 | **M4** Hoàn thiện & khóa API     | 6        | List mode, reset, test tương thích, gói release → `1.0.0-rc1`                            |
-| **RC** Dùng thử                  | 7–8      | rc1 chạy trong ≥ 1 project thật mà không phải đổi API → tag `1.0.0`                      |
+| **RC** Dùng thử                  | 7–8      | rc1 chạy các kịch bản tham chiếu trong ứng dụng độc lập mà không đổi API → tag `1.0.0`   |
 | **M5** 1.1                       | sau 1.0  | Form view + filter (chỉ bổ sung)                                                          |
 | **M6** 1.2                       | sau 1.1  | QObject adapter, serialize, Int64 (chỉ bổ sung)                                          |
 
@@ -46,12 +46,12 @@ Mỗi task có ước lượng (giờ tập trung) và tiêu chí **Done khi**.
 
 ### M0 — Khung component (≈ 8h)
 
-**Trạng thái:** xong, trừ M0.1 (đã có template `docs/use-cases.md`, chờ bạn điền).
+**Trạng thái:** xong. Không có project thật nên M0.1 dùng các kịch bản tham chiếu trong `docs/use-cases.md`.
 Option `QPB_INSTALL` (tùy chọn, SPEC §6.3) chưa thêm vì chưa có install rule nào để bật (R4).
 
 | ID    | Task                                                                                                  | Giờ | Done khi |
 |-------|-------------------------------------------------------------------------------------------------------|-----|----------|
-| M0.1  | Ghi `docs/use-cases.md`: ≥ 3 project/panel thật sẽ dùng qpb, kèm danh sách property của 1 panel     | 1   | Có file; dùng làm dữ liệu cho M1 |
+| M0.1  | Ghi `docs/use-cases.md`: 3 kịch bản tham chiếu (không có project thật) kèm danh sách property đầy đủ | 1   | Có file; dùng làm dữ liệu cho M1 |
 | M0.2  | Tạo cấu trúc repo theo SPEC §6.1: `qpb/{CMakeLists.txt,VERSION,LICENSE,CHANGELOG.md,include/qpb,src}`, CMake gốc cho dev | 2 | `cmake -S . -B build && cmake --build build` chạy |
 | M0.3  | `qpb/CMakeLists.txt` tuân **toàn bộ** SPEC §6.3 (không biến global, static mặc định, `find_package` có điều kiện, không `.qrc`) | 2 | Review checklist §6.3 từng dòng |
 | M0.4  | `qpbglobal.h` sinh từ `VERSION`: `QPB_VERSION*`, `QPB_VERSION_CHECK`, export macro, `QPB_DEPRECATED_X`, `QPB_DISABLE_DEPRECATED` | 1 | Test in ra `qpb::version()` |
@@ -65,7 +65,7 @@ Mục tiêu: chốt hình dạng API **trước khi** có code cài đặt để
 | ID    | Task                                                                                                  | Giờ | Done khi |
 |-------|-------------------------------------------------------------------------------------------------------|-----|----------|
 | M1.1  | Viết toàn bộ header public 1.0 (chỉ khai báo + comment tài liệu): `Property`, `PropertyGroup`, builders, `Attr`, `Types`, `TypeRegistry`, `ValidationResult`, `PropertyModel`, `EditorFactory`, `PropertyDelegate`, `PropertyTreeView`, `qpb.h` | 4 | Mọi header tuân SPEC §9.3 (d-pointer, không data member public, không logic inline) |
-| M1.2  | Viết trên header (chỉ biên dịch, chưa link): `examples/quickstart` (≤ 30 dòng), `examples/custom_type` (QColor), và panel thật từ M0.1 | 2 | Biên dịch được thành object file; tự đánh giá độ tiện tay |
+| M1.2  | Viết trên header (chỉ biên dịch, chưa link): `examples/quickstart` (≤ 30 dòng), `examples/custom_type` (QColor), và các kịch bản tham chiếu từ M0.1 | 2 | Biên dịch được thành object file; tự đánh giá độ tiện tay |
 | M1.3  | **Kiểm tra chừa chỗ cho tương lai:** phác thảo (không cài đặt) header của `PropertyFormView`, `PropertyFilterProxyModel`, `QObjectPropertySource`, serialize, `Int64` chỉ dùng API public 1.0 | 2 | Không cần thêm/sửa gì ở API 1.0; nếu cần → sửa API **bây giờ** |
 | M1.4  | Review API theo checklist SPEC §9.2–9.3; ghi quyết định mới vào SPEC Phụ lục B                          | 1   | Checklist ký tên; SPEC cập nhật |
 | M1.5  | Test "header tự đủ" (mỗi header public include riêng lẻ) đưa vào CTest                               | 1   | CTest pass |
@@ -123,7 +123,7 @@ vì sau 1.0 không đổi được.
 
 | ID    | Task                                                                                         | Done khi |
 |-------|----------------------------------------------------------------------------------------------|----------|
-| RC.1  | Tích hợp `1.0.0-rc1` vào ≥ 1 project thật từ M0.1 bằng `components/qpb/`                        | Panel thật chạy |
+| RC.1  | Dựng 3 kịch bản tham chiếu (M0.1) thành một ứng dụng độc lập ngoài repo, nhúng `1.0.0-rc1` qua `components/qpb/`; thêm project thật nếu lúc đó đã có | Mọi kịch bản chạy đúng |
 | RC.2  | Ghi mọi chỗ "khó chịu" với API. Nếu phải đổi API → sửa, phát `rc2`, lặp lại RC                  | Một vòng RC không cần đổi API |
 | RC.3  | Tag `1.0.0` (cùng nội dung RC cuối, chỉ đổi `VERSION`)                                          | Tag + release zip |
 
@@ -201,5 +201,5 @@ M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6
 | Ngôn ngữ code và tài liệu                  | **Chốt: tiếng Anh** (bản `-vi` để tham khảo)   |
 | Cách đồng bộ folder components            | Mở — mặc định chép tay từ zip                  |
 | License                                   | Mở — giả định MIT                              |
-| "Custom property table" nghĩa là gì?      | Mở — giả định (a) tập property runtime; cần chốt trước M1.1 |
+| "Custom property table" nghĩa là gì?      | **Chốt:** người dùng tự dựng property table bằng API public của thư viện (G1, G3); không thêm khái niệm mới |
 | Nguồn dữ liệu chính?                      | Mở — giả định builder tường minh; cần chốt trước M1.3 |
