@@ -39,3 +39,13 @@ void PluginsPage::unload(const QString& name)
 {
     m_model.root()->remove(name);
 }
+
+void PluginsPage::setAllEnabled(bool enabled)
+{
+    m_model.beginBatch();
+    for (qpb::Property* plugin : m_model.root()->children()) {
+        if (qpb::Property* p = plugin->toGroup()->child("enabled"))
+            p->setValue(enabled);
+    }
+    m_model.endBatch();
+}

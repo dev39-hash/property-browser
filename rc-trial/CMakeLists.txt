@@ -21,6 +21,7 @@ add_subdirectory(components/qpb)
 
 add_library(trial_app STATIC
     src/ColorType.cpp src/ColorType.h
+    src/SliderEditor.cpp src/SliderEditor.h
     src/InspectorPage.cpp src/InspectorPage.h
     src/SettingsPage.cpp src/SettingsPage.h
     src/PluginsPage.cpp src/PluginsPage.h
