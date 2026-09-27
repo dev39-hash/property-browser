@@ -57,6 +57,12 @@ public:
         m_property->setVisible(visible);
         return self();
     }
+    // Since 1.3. See Property::Flag::Live.
+    Derived& live(bool live = true)
+    {
+        m_property->setLive(live);
+        return self();
+    }
     Derived& validator(Property::Validator validator)
     {
         m_property->setValidator(std::move(validator));

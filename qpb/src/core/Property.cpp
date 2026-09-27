@@ -223,7 +223,7 @@ void Property::setDefaultValue(const QVariant& value)
 
 bool Property::isModified() const
 {
-    return !isGroup() && d->value != d->defaultValue;
+    return !isGroup() && !isLive() && d->value != d->defaultValue;
 }
 
 bool Property::resetToDefault()
@@ -233,8 +233,10 @@ bool Property::resetToDefault()
         if (observer)
             observer->beginBatch();
         bool ok = true;
-        for (Property* child : group->children())
-            ok = child->resetToDefault() && ok;
+        for (Property* child : group->children()) {
+            if (!child->isLive())
+                ok = child->resetToDefault() && ok;
+        }
         if (observer)
             observer->endBatch();
         return ok;
@@ -313,6 +315,20 @@ void Property::setEnabled(bool enabled)
 void Property::setVisible(bool visible)
 {
     setFlag(Flag::Hidden, !visible);
+}
+
+void Property::setLive(bool live)
+{
+    setFlag(Flag::Live, live);
+}
+
+bool Property::isLive() const
+{
+    for (const Property* node = this; node; node = PropertyPrivate::get(node)->parent) {
+        if (PropertyPrivate::get(node)->flags.testFlag(Flag::Live))
+            return true;
+    }
+    return false;
 }
 
 bool Property::isReadOnly() const
