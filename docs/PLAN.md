@@ -75,6 +75,11 @@ After M1, every public header change must be justified in Appendix B (still allo
 
 ### M2 — Core + Model (≈ 22h)
 
+**Status:** done. `qpb::core` is implemented (`qpb/src/core/`) with 61 test functions in `tests/core/`
+(`tst_property`, `tst_typeregistry`, `tst_propertymodel`, the last one under `QAbstractItemModelTester` in Fatal mode).
+M2.3's "quickstart links" needs the widgets module (M3); the core part is proven by `tests/consumer`, which now builds a
+model and runs the value pipeline from a statically linked copy of `qpb/` (this also covers M2.4's static-link check).
+
 | ID    | Task                                                                                         | h | Done when |
 |-------|----------------------------------------------------------------------------------------------|---|-----------|
 | M2.1  | `Property` + d-pointer: data, flags, inherited effective state, `path()` (SPEC §4.2)          | 3 | Tests: readOnly/enabled/visible inherited across 3 levels; correct paths |
@@ -87,6 +92,13 @@ After M1, every public header change must be justified in Appendix B (still allo
 | M2.8  | Nested batches + recursive `resetToDefault`                                                   | 1 | `batchValueChanged` emitted once by the outermost batch |
 
 ### M3 — Tree view + editors (≈ 24h)
+
+**Status:** done, except the internal `0.1.0` tag (M3.8), which is left to the maintainer. `qpb::widgets` is implemented
+(`EditorFactory` with the seven built-in editors, internal `PathEdit`, `PropertyDelegate`, `PropertyTreeView`); all five
+examples now link and start. `tests/widgets` covers the factory (13 functions) and view/delegate interaction (19 functions:
+Enter/Escape/focus-out, Tab/Shift+Tab skipping, enum and path commits, dialog focus protection, check boxes, validation tool
+tip, modes, hidden rows, context-menu reset, proxy models). The manual pass used offscreen screenshots (`QPB_SCREENSHOT_DIR`).
+The decision point after M3.6 did not trigger: no hacks beyond an event filter and a `moveCursor()` override were needed.
 
 High-risk parts first: Int + String + FilePath (editor UX, focus while a dialog is open).
 
@@ -106,6 +118,14 @@ High-risk parts first: Int + String + FilePath (editor UX, focus while a dialog 
 because it cannot change after 1.0.
 
 ### M4 — Hardening & API freeze (≈ 22h)
+
+**Status:** everything that can be done without publishing is done; `1.0.0-rc1` itself (M4.9: tag, GitHub Release,
+pushing `qpb-release`) waits for the maintainer. M4.1/M4.2 came with M3. New in M4: `tests/api_compat/v1_0.cpp` (M4.4),
+consumer scenarios for shared builds, host-setting leaks and in-place upgrades (M4.5), `tools/check_architecture.cmake`
+with a new rule R6 and `tools/count_lines.cmake` (M4.3, M4.6), Windows (MSVC) and macOS CI jobs (M4.7),
+`tools/api_snapshot.py` with the baseline `tests/api_compat/api-1.0.txt` (M4.8), `tools/make_release.sh` and
+[`RELEASING.md`](RELEASING.md) (M4.9), README integration and upgrade guide plus the final review in
+[`api-review.md`](api-review.md) (M4.10). The checks found two real problems in the component's CMake (D31, D32).
 
 | ID    | Task                                                                                         | h | Done when |
 |-------|----------------------------------------------------------------------------------------------|---|-----------|
@@ -154,6 +174,8 @@ M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6
 ---
 
 ## 4. Release process (every 1.x release)
+
+Step-by-step guide and tooling: [`RELEASING.md`](RELEASING.md), `tools/make_release.sh`.
 
 1. Update `qpb/VERSION` and add an entry to `qpb/CHANGELOG.md` (Added / Changed / Deprecated / Fixed / **Upgrade notes**).
 2. Green CI: unit tests, `api_compat/*` of **all** previous releases, `tests/consumer`, `check_arch`, API snapshot diff has additions only.

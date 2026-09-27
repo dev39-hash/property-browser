@@ -23,7 +23,7 @@ class PropertyPrivate;
 }
 
 // A node of the property tree: one editable value, or a PropertyGroup
-// (docs/SPEC.md §4.2).
+// (docs/SPEC.md section 4.2).
 //
 // Properties are created through PropertyGroup::add*() or Property::create()
 // and owned by their parent group; the root group is owned by the
@@ -53,6 +53,9 @@ public:
 
     // Creates a detached property of any registered (or not yet registered)
     // type. Attach it with PropertyGroup::add(std::unique_ptr<Property>).
+    // While its type is not registered the value is stored as given and
+    // setValue() fails; once the type is registered the property behaves
+    // like any other.
     // For the built-in types prefer the typed PropertyGroup::add*() functions.
     static std::unique_ptr<Property> create(
         const TypeId& type, const QString& id, const QVariant& value = QVariant());

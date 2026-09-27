@@ -1,9 +1,26 @@
 # property-browser (qpb)
 
-A property browser library for Qt 6 Widgets (namespace `qpb`): declare properties once, display them as
-Tree / List / Form views on top of a single `QAbstractItemModel`, and extend data types without modifying the library.
+A property browser library for Qt 6 Widgets (namespace `qpb`): declare properties once, display them as a tree or a
+flat list on top of a single `QAbstractItemModel`, and add data types and editors without modifying the library.
 
-Status: pre-1.0, under development. The public API is frozen starting with 1.0 (see the stability policy in the spec).
+Status: release candidate stage for 1.0. From 1.0 on the public API is stable within a major version (see below).
+
+```cpp
+auto root = qpb::PropertyGroup::create("Camera");
+root->addString("name", "Main camera");
+root->addDouble("x", 0.0).range(-100.0, 100.0).suffix(" m");
+root->addEnum("projection", {"Perspective", "Orthographic"}, 0);
+root->addFilePath("lut", {}).filter("LUT files (*.cube)");
+
+qpb::PropertyModel model(std::move(root));
+qpb::PropertyTreeView view;                 // Tree or List mode
+view.setModel(&model);
+QObject::connect(&model, &qpb::PropertyModel::valueChanged,
+    [](const QString& path, const QVariant& value) { qDebug() << path << value; });
+```
+
+More in [`examples/`](examples): quickstart, a custom `QColor` type, an inspector, a settings dialog and a runtime
+plugin configuration.
 
 ## Using qpb in a project
 
@@ -13,11 +30,32 @@ qpb is distributed as a self-contained component folder. Copy `qpb/` into your p
 ```cmake
 find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets)
 add_subdirectory(components/qpb)
-target_link_libraries(my_app PRIVATE qpb::widgets)
+target_link_libraries(my_app PRIVATE qpb::widgets)   # or qpb::core without widgets
 ```
 
-To update, replace the folder and rebuild. Requirements: C++17, Qt ≥ 6.5, CMake ≥ 3.21.
-Static libraries are built by default; set `QPB_BUILD_SHARED=ON` for shared ones.
+```cpp
+#include <qpb/qpb.h>       // everything; <qpb/qpbcore.h> for qpb::core only
+```
+
+Requirements: C++17 or newer, Qt 6.5 or newer, CMake 3.21 or newer. The component changes none of your project's
+CMake settings. Static libraries are built by default; with `-DQPB_BUILD_SHARED=ON` you must deploy the qpb libraries
+next to your executable.
+
+Get the folder from a release (`qpb-<version>.zip`), or keep it in sync with
+`git subtree pull --prefix components/qpb <this repository> qpb-release --squash`.
+
+## Upgrading
+
+Replace `components/qpb/` with the new version and rebuild; read the version's *Upgrade notes* in
+`qpb/CHANGELOG.md`. Within a major version (1.x) this never requires changes to your code or CMake:
+
+- nothing public is removed or changed, only added;
+- superseded API is marked deprecated (`QPB_DEPRECATED_X`) and kept until the next major version; define
+  `QPB_DISABLE_DEPRECATED` to find remaining uses at compile time;
+- raising the C++, Qt or CMake minimum only happens in a new major version.
+
+The rules and how they are enforced (API compatibility tests, API snapshot) are in
+[docs/SPEC.md section 9](docs/SPEC.md#9-api-stability-policy).
 
 ## Developing qpb
 
@@ -27,12 +65,16 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
-`tests/consumer` builds a throwaway application that embeds a copy of `qpb/` exactly like a consuming project.
+The test suite includes unit and widget tests, the API compatibility test, the API snapshot check
+(needs Python 3), architecture-rule and size checks, and `tests/consumer`, which builds throwaway applications that
+embed a copy of `qpb/` exactly like a consuming project (static, shared, C++17/C++20, in-place upgrade).
+Releases: [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Documentation
 
 - [Specification](docs/SPEC.md) ([Tiếng Việt](docs/SPEC-vi.md))
 - [Implementation plan](docs/PLAN.md) ([Tiếng Việt](docs/PLAN-vi.md))
-- [Reference use cases](docs/use-cases.md)
 - [1.0 API review](docs/api-review.md)
+- [Reference use cases](docs/use-cases.md)
+- [Releasing](docs/RELEASING.md)
 - [Original brainstorm (Vietnamese)](docs/brainstorm-vi.md)
