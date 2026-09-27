@@ -6,6 +6,21 @@ All notable changes to qpb are documented here. Each release has the sections
 From 1.0.0 on, releases within a major version never require changes to consuming code or CMake.
 Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC trial shows a problem.
 
+## 1.0.0-rc2 - 2026-09-27
+
+Second release candidate, after the first RC trial round (docs/rc-trial.md).
+
+### Changed
+- Read-only and disabled now only block edits by the user through views (`PropertyModel::setData`).
+  Application code (`Property::setValue`, `PropertyModel::setValue`, `resetToDefault`) can set and reset
+  such properties, still with conversion and validation.
+- The "Reset to default" / "Reset group" context menu leaves read-only and disabled properties unchanged.
+- `PropertyTreeView` fits the name column to its contents until a width is set with `setNameColumnWidth()`
+  or by dragging the header.
+
+### Upgrade notes
+- Code that relied on `setValue()` failing for read-only or disabled properties must check those flags itself.
+
 ## 1.0.0-rc1 - 2026-09-27
 
 First release candidate of the 1.0 API.

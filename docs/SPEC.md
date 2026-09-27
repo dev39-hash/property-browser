@@ -147,7 +147,9 @@ The corresponding setters (`setDisplayName`, `setToolTip`, `setReadOnly`, `setEn
 (see 4.6), so views update.
 
 `Property::setValue()` is the **application-code API** (e.g. loading data). It runs through the same
-validation + signal pipeline as `PropertyModel::setData` (R3) and returns `bool`.
+conversion, validation and signal pipeline as `PropertyModel::setData` (R3) and returns `bool`. Read-only and disabled
+restrict **the user only** (edits through views, i.e. `setData`): application code can still set, and reset, the value of
+such properties, e.g. a read-only status field it maintains. [D34]
 
 ### 4.3 `PropertyGroup` and the builder API
 
@@ -298,7 +300,7 @@ Groups are never editable.
 
 **Value write pipeline** (`setData(ValueColumn, EditRole|CheckStateRole)`, `setValue`, `Property::setValue`):
 
-1. Read-only / disabled property or unregistered type → return `false`, no signal.
+1. Group or unregistered type → return `false`, no signal. For `setData` (user edits) also: read-only or disabled property → `false`. [D34]
 2. Convert the `QVariant` to `storageType` (`QVariant::convert`); on failure → `validationFailed`, return `false`.
 3. `normalize` (e.g. Int/Double clamped to `min`/`max`, rounded to `decimals`).
 4. `TypeHandler::validate` → `Property::validator`. Error → `validationFailed(path, v, message)`, return `false`, old value kept.
@@ -421,6 +423,8 @@ public:
 };
 ```
 
+- The name column fits its contents (capped at 60% of the view) until its width is set with `setNameColumnWidth()` or by
+  dragging the header. [D35]
 - Defaults: `editTriggers = CurrentChanged | SelectedClicked | EditKeyPressed`; 2 columns; resizable header;
   `alternatingRowColors = true`; `setUniformRowHeights(true)`; rows hidden per `IsVisibleRole`, updated on `dataChanged`/insert.
 - **Mode::Tree:** groups are collapsible, expanded by default; group rows use `setFirstColumnSpanned(true)`.
@@ -707,3 +711,5 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D31| `project()` without `VERSION` in the component; version from `qpb/VERSION`  | `project(VERSION)` leaked into the host's `CMAKE_PROJECT_VERSION` (found by the consumer leak check) |
 | D32| `VERSION` may carry a pre-release suffix; CMake re-runs when it changes      | Release candidates (`1.0.0-rc1`); replacing the folder must refresh the version header |
 | D33| `qpb/` is ASCII only (rule R6)                                               | MSVC C4819 on non-UTF-8 code pages would break consumers using `/WX`                   |
+| D34| Read-only/disabled block user edits (`setData`) only, not application writes | RC trial: an application could not update its own read-only status field, and group resets depended on property order |
+| D35| The name column fits its contents until a width is set explicitly            | RC trial screenshots: names were cut off at the default width                         |

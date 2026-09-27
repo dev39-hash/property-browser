@@ -94,9 +94,11 @@ public:
 
     // Current value. Always invalid for groups.
     QVariant value() const;
-    // Runs the value pipeline (see class comment). Returns false and keeps the
-    // old value if the property is read-only or disabled, its type is not
-    // registered, or conversion/validation fails.
+    // Sets the value from application code through the value pipeline (see
+    // class comment). Read-only and disabled only restrict the user (edits
+    // through a view), so application code can still update such properties.
+    // Returns false and keeps the old value if the property is a group, its
+    // type is not registered, or conversion/validation fails.
     bool setValue(const QVariant& value);
 
     // Value restored by resetToDefault(). Defaults to the value at creation.
@@ -104,8 +106,9 @@ public:
     void setDefaultValue(const QVariant& value);
     // True when value() differs from defaultValue(). Always false for groups.
     bool isModified() const;
-    // Sets the value back to defaultValue() through the value pipeline. For a
-    // group, resets all descendants. Returns false if any reset was rejected.
+    // Sets the value back to defaultValue() through the value pipeline, like
+    // setValue(). For a group, resets all descendants. Returns false if any
+    // reset was rejected.
     bool resetToDefault();
 
     // Optional extra validation, run after the type's validation.

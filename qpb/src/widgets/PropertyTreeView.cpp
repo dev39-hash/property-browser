@@ -59,6 +59,27 @@ public:
         seen.clear();
         if (QAbstractItemModel* model = q->model())
             updateRows(QModelIndex(), 0, model->rowCount() - 1, true);
+        fitNameColumn();
+    }
+
+    // Sizes the name column to its contents until the width is set explicitly
+    // (setNameColumnWidth() or by dragging the header). Capped so the value
+    // column keeps at least 40% of the view.
+    void fitNameColumn()
+    {
+        if (nameWidthFixed || !q->model())
+            return;
+        const bool wasResizing = resizing;
+        resizing = true;
+        q->resizeColumnToContents(PropertyModel::NameColumn);
+        // Bold text (modified properties) is wider than the regular text measured.
+        int width
+            = q->columnWidth(PropertyModel::NameColumn) + q->fontMetrics().averageCharWidth() * 2;
+        if (q->viewport()->width() > 0)
+            width = qMin(width, q->viewport()->width() * 3 / 5);
+        width = qMax(width, q->header()->minimumSectionSize());
+        q->setColumnWidth(PropertyModel::NameColumn, width);
+        resizing = wasResizing;
     }
 
     void applyMode()
@@ -88,6 +109,8 @@ public:
     // user's later choices).
     QSet<QPersistentModelIndex> seen;
     QList<QMetaObject::Connection> connections;
+    bool nameWidthFixed = false; // set explicitly: stop fitting it to the contents
+    bool resizing = false; // fitNameColumn() is resizing the section
 };
 
 } // namespace detail
@@ -106,6 +129,10 @@ PropertyTreeView::PropertyTreeView(QWidget* parent)
     setAllColumnsShowFocus(true);
     header()->setStretchLastSection(true);
     header()->setSectionResizeMode(QHeaderView::Interactive);
+    connect(header(), &QHeaderView::sectionResized, this, [this](int section) {
+        if (section == PropertyModel::NameColumn && !d->resizing)
+            d->nameWidthFixed = true;
+    });
 }
 
 PropertyTreeView::~PropertyTreeView() = default;
@@ -124,6 +151,7 @@ void PropertyTreeView::setModel(QAbstractItemModel* model)
     d->connections << connect(model, &QAbstractItemModel::rowsInserted, this,
         [this](const QModelIndex& parent, int first, int last) {
             d->updateRows(parent, first, last, true);
+            d->fitNameColumn();
         });
     d->connections << connect(model, &QAbstractItemModel::dataChanged, this,
         [this](
@@ -132,6 +160,8 @@ void PropertyTreeView::setModel(QAbstractItemModel* model)
                 || roles.contains(PropertyModel::IsGroupRole)) {
                 d->updateRows(topLeft.parent(), topLeft.row(), bottomRight.row(), false);
             }
+            if (topLeft.column() == PropertyModel::NameColumn)
+                d->fitNameColumn();
         });
     d->connections << connect(
         model, &QAbstractItemModel::modelReset, this, [this] { d->updateAll(); });
@@ -150,7 +180,7 @@ void PropertyTreeView::setMode(Mode mode)
         return;
     d->mode = mode;
     d->applyMode();
-    d->updateAll();
+    d->updateAll(); // indentation changed: refit the name column
 }
 
 int PropertyTreeView::nameColumnWidth() const
@@ -160,6 +190,7 @@ int PropertyTreeView::nameColumnWidth() const
 
 void PropertyTreeView::setNameColumnWidth(int width)
 {
+    d->nameWidthFixed = true;
     setColumnWidth(PropertyModel::NameColumn, width);
 }
 
@@ -195,9 +226,25 @@ void PropertyTreeView::contextMenuEvent(QContextMenuEvent* event)
     QAction* reset
         = menu.addAction(property->isGroup() ? tr("Reset group") : tr("Reset to default"));
     reset->setEnabled(resettable(property));
+    // A user action: reset through setData() so read-only and disabled
+    // properties (possibly maintained by the application) are left alone.
     connect(reset, &QAction::triggered, propertyModel,
         [propertyModel, persistent = QPersistentModelIndex(sourceIndex)] {
-            propertyModel->resetToDefault(persistent);
+            const Property* target = propertyModel->propertyAt(persistent);
+            if (!target)
+                return;
+            const std::function<void(const Property*)> resetUserEditable = [&](const Property* p) {
+                if (const PropertyGroup* group = p->toGroup()) {
+                    for (const Property* child : group->children())
+                        resetUserEditable(child);
+                } else if (p->isModified()) {
+                    propertyModel->setData(propertyModel->indexOf(p, PropertyModel::ValueColumn),
+                        p->defaultValue(), Qt::EditRole);
+                }
+            };
+            propertyModel->beginBatch();
+            resetUserEditable(target);
+            propertyModel->endBatch();
         });
     menu.exec(event->globalPos());
     event->accept();

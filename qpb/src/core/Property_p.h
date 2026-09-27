@@ -57,9 +57,17 @@ public:
     // Used for initial values.
     QVariant convertInitial(const QVariant& value) const;
 
+    // Who is setting a value: the user through a view (PropertyModel::setData),
+    // or application code (Property::setValue, PropertyModel::setValue, resets).
+    enum class Origin {
+        User,
+        Application,
+    };
+
     // The value pipeline (docs/SPEC.md section 4.6). Returns false if the value was
-    // rejected; emits notifications through the observer.
-    bool assign(const QVariant& value);
+    // rejected; emits notifications through the observer. Read-only and
+    // disabled properties only reject values that come from the user.
+    bool assign(const QVariant& value, Origin origin);
 
     void notifyChanged(bool recursive = false);
 
