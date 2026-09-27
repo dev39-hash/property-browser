@@ -216,6 +216,12 @@ the space used). They should never look "modified", be reset or be saved.
 
 Total ≈ 9.5 h.
 
+**Status:** M7.1–M7.6 done with the proposed D44 (opt-in `setLiveReadOnlyProperties()`). `Flag::Live` (core, 4 test
+functions across property, model, serialization), titles and live values in `QObjectPropertySource` (3 tests), tree and
+form views unchanged (2 tests), `tests/api_compat/v1_3.cpp` and `api-1.3.txt` (superset of 1.2), `examples/object_editor`
+with titles, a live counter and undo that skips it, SPEC §4.2, §4.8, §4.9, D43, D44. RC round 5 closed F8 and F9.
+Remaining: M7.7 (release 1.3.0).
+
 ---
 
 ## 3. Task dependencies

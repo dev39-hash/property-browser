@@ -9,6 +9,7 @@
 #include <QFileDialog>
 #include <QJsonDocument>
 #include <QMainWindow>
+#include <QTimer>
 #include <QToolBar>
 #include <QUndoStack>
 
@@ -87,17 +88,24 @@ int main(int argc, char* argv[])
 
     qpb::PropertyModel model(qpb::PropertyGroup::create("Scene"));
     qpb::QObjectPropertySource source(&model);
+    source.setLiveReadOnlyProperties(true); // 1.3: "emitted" is live
     source.addObject(&key);
     source.addObject(&fill);
 
-    // Every change made through the model becomes an undoable command.
+    // Every change made through the model becomes an undoable command, except
+    // live values, which the objects maintain themselves.
     QUndoStack undoStack;
     bool applying = false;
     QObject::connect(&model, &qpb::PropertyModel::valueChanged,
         [&](const QString& path, const QVariant& newValue, const QVariant& oldValue) {
-            if (!applying)
+            if (!applying && !model.find(path)->isLive())
                 undoStack.push(new SetValueCommand(model, applying, path, newValue, oldValue));
         });
+
+    // The key light is on: it keeps emitting.
+    QTimer emitting;
+    QObject::connect(&emitting, &QTimer::timeout, [&key] { key.addEmitted(1'000'000); });
+    emitting.start(500);
 
     QMainWindow window;
     auto* view = new qpb::PropertyTreeView;
