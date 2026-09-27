@@ -46,6 +46,9 @@ Mỗi task có ước lượng (giờ tập trung) và tiêu chí **Done khi**.
 
 ### M0 — Khung component (≈ 8h)
 
+**Trạng thái:** xong, trừ M0.1 (đã có template `docs/use-cases.md`, chờ bạn điền).
+Option `QPB_INSTALL` (tùy chọn, SPEC §6.3) chưa thêm vì chưa có install rule nào để bật (R4).
+
 | ID    | Task                                                                                                  | Giờ | Done khi |
 |-------|-------------------------------------------------------------------------------------------------------|-----|----------|
 | M0.1  | Ghi `docs/use-cases.md`: ≥ 3 project/panel thật sẽ dùng qpb, kèm danh sách property của 1 panel     | 1   | Có file; dùng làm dữ liệu cho M1 |
