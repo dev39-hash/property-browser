@@ -173,7 +173,7 @@ M6.5 `v1_2.cpp` + snapshot diff · M6.6 release 1.2.0.
 and native `QSettings`), `Types::Int64` with an internal 64-bit spin box, `examples/object_editor` (QObject source +
 `QUndoStack` + JSON), `tests/api_compat/v1_2.cpp` and `api-1.2.txt` (superset of 1.1). The compile check caught that free
 functions in `qpb` break unqualified application calls through ADL, hence the nested namespace (D40). Decisions D40–D42.
-Remaining: M6.6 (release 1.2.0) after merge.
+M6.6: released as `1.2.0`.
 
 ---
 
