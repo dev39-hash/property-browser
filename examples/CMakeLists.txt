@@ -19,3 +19,4 @@ qpb_add_example(qpb_example_custom_type SOURCES custom_type/main.cpp ${_qpb_colo
 qpb_add_example(qpb_example_inspector SOURCES inspector/main.cpp ${_qpb_color_type})
 qpb_add_example(qpb_example_settings_dialog SOURCES settings_dialog/main.cpp)
 qpb_add_example(qpb_example_plugin_config SOURCES plugin_config/main.cpp)
+qpb_add_example(qpb_example_form_view SOURCES form_view/main.cpp)

@@ -160,6 +160,12 @@ của `1.0.0-rc2`, chỉ đổi `VERSION` và `CHANGELOG.md`; xem [`rc-trial.md`
 M5.1 `PropertyFormView` (SPEC §5.6) · M5.2 đồng bộ hai chiều form ↔ model · M5.3 `PropertyFilterProxyModel` + ô search ·
 M5.4 attribute `multiline` · M5.5 `tests/api_compat/v1_1.cpp` + diff API snapshot (chỉ được thêm) · M5.6 release 1.1.0.
 
+**Trạng thái:** M5.1–M5.5 xong. `PropertyFormView` (`qpb/src/widgets/PropertyFormView.cpp`, 17 test trong
+`tests/widgets/tst_propertyformview.cpp`), `PropertyFilterProxyModel` trong `qpb::core` (7 test), attribute `multiline`
+(tree view và form), `tests/api_compat/v1_1.cpp` và snapshot `api-1.1.txt` (chứa trọn `api-1.0.txt`, file này vẫn được
+kiểm tra). Ô search là `QLineEdit` của ứng dụng nối với `setFilterFixedString()`, minh họa trong `examples/form_view`.
+Quyết định D36–D39 trong SPEC. Còn lại: M5.6 (release 1.1.0) sau khi merge.
+
 ### M6 — 1.2 (chỉ bổ sung)
 
 M6.1 `QObjectPropertySource` · M6.2 serialize JSON/`QSettings` · M6.3 `Types::Int64` · M6.4 example `QUndoStack` ·

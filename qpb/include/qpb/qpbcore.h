@@ -6,6 +6,7 @@
 #include <qpb/Attributes.h>
 #include <qpb/Property.h>
 #include <qpb/PropertyBuilders.h>
+#include <qpb/PropertyFilterProxyModel.h>
 #include <qpb/PropertyGroup.h>
 #include <qpb/PropertyModel.h>
 #include <qpb/TypeRegistry.h>

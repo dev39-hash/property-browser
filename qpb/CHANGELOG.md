@@ -6,6 +6,19 @@ All notable changes to qpb are documented here. Each release has the sections
 From 1.0.0 on, releases within a major version never require changes to consuming code or CMake.
 Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC trial shows a problem.
 
+## Unreleased
+
+### Added
+- `PropertyFormView` (`qpb/widgets/PropertyFormView.h`): the properties of a `PropertyModel` (or a proxy of one) as a
+  form with persistent editors and collapsible group sections, kept in sync with the model in both directions.
+- `PropertyFilterProxyModel` (`qpb/PropertyFilterProxyModel.h`, in `qpb::core`): filters by display name for a search
+  box; works with `PropertyTreeView` and `PropertyFormView`.
+- `Attr::Multiline` / `StringBuilder::multiline()`: multi-line strings, edited with a `QPlainTextEdit`
+  (Enter adds a line, Ctrl+Enter commits) and shown on one line in cells.
+
+### Upgrade notes
+- Nothing to do.
+
 ## 1.0.0 - 2026-09-27
 
 First stable release: the same content as `1.0.0-rc2`, which passed the RC trial without API or behaviour
