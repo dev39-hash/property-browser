@@ -6,6 +6,7 @@
 #include <QJsonDocument>
 #include <QSettings>
 #include <QSignalSpy>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -58,6 +59,7 @@ class tst_Serialization : public QObject
     Q_OBJECT
 
 private slots:
+    void initTestCase();
     void jsonLayout();
     void jsonRoundTrip();
     void fromJsonIgnoresUnknownAndReadOnly();
@@ -68,6 +70,12 @@ private slots:
     void settingsUnderGroupAndMissingKeys();
     void batchOnModel();
 };
+
+void tst_Serialization::initTestCase()
+{
+    // Native settings files (Linux, macOS) go to a test directory.
+    QStandardPaths::setTestModeEnabled(true);
+}
 
 void tst_Serialization::jsonLayout()
 {
@@ -168,24 +176,36 @@ void tst_Serialization::settingsRoundTrip_data()
     QTest::newRow("native") << int(QSettings::NativeFormat);
 }
 
+// Native settings are the registry on Windows (a file name would be read as a
+// registry path), so they are opened by organization and application name.
+std::unique_ptr<QSettings> openSettings(int format, const QString& iniFile)
+{
+    if (format == QSettings::IniFormat)
+        return std::make_unique<QSettings>(iniFile, QSettings::IniFormat);
+    return std::make_unique<QSettings>(QSettings::NativeFormat, QSettings::UserScope,
+        QStringLiteral("qpb-tests"), QStringLiteral("tst_serialization"));
+}
+
 void tst_Serialization::settingsRoundTrip()
 {
     QFETCH(int, format);
     QTemporaryDir dir;
     QVERIFY(dir.isValid());
-    const QString file = dir.filePath(QStringLiteral("settings.conf"));
+    const QString file = dir.filePath(QStringLiteral("settings.ini"));
     auto saved = createSettings();
     modify(*saved);
     {
-        QSettings settings(file, QSettings::Format(format));
-        serialization::save(*saved, settings);
-        QVERIFY(!settings.contains(QStringLiteral("version")));
-        QCOMPARE(settings.value(QStringLiteral("General/minutes")).toInt(), 30);
+        auto settings = openSettings(format, file);
+        settings->clear();
+        serialization::save(*saved, *settings);
+        QVERIFY(!settings->contains(QStringLiteral("version")));
+        QCOMPARE(settings->value(QStringLiteral("General/minutes")).toInt(), 30);
     }
-    QSettings settings(file, QSettings::Format(format));
+    auto settings = openSettings(format, file);
     auto restored = createSettings();
-    QVERIFY(serialization::load(*restored, settings));
+    QVERIFY(serialization::load(*restored, *settings));
     compareValues(*saved, *restored);
+    settings->clear(); // leave nothing behind in the registry or config directory
 }
 
 void tst_Serialization::settingsUnderGroupAndMissingKeys()
