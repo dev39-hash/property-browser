@@ -11,8 +11,10 @@ everything locally.
 3. For a new minor release (1.1, 1.2, ...):
    - add `tests/api_compat/v<major>_<minor>.cpp` exercising the new API, and list it in
      `tests/api_compat/CMakeLists.txt`;
-   - regenerate the API snapshot: `python3 tools/api_snapshot.py --include qpb/include --write tests/api_compat/api-1.0.txt`
-     (the check only ever allows additions, so the regenerated file must be a superset of the old one).
+   - add the API snapshot of the new version:
+     `python3 tools/api_snapshot.py --include qpb/include --write tests/api_compat/api-<major>.<minor>.txt` and list it in
+     `tests/api_compat/CMakeLists.txt`. Earlier snapshots are never edited; each is still checked, and the new one must be
+     a superset of the previous one.
 4. Commit through a pull request and wait for green CI on all platforms.
 
 ## 2. Build the artifacts

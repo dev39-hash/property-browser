@@ -2,7 +2,7 @@
 #
 #   cmake -DQPB_DIR=<path to qpb/> -P tools/check_architecture.cmake
 #
-# R1  Views never branch on type IDs (PropertyDelegate / PropertyTreeView).
+# R1  Views never branch on type IDs (PropertyDelegate, PropertyTreeView, PropertyFormView).
 # R2  qpb::core includes nothing from QtWidgets or QtGui.
 # R5  Public headers never include private headers or anything under src/.
 # R6  Sources in qpb/ are ASCII only: MSVC on a non-UTF-8 code page warns
@@ -26,7 +26,7 @@ function(check files pattern rule)
 endfunction()
 
 # R1
-check("${QPB_DIR}/src/widgets/PropertyDelegate.cpp;${QPB_DIR}/src/widgets/PropertyTreeView.cpp"
+check("${QPB_DIR}/src/widgets/PropertyDelegate.cpp;${QPB_DIR}/src/widgets/PropertyTreeView.cpp;${QPB_DIR}/src/widgets/PropertyFormView.cpp"
     "Types::|typeId\\(\\)" "R1 (view branches on a type)")
 
 # R2

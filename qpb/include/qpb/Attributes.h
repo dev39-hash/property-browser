@@ -36,6 +36,9 @@ inline constexpr QLatin1StringView MaxLength {"maxLength"};
 inline constexpr QLatin1StringView Placeholder {"placeholder"};
 // String: pattern the whole value must match (QString, QRegularExpression syntax).
 inline constexpr QLatin1StringView RegularExpression {"regularExpression"};
+// String: the value may span several lines (bool). Editors use a multi-line
+// text field; cells show the lines joined with a pilcrow. Since 1.1.
+inline constexpr QLatin1StringView Multiline {"multiline"};
 
 // Enum: the selectable options (QList<qpb::EnumOption>).
 inline constexpr QLatin1StringView Options {"options"};
