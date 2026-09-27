@@ -20,3 +20,8 @@ qpb_add_test(tst_propertymodel
     SOURCES tst_propertymodel.cpp
     LIBRARIES qpb::core
 )
+
+qpb_add_test(tst_propertyfilterproxymodel
+    SOURCES tst_propertyfilterproxymodel.cpp
+    LIBRARIES qpb::core
+)

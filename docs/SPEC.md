@@ -205,6 +205,9 @@ Keys are the constants `qpb::Attr::*` (`QString`). Unknown attributes are ignore
 | DirPath    | `defaultDir` `mustExist`(bool)                                                             | false                 |
 | (any type) | `editorId`(TypeId) — overrides the editor for this property only (see 5.2)                  | —                     |
 
+**Multiline (1.1):** the value keeps its line breaks; `displayText` joins the lines with ` ¶ ` (a pilcrow) so a cell
+shows one line. Strings without the attribute display as before. [D36]
+
 **Enum:** `value()` is the `value` of the selected option (int **or** QString, chosen by overload).
 The overload `addEnum(id, QStringList labels, int index)` creates options with `value = index`.
 
@@ -387,7 +390,7 @@ that property. Storage type and validation still follow the original `typeId`.
 | Bool     | *no editor* in Tree/List (checkbox painted by the delegate via `CheckStateRole`); `QCheckBox` in Form | Toggle with click or Space |
 | Int      | `QSpinBox`                                                    | Applies `min/max/step/prefix/suffix`; `keyboardTracking = false`        |
 | Double   | `QDoubleSpinBox`                                              | Like Int + `decimals`; when not editing, shows at most `decimals` fractional digits via `QLocale`, trailing zeros removed |
-| String   | `QLineEdit`                                                   | `maxLength`, `placeholder`, `QRegularExpressionValidator` from `regularExpression` |
+| String   | `QLineEdit`; `QPlainTextEdit` when `multiline` (1.1)          | `maxLength`, `placeholder`, `QRegularExpressionValidator` from `regularExpression`; multi-line: `placeholder`, at least 4 lines tall, Tab moves on |
 | Enum     | `QComboBox` (not editable)                                    | Commits on selection (`notifyCommit` on `activated`)                    |
 | FilePath | internal `PathEdit` = `QLineEdit` + `QToolButton "…"`         | Button opens `QFileDialog::getOpenFileName`/`getSaveFileName` per `dialogMode`; on selection → `notifyCommit` |
 | DirPath  | internal `PathEdit` (directory mode)                          | `QFileDialog::getExistingDirectory`                                     |
@@ -406,7 +409,8 @@ Long paths in a (non-editing) cell are elided in the middle (`Qt::ElideMiddle`);
   a color button can use it; the internal `PathEdit` does too). `PropertyDelegate::eventFilter` ignores `FocusOut` while a scope is
   active, so the editor is not committed/closed half-way. [Decisions D6, D24]
 - Keys: **Enter** commits + closes; **Esc** cancels; **Tab/Shift+Tab** commit and open the editor on the next/previous editable Value cell
-  (skipping groups and read-only properties); focus-out commits.
+  (skipping groups and read-only properties); focus-out commits. In a multi-line editor (1.1) **Enter** inserts a line break and
+  **Ctrl+Enter** commits. Editors taller than the row (multi-line) grow downwards, or upwards at the bottom of the viewport.
 
 ### 5.5 `PropertyTreeView : QTreeView`
 
@@ -437,19 +441,43 @@ public:
 
 ### 5.6 `PropertyFormView : QScrollArea` (1.1)
 
-- Builds a `QFormLayout` per group; nested groups become collapsible `QGroupBox`es (not checkable, ▸ button in the title).
-- Every property has a **persistent** editor created by `EditorFactory` (Bool uses `QCheckBox`).
-- Commit: editor change signal → `model->setData` (spin box: `editingFinished`; line edit: `editingFinished`;
-  combo/checkbox/path: immediately or via `notifyCommit`). Validation error → restore the old value in the editor + error tooltip.
-- Reverse sync: `dataChanged` → `setEditorData` (loops blocked with `QSignalBlocker`);
-  `rowsInserted/rowsRemoved/modelReset/layoutChanged` → rebuild the affected part (1.1 may rebuild the whole containing group).
-- Honours `visible` (hides label + editor), `enabled`, `readOnly`.
+```cpp
+class PropertyFormView : public QScrollArea {
+public:
+    explicit PropertyFormView(QWidget* parent = nullptr);
+    void setModel(QAbstractItemModel* model);           // a PropertyModel or a proxy of one; not owned
+    QAbstractItemModel* model() const;
+    QWidget* editor(const QString& path) const;         // nullptr for groups and filtered-out paths
+    bool isExpanded(const QString& groupPath) const;    // kept by path, default true
+    void setExpanded(const QString& groupPath, bool expanded);
+};
+```
+
+- Consecutive properties of a group share a `QFormLayout` (label | editor). Every group is a collapsible **section**: a
+  checkable title `QToolButton` (bold, arrow) and an indented body. The collapsed state is kept by path across rebuilds. [D37]
+- Every property has a **persistent** editor created by `EditorFactory` (Bool uses `QCheckBox`), shown with a frame.
+  A type without an editor is shown as a selectable read-only `QLabel` with its `displayText`.
+- Commit (R3, `model->setData`): on focus-out (not while an `EditorDialogScope` or popup is active, not when the focus moves
+  inside the editor), on Enter (Ctrl+Enter for multi-line text), at once for checkable buttons (`toggled`) and editors
+  calling `notifyCommit` (combo boxes, paths). Unchanged values are not written. A rejected value → the editor shows the
+  model's value again + error tooltip. **Esc** puts the model's value back into the editor.
+- Reverse sync: `dataChanged` → label (display name, bold when modified, tooltip), visibility, enabled/read-only,
+  `applyAttributes` when `AttributesRole` changed, `setEditorData` when the value differs (signals blocked).
+  `rowsInserted/rowsRemoved/rowsMoved/modelReset/layoutChanged` → the form is **rebuilt once**, when control returns to the
+  event loop or when `editor()` / `setExpanded()` is called; the focused editor is committed first and gets the focus back
+  afterwards; old widgets are deleted later (an editor may be running its own handler). [D38]
+- Honours `visible` (hides label + editor, or the whole section), `enabled` (label and editor disabled) and `readOnly`
+  (editor disabled, label normal).
+- Context menu on a label: **Reset to default**; on a section title: **Reset group** (same rules as the tree view, D34).
 - Does not use `QDataWidgetMapper` (no tree support).
 
 ### 5.7 Search / filter (1.1)
 
-`PropertyFilterProxyModel : QSortFilterProxyModel` with `recursiveFilteringEnabled = true`, filtering on `displayName`
-(case-insensitive). A group is shown when a child matches. `PropertyTreeView` and `PropertyFormView` work with the proxy.
+`PropertyFilterProxyModel : QSortFilterProxyModel` (in `qpb::core`) with `recursiveFilteringEnabled = true`, filtering on
+`displayName` (name column, `DisplayRole`), case-insensitive by default. The text is set with the standard
+`setFilterFixedString()` / `setFilterRegularExpression()`. A group is shown when a descendant matches; when a group's name
+matches, its descendants are shown too (checked in `filterAcceptsRow()`, not with `autoAcceptChildRows`, so subclasses see
+every row). Hidden properties never match. `PropertyTreeView` and `PropertyFormView` work with the proxy. [D39]
 
 ---
 
@@ -713,3 +741,7 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D33| `qpb/` is ASCII only (rule R6)                                               | MSVC C4819 on non-UTF-8 code pages would break consumers using `/WX`                   |
 | D34| Read-only/disabled block user edits (`setData`) only, not application writes | RC trial: an application could not update its own read-only status field, and group resets depended on property order |
 | D35| The name column fits its contents until a width is set explicitly            | RC trial screenshots: names were cut off at the default width                         |
+| D36| Multi-line strings are an attribute of `String`, not a new type; cells join lines with a pilcrow | Storage and validation stay the same; a cell has room for one line  |
+| D37| Form sections use a checkable title `QToolButton` instead of `QGroupBox`    | `QGroupBox` cannot collapse without a check box, which reads as "enabled"              |
+| D38| The form view rebuilds once per event-loop pass on structural changes; queries rebuild at once | A filter change emits many row signals; editors may be replaced while committing |
+| D39| The filter proxy matches descendants of a matching group in `filterAcceptsRow()` | `autoAcceptChildRows` bypasses `filterAcceptsRow()`, which would ignore subclass rules |
