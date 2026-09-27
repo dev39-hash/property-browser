@@ -70,8 +70,11 @@ public:
 
     // --- values ----------------------------------------------------------------
 
-    // Sets the value of the property at path through the value pipeline.
+    // Sets the value of the property at path from application code, like
+    // Property::setValue() (read-only and disabled properties included).
     // Returns false if there is no such property or the value is rejected.
+    // setData() is the entry point for views: it rejects read-only and
+    // disabled properties.
     bool setValue(const QString& path, const QVariant& value);
     // Resets the property at index (a group: all its descendants) to the
     // default value. Returns false if any reset was rejected.
