@@ -25,7 +25,7 @@ add_library(qpb_api_check OBJECT
 )
 target_link_libraries(qpb_api_check PRIVATE qpb::widgets)
 if(MSVC)
-    target_compile_options(qpb_api_check PRIVATE /W4 /WX)
+    target_compile_options(qpb_api_check PRIVATE /W4 /WX /utf-8)
 else()
     target_compile_options(qpb_api_check PRIVATE -Wall -Wextra -Wpedantic -Werror)
 endif()

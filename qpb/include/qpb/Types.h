@@ -7,7 +7,7 @@
 
 namespace qpb {
 
-// Logical type of a property (docs/SPEC.md §4.1).
+// Logical type of a property (docs/SPEC.md section 4.1).
 //
 // A type is identified by a string rather than by a QMetaType because several
 // logical types share one storage type: String, FilePath and DirPath all store

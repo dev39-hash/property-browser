@@ -16,7 +16,7 @@ class PropertyTreeViewPrivate;
 }
 
 // Two-column view (name | value) for a PropertyModel or a proxy of one
-// (docs/SPEC.md §5.5).
+// (docs/SPEC.md section 5.5).
 //
 // Tree mode shows collapsible groups; List mode shows the same model flat,
 // with groups as section headers. Switching modes keeps the model, the values
