@@ -144,7 +144,9 @@ CMake của component (D31, D32).
 
 ### RC — Dùng thử trước khi khóa (1–2 tuần, song song việc khác)
 
-**Trạng thái:** vòng 1 (`1.0.0-rc1`) phát hiện hai vấn đề hành vi, đã sửa trong `1.0.0-rc2`; xem [`rc-trial.md`](rc-trial.md).
+**Trạng thái:** vòng 1 (`1.0.0-rc1`) phát hiện hai vấn đề hành vi, đã sửa trong `1.0.0-rc2`. Vòng 2 và 3 (`1.0.0-rc2`,
+vòng 3 phủ rộng API hơn và build static/shared/Clang) không cần thay đổi API hay hành vi nào, nên RC.2 đã xong. RC.3: `1.0.0` có nội dung
+của `1.0.0-rc2`, chỉ đổi `VERSION` và `CHANGELOG.md`; xem [`rc-trial.md`](rc-trial.md).
 Ứng dụng thử nghiệm nằm trong `rc-trial/` và được chạy lại với mỗi release candidate.
 
 | ID    | Task                                                                                         | Done khi |
