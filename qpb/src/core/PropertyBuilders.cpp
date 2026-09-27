@@ -104,6 +104,11 @@ StringBuilder& StringBuilder::regularExpression(const QString& pattern)
     return attribute(Attr::RegularExpression, pattern);
 }
 
+StringBuilder& StringBuilder::multiline(bool multiline)
+{
+    return attribute(Attr::Multiline, multiline);
+}
+
 // --- Enum ----------------------------------------------------------------------
 
 EnumBuilder::EnumBuilder(Property& property)

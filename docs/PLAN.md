@@ -158,6 +158,12 @@ The trial application lives in `rc-trial/` and is rerun against every release ca
 M5.1 `PropertyFormView` (SPEC §5.6) · M5.2 two-way form ↔ model sync · M5.3 `PropertyFilterProxyModel` + search box ·
 M5.4 `multiline` attribute · M5.5 `tests/api_compat/v1_1.cpp` + API snapshot diff (additions only) · M5.6 release 1.1.0.
 
+**Status:** M5.1–M5.5 done. `PropertyFormView` (`qpb/src/widgets/PropertyFormView.cpp`, 17 tests in
+`tests/widgets/tst_propertyformview.cpp`), `PropertyFilterProxyModel` in `qpb::core` (7 tests), the `multiline` attribute
+(tree view and form), `tests/api_compat/v1_1.cpp` and the snapshot `api-1.1.txt` (a strict superset of `api-1.0.txt`, which
+is still checked). The search box is the application's `QLineEdit` wired to `setFilterFixedString()`, shown in
+`examples/form_view`. Decisions D36–D39 in SPEC. M5.6: released as `1.1.0`.
+
 ### M6 — 1.2 (additive only)
 
 M6.1 `QObjectPropertySource` · M6.2 JSON/`QSettings` serialization · M6.3 `Types::Int64` · M6.4 `QUndoStack` example ·
