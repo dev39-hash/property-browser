@@ -44,6 +44,9 @@ Every task has an estimate (focused hours) and a **Done when** criterion.
 
 ### M0 — Component skeleton (≈ 8h)
 
+**Status:** done except M0.1 (template in `docs/use-cases.md`, waiting for the maintainer's input).
+The optional `QPB_INSTALL` option from SPEC §6.3 is not added yet: there are no install rules to switch on (R4).
+
 | ID    | Task                                                                                                  | h | Done when |
 |-------|-------------------------------------------------------------------------------------------------------|---|-----------|
 | M0.1  | Write `docs/use-cases.md`: ≥ 3 real projects/panels that will use qpb, with the property list of one panel | 1 | File exists; used as input for M1 |

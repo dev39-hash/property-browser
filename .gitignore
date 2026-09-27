@@ -1,0 +1,18 @@
+# Build trees
+/build*/
+/out/
+cmake-build-*/
+
+# CMake / IDE local files
+CMakeUserPresets.json
+CMakeLists.txt.user*
+compile_commands.json
+.cache/
+.vscode/
+.idea/
+.vs/
+*.user
+
+# OS files
+.DS_Store
+Thumbs.db
