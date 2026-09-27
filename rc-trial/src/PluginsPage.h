@@ -23,6 +23,8 @@ public:
 
     void load(const PluginManifest& manifest);
     void unload(const QString& name);
+    // Enables or disables every loaded plugin as one batch.
+    void setAllEnabled(bool enabled);
 
     qpb::PropertyModel& model()
     {
