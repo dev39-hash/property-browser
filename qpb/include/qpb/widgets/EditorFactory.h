@@ -5,6 +5,7 @@
 #include <qpb/qpbglobal.h>
 
 #include <QtCore/qlist.h>
+#include <QtCore/qpointer.h>
 #include <QtCore/qvariant.h>
 
 #include <functional>
@@ -114,7 +115,7 @@ public:
     EditorDialogScope& operator=(const EditorDialogScope&) = delete;
 
 private:
-    QWidget* m_editor;
+    QPointer<QWidget> m_editor;
 };
 
 } // namespace qpb
