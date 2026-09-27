@@ -1,8 +1,12 @@
-# property-browser
+# property-browser (qpb)
 
-Thư viện property browser cho Qt 6 Widgets (namespace `qpb`): khai báo thuộc tính một lần,
-hiển thị dạng Tree / List / Form trên cùng một `QAbstractItemModel`, mở rộng kiểu dữ liệu mà không sửa lib.
+A property browser library for Qt 6 Widgets (namespace `qpb`): declare properties once, display them as
+Tree / List / Form views on top of a single `QAbstractItemModel`, and extend data types without modifying the library.
 
-- [Ý tưởng (brainstorm)](docs/brainstorm.md)
-- [Đặc tả kỹ thuật](docs/SPEC.md)
-- [Kế hoạch triển khai](docs/PLAN.md)
+Status: pre-1.0, under development. The public API is frozen starting with 1.0 (see the stability policy in the spec).
+
+## Documentation
+
+- [Specification](docs/SPEC.md) ([Tiếng Việt](docs/SPEC-vi.md))
+- [Implementation plan](docs/PLAN.md) ([Tiếng Việt](docs/PLAN-vi.md))
+- [Original brainstorm (Vietnamese)](docs/brainstorm-vi.md)
