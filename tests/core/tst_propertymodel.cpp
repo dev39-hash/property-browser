@@ -72,6 +72,7 @@ private slots:
 
     void batches();
     void resetToDefault();
+    void liveIsNeverModified();
 
     void modelTesterWholeLifecycle();
 };
@@ -522,6 +523,24 @@ void tst_PropertyModel::modelTesterWholeLifecycle()
     QVERIFY(model.resetToDefault(model.indexOf(model.root()->child(0))));
     model.setRoot(createTree());
     QVERIFY(model.root()->remove(QStringLiteral("name")));
+}
+
+// Since 1.3: views get IsModifiedRole false for live properties, and turning
+// the flag on or off refreshes the row.
+void tst_PropertyModel::liveIsNeverModified()
+{
+    auto root = PropertyGroup::create(QStringLiteral("root"));
+    Property& used = root->addInt(QStringLiteral("used"), 0);
+    PropertyModel model(std::move(root));
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    const QModelIndex name = model.indexOf(&used);
+    QVERIFY(model.setValue(QStringLiteral("used"), 5));
+    QCOMPARE(name.data(PropertyModel::IsModifiedRole).toBool(), true);
+
+    QSignalSpy changed(&model, &QAbstractItemModel::dataChanged);
+    used.setLive(true);
+    QVERIFY(changed.count() >= 1);
+    QCOMPARE(name.data(PropertyModel::IsModifiedRole).toBool(), false);
 }
 
 QTEST_APPLESS_MAIN(tst_PropertyModel)
