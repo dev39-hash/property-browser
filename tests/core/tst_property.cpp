@@ -27,7 +27,7 @@ private slots:
     void enumFromLabels();
     void attributesApi();
     void setValueWithoutModel();
-    void setValueRejectedWhenReadOnlyOrDisabled();
+    void setValueAllowedWhenReadOnlyOrDisabled();
     void validatorRejectsValue();
     void modifiedAndReset();
     void groupResetResetsDescendants();
@@ -343,21 +343,25 @@ void tst_Property::setValueWithoutModel()
     QVERIFY(!root->setValue(1)); // groups have no value
 }
 
-void tst_Property::setValueRejectedWhenReadOnlyOrDisabled()
+// Read-only and disabled restrict the user only; application code can still
+// set values (found in the RC trial, SPEC D34). Validation still applies.
+void tst_Property::setValueAllowedWhenReadOnlyOrDisabled()
 {
     auto root = PropertyGroup::create(QStringLiteral("root"));
     PropertyGroup& g = root->addGroup(QStringLiteral("g"));
-    Property& p = g.addInt(QStringLiteral("p"), 1);
+    Property& p = g.addInt(QStringLiteral("p"), 1).range(0, 10);
 
     g.setReadOnly(true);
-    QVERIFY(!p.setValue(2));
-    QCOMPARE(p.value(), QVariant(1));
+    QVERIFY(p.setValue(2));
+    QCOMPARE(p.value(), QVariant(2));
+    QVERIFY(!p.setValue(QStringLiteral("x"))); // still converted and validated
+    QVERIFY(p.setValue(50));
+    QCOMPARE(p.value(), QVariant(10)); // still normalized
     g.setReadOnly(false);
 
     p.setEnabled(false);
-    QVERIFY(!p.setValue(2));
-    p.setEnabled(true);
-    QVERIFY(p.setValue(2));
+    QVERIFY(p.setValue(3));
+    QCOMPARE(p.value(), QVariant(3));
 
     Property& unknown = root->add(QStringLiteral("test.unregistered"), QStringLiteral("u"), 1);
     QVERIFY(!unknown.setValue(2));
@@ -408,11 +412,14 @@ void tst_Property::groupResetResetsDescendants()
     QCOMPARE(a.value(), QVariant(1));
     QCOMPARE(b.value(), QVariant(QStringLiteral("x")));
 
-    // A read-only descendant is not reset, and the result reports it.
+    // Application-side resets include read-only and disabled descendants.
     QVERIFY(a.setValue(10));
     a.setReadOnly(true);
-    QVERIFY(!g.resetToDefault());
-    QCOMPARE(a.value(), QVariant(10));
+    b.setEnabled(false);
+    QVERIFY(b.setValue(QStringLiteral("z")));
+    QVERIFY(g.resetToDefault());
+    QCOMPARE(a.value(), QVariant(1));
+    QCOMPARE(b.value(), QVariant(QStringLiteral("x")));
 }
 
 QTEST_APPLESS_MAIN(tst_Property)

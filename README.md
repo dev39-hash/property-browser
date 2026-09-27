@@ -77,4 +77,5 @@ Releases: [docs/RELEASING.md](docs/RELEASING.md).
 - [1.0 API review](docs/api-review.md)
 - [Reference use cases](docs/use-cases.md)
 - [Releasing](docs/RELEASING.md)
+- [RC trial report](docs/rc-trial.md)
 - [Original brainstorm (Vietnamese)](docs/brainstorm-vi.md)

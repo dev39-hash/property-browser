@@ -144,6 +144,9 @@ CMake của component (D31, D32).
 
 ### RC — Dùng thử trước khi khóa (1–2 tuần, song song việc khác)
 
+**Trạng thái:** vòng 1 (`1.0.0-rc1`) phát hiện hai vấn đề hành vi, đã sửa trong `1.0.0-rc2`; xem [`rc-trial.md`](rc-trial.md).
+Ứng dụng thử nghiệm nằm trong `rc-trial/` và được chạy lại với mỗi release candidate.
+
 | ID    | Task                                                                                         | Done khi |
 |-------|----------------------------------------------------------------------------------------------|----------|
 | RC.1  | Dựng 3 kịch bản tham chiếu (M0.1) thành một ứng dụng độc lập ngoài repo, nhúng `1.0.0-rc1` qua `components/qpb/`; thêm project thật nếu lúc đó đã có | Mọi kịch bản chạy đúng |
