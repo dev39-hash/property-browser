@@ -58,6 +58,7 @@ qpb_add_library(qpb_core
         include/qpb/Attributes.h
         include/qpb/Property.h
         include/qpb/PropertyBuilders.h
+        include/qpb/PropertyFilterProxyModel.h
         include/qpb/PropertyGroup.h
         include/qpb/PropertyModel.h
         include/qpb/TypeRegistry.h
@@ -68,6 +69,7 @@ qpb_add_library(qpb_core
         "${CMAKE_CURRENT_BINARY_DIR}/include/qpb/qpbversion.h"
         src/core/Property.cpp
         src/core/PropertyBuilders.cpp
+        src/core/PropertyFilterProxyModel.cpp
         src/core/PropertyGroup.cpp
         src/core/PropertyModel.cpp
         src/core/Property_p.h
@@ -85,12 +87,14 @@ qpb_add_library(qpb_widgets
     SOURCES
         include/qpb/widgets/EditorFactory.h
         include/qpb/widgets/PropertyDelegate.h
+        include/qpb/widgets/PropertyFormView.h
         include/qpb/widgets/PropertyTreeView.h
         include/qpb/qpb.h
         src/widgets/EditorFactory.cpp
         src/widgets/PathEdit.cpp
         src/widgets/PathEdit_p.h
         src/widgets/PropertyDelegate.cpp
+        src/widgets/PropertyFormView.cpp
         src/widgets/PropertyTreeView.cpp
         src/widgets/widgets_p.cpp
         src/widgets/widgets_p.h

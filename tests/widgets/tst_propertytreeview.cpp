@@ -10,6 +10,7 @@
 #include <QDir>
 #include <QLineEdit>
 #include <QMenu>
+#include <QPlainTextEdit>
 #include <QPointer>
 #include <QPushButton>
 #include <QSortFilterProxyModel>
@@ -151,6 +152,7 @@ private slots:
     void contextMenuLeavesReadOnlyAlone();
     void nameColumnFitsContents();
     void worksThroughProxyModel();
+    void multilineEditor();
     void screenshot();
 
 private:
@@ -485,6 +487,32 @@ void tst_PropertyTreeView::nameColumnFitsContents()
     view.setNameColumnWidth(80);
     model.root()->addInt(QStringLiteral("aVeryLongPropertyIdentifierIndeed"), 1);
     QCOMPARE(view.nameColumnWidth(), 80);
+}
+
+// Since 1.1: a multi-line text editor taller than the row; Enter adds a line,
+// Ctrl+Enter commits.
+void tst_PropertyTreeView::multilineEditor()
+{
+    f->model.root()->addString(QStringLiteral("notes"), QStringLiteral("a\nb")).multiline();
+    const QModelIndex notes = f->value(QStringLiteral("notes"));
+    QCOMPARE(notes.data(Qt::DisplayRole).toString(), QStringLiteral("a \u00B6 b"));
+
+    auto* editor = f->edit<QPlainTextEdit>(QStringLiteral("notes"));
+    QVERIFY(editor);
+    QCOMPARE(editor->toPlainText(), QStringLiteral("a\nb"));
+    QVERIFY(editor->height() > f->view->visualRect(notes).height());
+    QVERIFY(editor->geometry().bottom() < f->view->viewport()->height());
+
+    editor->moveCursor(QTextCursor::End);
+    QTest::keyClick(editor, Qt::Key_Return);
+    QTest::keyClicks(editor, QStringLiteral("c"));
+    QCoreApplication::processEvents();
+    QVERIFY(editorOpen(f->view));
+    QCOMPARE(f->stored(QStringLiteral("notes")), QVariant(QStringLiteral("a\nb")));
+
+    QTest::keyClick(editor, Qt::Key_Return, Qt::ControlModifier);
+    QTRY_VERIFY(!editorOpen(f->view));
+    QCOMPARE(f->stored(QStringLiteral("notes")), QVariant(QStringLiteral("a\nb\nc")));
 }
 
 void tst_PropertyTreeView::worksThroughProxyModel()

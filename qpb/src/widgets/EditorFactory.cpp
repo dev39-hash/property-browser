@@ -8,6 +8,7 @@
 #include <QtWidgets/qcheckbox.h>
 #include <QtWidgets/qcombobox.h>
 #include <QtWidgets/qlineedit.h>
+#include <QtWidgets/qplaintextedit.h>
 #include <QtWidgets/qspinbox.h>
 
 #include <limits>
@@ -125,15 +126,30 @@ EditorHandler doubleEditor()
 
 // --- String ----------------------------------------------------------------------
 
+// Height of the multi-line editor, in lines of text.
+constexpr int MultilineEditorLines = 4;
+
 EditorHandler stringEditor()
 {
     EditorHandler handler;
-    handler.createEditor = [](QWidget* parent, const Property&) {
+    handler.createEditor = [](QWidget* parent, const Property& property) -> QWidget* {
+        if (property.attribute(Attr::Multiline).toBool()) {
+            auto* textEdit = new QPlainTextEdit(parent);
+            textEdit->setTabChangesFocus(true);
+            const int frame = 2 * textEdit->frameWidth();
+            textEdit->setMinimumHeight(textEdit->fontMetrics().lineSpacing() * MultilineEditorLines
+                + frame + 2 * int(textEdit->document()->documentMargin()));
+            return textEdit;
+        }
         auto* lineEdit = new QLineEdit(parent);
         lineEdit->setFrame(false);
         return lineEdit;
     };
     handler.applyAttributes = [](QWidget* editor, const Property& property) {
+        if (auto* textEdit = qobject_cast<QPlainTextEdit*>(editor)) {
+            textEdit->setPlaceholderText(property.attribute(Attr::Placeholder).toString());
+            return; // maxLength and regularExpression are checked on commit
+        }
         auto* lineEdit = static_cast<QLineEdit*>(editor);
         const int maxLength = property.attribute(Attr::MaxLength, -1).toInt();
         lineEdit->setMaxLength(maxLength >= 0 ? maxLength : 32767);
@@ -146,9 +162,16 @@ EditorHandler stringEditor()
             lineEdit->setValidator(nullptr);
     };
     handler.setEditorData = [](QWidget* editor, const QVariant& value, const Property&) {
+        if (auto* textEdit = qobject_cast<QPlainTextEdit*>(editor)) {
+            if (textEdit->toPlainText() != value.toString())
+                textEdit->setPlainText(value.toString());
+            return;
+        }
         static_cast<QLineEdit*>(editor)->setText(value.toString());
     };
     handler.editorData = [](QWidget* editor, const Property&) {
+        if (auto* textEdit = qobject_cast<QPlainTextEdit*>(editor))
+            return QVariant(textEdit->toPlainText());
         return QVariant(static_cast<QLineEdit*>(editor)->text());
     };
     return handler;

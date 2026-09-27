@@ -1,9 +1,10 @@
 # property-browser (qpb)
 
-A property browser library for Qt 6 Widgets (namespace `qpb`): declare properties once, display them as a tree or a
-flat list on top of a single `QAbstractItemModel`, and add data types and editors without modifying the library.
+A property browser library for Qt 6 Widgets (namespace `qpb`): declare properties once, display them as a tree, a
+flat list or (since 1.1) a form on top of a single `QAbstractItemModel`, filter them with a search box, and add data types
+and editors without modifying the library.
 
-Status: 1.0.0 released. The public API is stable within a major version (see below).
+Status: 1.1.0 released. The public API is stable within a major version (see below).
 
 ```cpp
 auto root = qpb::PropertyGroup::create("Camera");
@@ -19,8 +20,8 @@ QObject::connect(&model, &qpb::PropertyModel::valueChanged,
     [](const QString& path, const QVariant& value) { qDebug() << path << value; });
 ```
 
-More in [`examples/`](examples): quickstart, a custom `QColor` type, an inspector, a settings dialog and a runtime
-plugin configuration.
+More in [`examples/`](examples): quickstart, a custom `QColor` type, an inspector, a settings dialog, a runtime
+plugin configuration, and (1.1) a form view and a tree view sharing one search filter.
 
 ## Using qpb in a project
 
