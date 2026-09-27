@@ -70,6 +70,37 @@ TypeHandler intHandler()
     return handler;
 }
 
+// --- Int64 -----------------------------------------------------------------------
+
+TypeHandler int64Handler()
+{
+    TypeHandler handler;
+    handler.storageType = QMetaType::fromType<qint64>();
+    handler.displayText = [](const QVariant& value, const Property& property) {
+        return affixed(QLocale().toString(value.toLongLong()), property);
+    };
+    handler.normalize = [](const QVariant& value, const Property& property) {
+        const qint64 minimum
+            = property.attribute(Attr::Minimum, std::numeric_limits<qint64>::min()).toLongLong();
+        const qint64 maximum
+            = property.attribute(Attr::Maximum, std::numeric_limits<qint64>::max()).toLongLong();
+        return QVariant::fromValue(qBound(minimum, value.toLongLong(), qMax(minimum, maximum)));
+    };
+    // JSON numbers are doubles: values beyond 2^53 are written as strings.
+    handler.toJson = [](const QVariant& value, const Property&) {
+        constexpr qint64 exact = qint64(1) << 53;
+        const qint64 number = value.toLongLong();
+        return number >= -exact && number <= exact ? QJsonValue(number)
+                                                   : QJsonValue(QString::number(number));
+    };
+    handler.fromJson = [](const QJsonValue& json, const Property&) {
+        if (json.isString())
+            return QVariant(json.toString());
+        return json.isDouble() ? QVariant::fromValue(json.toInteger()) : json.toVariant();
+    };
+    return handler;
+}
+
 // --- Double ----------------------------------------------------------------------
 
 constexpr int DefaultDecimals = 2;
@@ -265,6 +296,7 @@ TypeRegistry::TypeRegistry()
     d->insert(Types::Enum, enumHandler());
     d->insert(Types::FilePath, filePathHandler());
     d->insert(Types::DirPath, dirPathHandler());
+    d->insert(Types::Int64, int64Handler()); // 1.2: after the types of 1.0
 }
 
 TypeRegistry::~TypeRegistry() = default;

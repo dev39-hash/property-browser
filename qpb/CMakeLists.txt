@@ -61,6 +61,8 @@ qpb_add_library(qpb_core
         include/qpb/PropertyFilterProxyModel.h
         include/qpb/PropertyGroup.h
         include/qpb/PropertyModel.h
+        include/qpb/QObjectPropertySource.h
+        include/qpb/Serialization.h
         include/qpb/TypeRegistry.h
         include/qpb/Types.h
         include/qpb/ValidationResult.h
@@ -72,6 +74,9 @@ qpb_add_library(qpb_core
         src/core/PropertyFilterProxyModel.cpp
         src/core/PropertyGroup.cpp
         src/core/PropertyModel.cpp
+        src/core/QObjectPropertySource.cpp
+        src/core/QObjectPropertySource_p.h
+        src/core/Serialization.cpp
         src/core/Property_p.h
         src/core/TypeRegistry.cpp
         src/core/qpbglobal.cpp
@@ -91,6 +96,8 @@ qpb_add_library(qpb_widgets
         include/qpb/widgets/PropertyTreeView.h
         include/qpb/qpb.h
         src/widgets/EditorFactory.cpp
+        src/widgets/Int64SpinBox.cpp
+        src/widgets/Int64SpinBox_p.h
         src/widgets/PathEdit.cpp
         src/widgets/PathEdit_p.h
         src/widgets/PropertyDelegate.cpp

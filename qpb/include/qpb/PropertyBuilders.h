@@ -111,6 +111,20 @@ public:
     IntBuilder& suffix(const QString& suffix);
 };
 
+// Builder for Types::Int64. Since 1.2.
+class QPB_CORE_EXPORT Int64Builder : public PropertyBuilderBase<Int64Builder>
+{
+public:
+    explicit Int64Builder(Property& property);
+
+    Int64Builder& range(qint64 minimum, qint64 maximum);
+    Int64Builder& minimum(qint64 minimum);
+    Int64Builder& maximum(qint64 maximum);
+    Int64Builder& step(qint64 step);
+    Int64Builder& prefix(const QString& prefix);
+    Int64Builder& suffix(const QString& suffix);
+};
+
 // Builder for Types::Double.
 class QPB_CORE_EXPORT DoubleBuilder : public PropertyBuilderBase<DoubleBuilder>
 {
