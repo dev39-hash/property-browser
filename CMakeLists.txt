@@ -38,22 +38,36 @@ configure_file(
 )
 
 # --- qpb::core (Qt6::Core only) ----------------------------------------------
-#
-# Headers are listed here together with their implementation (docs/PLAN.md
-# M2/M3); the remaining public headers are declarations only for now.
 
 qpb_add_library(qpb_core
     EXPORT_DEFINE QPB_BUILD_CORE_LIB
     OUTPUT_NAME qpbcore
     SOURCES
+        include/qpb/Attributes.h
+        include/qpb/Property.h
+        include/qpb/PropertyBuilders.h
+        include/qpb/PropertyGroup.h
+        include/qpb/PropertyModel.h
+        include/qpb/TypeRegistry.h
+        include/qpb/Types.h
+        include/qpb/ValidationResult.h
+        include/qpb/qpbcore.h
         include/qpb/qpbglobal.h
         "${CMAKE_CURRENT_BINARY_DIR}/include/qpb/qpbversion.h"
+        src/core/Property.cpp
+        src/core/PropertyBuilders.cpp
+        src/core/PropertyGroup.cpp
+        src/core/PropertyModel.cpp
+        src/core/Property_p.h
+        src/core/TypeRegistry.cpp
         src/core/qpbglobal.cpp
 )
 target_link_libraries(qpb_core PUBLIC Qt6::Core)
 add_library(qpb::core ALIAS qpb_core)
 
 # --- qpb::widgets (Qt6::Widgets) ---------------------------------------------
+#
+# The widgets headers are declarations only until docs/PLAN.md M3.
 
 qpb_add_library(qpb_widgets
     EXPORT_DEFINE QPB_BUILD_WIDGETS_LIB
