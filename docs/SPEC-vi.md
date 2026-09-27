@@ -35,8 +35,8 @@ Lý do chi tiết: brainstorm mục 11. Thiết kế **không được cấm** m
 
 | #  | Tiêu chí                                                         | Kiểm chứng bằng                                        |
 |----|------------------------------------------------------------------|--------------------------------------------------------|
-| S1 | Panel 10 thuộc tính ≤ 30 dòng                                     | `examples/quickstart/main.cpp` (đếm dòng, không tính include) |
-| S2 | Kiểu `QColor` ≤ 100 dòng, nằm ngoài lib                           | `examples/custom_type/`                                |
+| S1 | Panel 10 thuộc tính ≤ 30 dòng                                     | `examples/quickstart/main.cpp` (dòng không trống, không tính comment và `#include`) |
+| S2 | Kiểu `QColor` ≤ 100 dòng, nằm ngoài lib                           | `examples/custom_type/ColorType.{h,cpp}` (cùng cách đếm như S1) |
 | S3 | Chuyển Tree ↔ List ↔ Form không đổi model                         | `examples/inspector` có nút chuyển view + test         |
 | S4 | 3 kịch bản tham chiếu (`docs/use-cases.md`) làm được chỉ bằng API public | Ứng dụng RC độc lập (PLAN RC.1); project thật theo dõi ngoài repo khi có |
 | S5 | Nâng 1.x → 1.y không phải sửa code consumer                        | Bộ test tương thích API (§9.5) pass trên mọi bản 1.y  |
@@ -88,6 +88,9 @@ Lý do chi tiết: brainstorm mục 11. Thiết kế **không được cấm** m
 
 ## 4. Core (`qpb::core`)
 
+> Từ M1, header public trong `qpb/include/qpb/` là **tham chiếu API chuẩn**; code ở §4–§5 chỉ tóm tắt.
+> Kết quả review API ở M1 ghi trong [`api-review.md`](api-review.md) và Phụ lục B (D21–D28).
+
 ### 4.1 Định danh kiểu (`TypeId`)
 
 Kiểu được định danh bằng **ID logic** (chuỗi), không phải `QMetaType`, vì nhiều kiểu logic cùng
@@ -97,14 +100,14 @@ kiểu lưu trữ (`String`, `FilePath`, `DirPath` đều là `QString`).
 namespace qpb {
 using TypeId = QString;
 namespace Types {
-inline const TypeId Bool     = QStringLiteral("bool");
-inline const TypeId Int      = QStringLiteral("int");
-inline const TypeId Double   = QStringLiteral("double");
-inline const TypeId String   = QStringLiteral("string");
-inline const TypeId Enum     = QStringLiteral("enum");
-inline const TypeId FilePath = QStringLiteral("filepath");
-inline const TypeId DirPath  = QStringLiteral("dirpath");
-inline const TypeId Group    = QStringLiteral("group");
+inline constexpr QLatin1StringView Bool{"bool"};
+inline constexpr QLatin1StringView Int{"int"};
+inline constexpr QLatin1StringView Double{"double"};
+inline constexpr QLatin1StringView String{"string"};
+inline constexpr QLatin1StringView Enum{"enum"};
+inline constexpr QLatin1StringView FilePath{"filepath"};
+inline constexpr QLatin1StringView DirPath{"dirpath"};
+inline constexpr QLatin1StringView Group{"group"};
 }
 }
 ```
@@ -134,7 +137,8 @@ Không copy được; không có constructor public (tạo qua `PropertyGroup::a
 | `isVisible()`     | `bool`                 | Ẩn group ⇒ ẩn toàn bộ con                                               |
 | `parent()`        | `PropertyGroup*`       | `nullptr` với gốc                                                       |
 | `isModified()`    | `bool`                 | `value() != defaultValue()` (so sánh `QVariant`)                        |
-| `validator`       | `std::function<ValidationResult(const QVariant&)>` | Tùy chọn, chạy sau validation của kiểu          |
+| `validator()`     | `Property::Validator` = `std::function<ValidationResult(const QVariant&, const Property&)>` | Tùy chọn, chạy sau validation của kiểu |
+| `flags()`         | `Property::Flags` (`ReadOnly`, `Disabled`, `Hidden`) | Trạng thái riêng; `isReadOnly/isEnabled/isVisible` ở trên là hiệu lực |
 
 Setter tương ứng (`setDisplayName`, `setToolTip`, `setReadOnly`, `setEnabled`, `setVisible`,
 `setAttribute`, `setValidator`, `setDefaultValue`) **thông báo cho model** nếu property đã gắn vào model
@@ -152,21 +156,24 @@ class PropertyGroup : public Property {
 public:
     static std::unique_ptr<PropertyGroup> create(const QString& id);
 
-    PropertyGroup& addGroup(const QString& id);
-    PropertyBuilder<bool>    addBool  (const QString& id, bool v);
-    PropertyBuilder<int>     addInt   (const QString& id, int v);
-    PropertyBuilder<double>  addDouble(const QString& id, double v);
-    PropertyBuilder<QString> addString(const QString& id, const QString& v);
-    EnumBuilder              addEnum  (const QString& id, const QStringList& labels, int index);
-    EnumBuilder              addEnum  (const QString& id, const QList<EnumOption>& options, const QVariant& v);
-    PathBuilder              addFilePath(const QString& id, const QString& v);
-    PathBuilder              addDirPath (const QString& id, const QString& v);
-    Property&                add(const TypeId& type, const QString& id, const QVariant& v); // kiểu tùy biến
-    Property&                add(std::unique_ptr<Property> p);
+    PropertyGroup&  addGroup(const QString& id);
+    BoolBuilder     addBool  (const QString& id, bool value);
+    IntBuilder      addInt   (const QString& id, int value);
+    DoubleBuilder   addDouble(const QString& id, double value);
+    StringBuilder   addString(const QString& id, const QString& value);
+    EnumBuilder     addEnum  (const QString& id, const QStringList& labels, int currentIndex);
+    EnumBuilder     addEnum  (const QString& id, const QList<EnumOption>& options, const QVariant& value);
+    FilePathBuilder addFilePath(const QString& id, const QString& path);
+    DirPathBuilder  addDirPath (const QString& id, const QString& path);
+    Property&       add(const TypeId& type, const QString& id, const QVariant& value); // custom type
+    Property&       add(std::unique_ptr<Property> property);
 
     bool remove(const QString& id);
     int  childCount() const;
-    Property* child(int i) const;
+    Property* child(int index) const;
+    Property* child(const QString& id) const;
+    QList<Property*> children() const;
+    int  indexOf(const Property* child) const;
     Property* find(const QString& path) const;   // "Transform/x"
 };
 ```
@@ -174,8 +181,9 @@ public:
 - Thêm `id` trùng trong cùng group: **assert trong debug**, trả về property đã tồn tại trong release (không tạo mới).
 - `PropertyBuilder<T>` là wrapper nhẹ quanh `Property&`, trả về `*this` cho mỗi setter:
   `displayName`, `toolTip`, `readOnly`, `enabled`, `visible`, `validator`, và setter theo kiểu
-  (`range`, `step`, `decimals`, `prefix`, `suffix`, `maxLength`, `placeholder`, `regex`, `filter`, `mode`, `defaultDir`, `mustExist`).
-  Setter không hợp lệ với kiểu (vd. `regex` trên `int`) **không biên dịch được** (chỉ khai báo trên specialization tương ứng).
+  (`range`, `minimum`, `maximum`, `step`, `decimals`, `prefix`, `suffix`, `maxLength`, `placeholder`, `regularExpression`, `filter`, `dialogMode`, `defaultDir`, `mustExist`), cùng `attribute` và `editor` cho mọi kiểu.
+  Builder là các class cụ thể (`BoolBuilder`, `IntBuilder`, `DoubleBuilder`, `StringBuilder`, `EnumBuilder`, `FilePathBuilder`, `DirPathBuilder`)
+  dùng chung `PropertyBuilderBase<Derived>`; setter không hợp lệ với kiểu (vd. `regularExpression` trên int) **không biên dịch được**.
 - Builder chuyển ngầm được sang `Property&`.
 
 ### 4.4 Attribute chuẩn
@@ -184,11 +192,11 @@ Khóa là hằng `qpb::Attr::*` (`QString`). Thuộc tính không nhận ra bị
 
 | Kiểu       | Attribute (kiểu giá trị)                                                                 | Mặc định              |
 |------------|-------------------------------------------------------------------------------------------|-----------------------|
-| Int        | `min`(int) `max`(int) `step`(int) `prefix` `suffix`                                        | INT_MIN / INT_MAX / 1 |
-| Double     | `min` `max` `step`(double) `decimals`(int) `prefix` `suffix`                               | −∞ / +∞ / 1.0 / 2     |
-| String     | `maxLength`(int) `placeholder` `regex`(QString) `multiline`(bool, **1.1**)                | không giới hạn        |
+| Int        | `minimum`(int) `maximum`(int) `step`(int) `prefix` `suffix`                                | INT_MIN / INT_MAX / 1 |
+| Double     | `minimum` `maximum` `step`(double) `decimals`(int) `prefix` `suffix`                       | −∞ / +∞ / 1.0 / 2     |
+| String     | `maxLength`(int) `placeholder` `regularExpression`(QString) `multiline`(bool, **1.1**)    | không giới hạn |
 | Enum       | `options`(`QList<EnumOption>` — `{QString label; QVariant value;}`)                         | —                     |
-| FilePath   | `filter`(QString) `mode`(`"open"`/`"save"`) `defaultDir` `mustExist`(bool)                  | `"open"`, false       |
+| FilePath   | `filter`(QString) `dialogMode`(int, `qpb::FileMode::Open`/`Save`) `defaultDir` `mustExist`(bool) | `Open`, false |
 | DirPath    | `defaultDir` `mustExist`(bool)                                                             | false                 |
 | (mọi kiểu) | `editorId`(TypeId) — ghi đè editor cho riêng property này (xem 5.2)                         | —                     |
 
@@ -201,19 +209,21 @@ Overload `addEnum(id, QStringList labels, int index)` tạo option với `value 
 
 ```cpp
 struct TypeHandler {
-    int storageType = QMetaType::UnknownType;                           // kiểu QVariant mong đợi
-    std::function<QString(const QVariant&, const Property&)> displayText; // null → QVariant::toString()
-    std::function<ValidationResult(const QVariant&, const Property&)> validate; // null → luôn hợp lệ
-    std::function<QVariant(const QVariant&, const Property&)> normalize;  // null → giữ nguyên (vd. clamp)
+    QMetaType storageType;                                                // invalid → stored unconverted
+    std::function<QString(const QVariant&, const Property&)> displayText; // empty → QVariant::toString()
+    std::function<QVariant(const QVariant&, const Property&)> normalize;  // empty → unchanged (e.g. clamp)
+    std::function<ValidationResult(const QVariant&, const Property&)> validate; // empty → always valid
 };
 
 class TypeRegistry {
 public:
     static TypeRegistry& global();
-    bool registerType(const TypeId& id, TypeHandler h);   // false nếu id đã có (không ghi đè)
-    void replaceType (const TypeId& id, TypeHandler h);   // ghi đè có chủ đích
-    const TypeHandler* handler(const TypeId& id) const;   // nullptr nếu chưa đăng ký
-    template <class T> bool registerType(const TypeId& id, TypeHandler h); // tự set storageType
+    bool registerType(const TypeId& id, const TypeHandler& h); // false if id exists or is reserved
+    template <class T> bool registerType(const TypeId& id, TypeHandler h); // sets storageType to T
+    bool replaceType (const TypeId& id, const TypeHandler& h); // false if id is not registered
+    bool contains(const TypeId& id) const;
+    const TypeHandler* handler(const TypeId& id) const;        // nullptr if not registered
+    QList<TypeId> types() const;                               // registration order
 };
 ```
 
@@ -251,7 +261,7 @@ public:
     Property* find(const QString& path) const;
 
     bool setValue(const QString& path, const QVariant& v);
-    void resetToDefault(const QModelIndex& idx);          // group ⇒ reset đệ quy
+    bool resetToDefault(const QModelIndex& idx);          // group ⇒ reset đệ quy
 
     void beginBatch();                                    // lồng được
     void endBatch();
@@ -316,9 +326,9 @@ Validation mặc định của kiểu cơ bản:
 | Kiểu       | Kiểm tra                                                                  |
 |------------|---------------------------------------------------------------------------|
 | Int/Double | Sau normalize luôn trong khoảng → luôn hợp lệ (clamp thay vì từ chối)     |
-| String     | `maxLength`; `regex` (khớp toàn bộ, `QRegularExpression::anchoredPattern`) |
+| String     | `maxLength`; `regularExpression` (khớp toàn bộ, `QRegularExpression::anchoredPattern`) |
 | Enum       | Giá trị thuộc `options`                                                   |
-| FilePath   | `mustExist` + mode `open` → `QFileInfo::isFile()`; chuỗi rỗng luôn hợp lệ |
+| FilePath   | `mustExist` + `FileMode::Open` → `QFileInfo::isFile()`; chuỗi rỗng luôn hợp lệ |
 | DirPath    | `mustExist` → `QFileInfo::isDir()`; chuỗi rỗng luôn hợp lệ                |
 
 ---
@@ -329,23 +339,30 @@ Validation mặc định của kiểu cơ bản:
 
 ```cpp
 struct EditorHandler {
-    std::function<QWidget*(QWidget* parent, const Property&)> createEditor;   // bắt buộc
-    std::function<void(QWidget*, const QVariant&, const Property&)> setEditorData; // bắt buộc
-    std::function<QVariant(QWidget*, const Property&)> editorData;            // bắt buộc
-    std::function<void(QPainter*, const QStyleOptionViewItem&, const QVariant&, const Property&)> paint; // tùy chọn
-    std::function<void(QWidget*, const Property&)> applyAttributes;          // tùy chọn, gọi sau createEditor và khi attribute đổi
+    std::function<QWidget*(QWidget* parent, const Property&)> createEditor;        // required
+    std::function<void(QWidget*, const QVariant&, const Property&)> setEditorData; // required
+    std::function<QVariant(QWidget*, const Property&)> editorData;                 // required
+    std::function<void(QPainter*, const QStyleOptionViewItem&, const QVariant&, const Property&)> paint; // optional
+    std::function<void(QWidget*, const Property&)> applyAttributes;                // optional
 };
 
 class EditorFactory {
 public:
     static EditorFactory& global();
-    bool registerEditor(const TypeId& id, EditorHandler h);
-    void replaceEditor (const TypeId& id, EditorHandler h);
+    bool registerEditor(const TypeId& id, const EditorHandler& h);
+    bool replaceEditor (const TypeId& id, const EditorHandler& h);
+    bool contains(const TypeId& id) const;
     const EditorHandler* handler(const TypeId& id) const;
+    const EditorHandler* handlerFor(const Property& p) const;  // editorId attribute, then typeId
+    QList<TypeId> editors() const;
+    QWidget* createEditor(QWidget* parent, const Property& p) const;
+    static void notifyCommit(QWidget* editor);                // commit now, don't wait for focus-out
+};
 
-    QWidget* createEditor(QWidget* parent, const Property& p) const; // dùng attribute editorId nếu có
-    // Editor phát tín hiệu này khi người dùng "chốt" giá trị (vd. chọn xong file) để view commit ngay.
-    static void notifyCommit(QWidget* editor);
+class EditorDialogScope {                                     // RAII: editor shows a modal dialog
+public:
+    explicit EditorDialogScope(QWidget* editor);
+    ~EditorDialogScope();
 };
 ```
 
@@ -364,10 +381,10 @@ property đó. Kiểu lưu trữ và validation vẫn theo `typeId` gốc.
 | Bool     | *không tạo editor* trong Tree/List (checkbox vẽ bởi delegate qua `CheckStateRole`); `QCheckBox` trong Form | Click hoặc Space để toggle |
 | Int      | `QSpinBox`                                                    | Áp `min/max/step/prefix/suffix`; `keyboardTracking = false`             |
 | Double   | `QDoubleSpinBox`                                              | Như Int + `decimals`; khi không edit hiển thị tối đa `decimals` chữ số thập phân theo `QLocale`, bỏ số 0 thừa |
-| String   | `QLineEdit`                                                   | `maxLength`, `placeholder`, `QRegularExpressionValidator` từ `regex`    |
+| String   | `QLineEdit`                                                   | `maxLength`, `placeholder`, `QRegularExpressionValidator` từ `regularExpression` |
 | Enum     | `QComboBox` (không editable)                                  | Commit ngay khi chọn (`notifyCommit` trên `activated`)                  |
-| FilePath | `qpb::PathEdit` = `QLineEdit` + `QToolButton "…"`             | Nút mở `QFileDialog::getOpenFileName`/`getSaveFileName` theo `mode`; chọn xong → `notifyCommit` |
-| DirPath  | `qpb::PathEdit` (chế độ thư mục)                              | `QFileDialog::getExistingDirectory`                                    |
+| FilePath | `PathEdit` nội bộ = `QLineEdit` + `QToolButton "…"`           | Nút mở `QFileDialog::getOpenFileName`/`getSaveFileName` theo `dialogMode`; chọn xong → `notifyCommit` |
+| DirPath  | `PathEdit` nội bộ (chế độ thư mục)                            | `QFileDialog::getExistingDirectory`                                    |
 
 Hiển thị đường dẫn dài trong ô (không edit): elide ở giữa (`Qt::ElideMiddle`), tooltip là đường dẫn đầy đủ.
 
@@ -377,8 +394,9 @@ Hiển thị đường dẫn dài trong ô (không edit): elide ở giữa (`Qt:
   nếu trả `false` (validation lỗi) thì editor vẫn đóng, model giữ giá trị cũ, view hiển thị thông báo lỗi
   (tooltip tại ô, `QToolTip::showText`) — hành vi 1.0. [Quyết định D5]
 - `paint`: dùng `EditorHandler::paint` nếu có; Bool vẽ checkbox căn giữa trái; group vẽ nền `QPalette::AlternateBase`, chữ đậm.
-- **Focus khi mở dialog:** `PathEdit` đặt cờ `dialogOpen` trong lúc dialog modal hiển thị. `PropertyDelegate::eventFilter`
-  bỏ qua `FocusOut` của editor có cờ này, nên editor không bị đóng/commit giữa chừng. [Quyết định D6]
+- **Focus khi mở dialog:** editor đang mở dialog modal giữ một `qpb::EditorDialogScope` (public, để editor tùy biến như nút chọn màu
+  cũng dùng được; `PathEdit` nội bộ cũng dùng nó). `PropertyDelegate::eventFilter` bỏ qua `FocusOut` khi scope còn sống,
+  nên editor không bị đóng/commit giữa chừng. [Quyết định D6, D24]
 - Phím: **Enter** commit + đóng; **Esc** hủy; **Tab/Shift+Tab** commit rồi mở editor ở ô Value kế tiếp/trước đó có thể edit
   (bỏ qua group và read-only); focus-out commit.
 
@@ -391,7 +409,9 @@ public:
     explicit PropertyTreeView(QWidget* parent = nullptr);
     void setModel(QAbstractItemModel* model) override; // chấp nhận PropertyModel hoặc proxy của nó
     void setMode(Mode m);  Mode mode() const;
+    int nameColumnWidth() const;
     void setNameColumnWidth(int px);
+    PropertyDelegate* propertyDelegate() const;
 };
 ```
 
@@ -437,7 +457,8 @@ property-browser/                  (repo phát triển)
 │   ├── CHANGELOG.md               # kèm hướng dẫn nâng cấp mỗi bản
 │   ├── cmake/                     # helper và template CMake nội bộ
 │   ├── include/qpb/               # header public (duy nhất) — §9
-│   │   ├── qpb.h                  # umbrella header: include tất cả
+│   │   ├── qpb.h                  # umbrella header: tất cả (cần qpb::widgets)
+│   │   ├── qpbcore.h              # umbrella header chỉ cho qpb::core
 │   │   ├── qpbglobal.h            # export macro, QPB_VERSION*, QPB_DEPRECATED
 │   │   ├── Property.h  PropertyGroup.h  PropertyModel.h  TypeRegistry.h ...
 │   │   └── widgets/PropertyTreeView.h  EditorFactory.h ...
@@ -514,7 +535,7 @@ Ba cách giữ folder đồng bộ (đều được hỗ trợ, do consumer ch�
 | API compat    | chỉ biên dịch + chạy             | §9.5: mã client của mọi bản 1.x đã phát hành vẫn build và chạy đúng               |
 | Consumer      | CMake project mẫu `tests/consumer` | Chép `qpb/` vào `components/`, build; kiểm tra không rò rỉ biến global; build với C++17 và C++20; static và shared |
 
-`PathEdit` expose một hook tĩnh (`setDialogProviderForTesting`) để test thay `QFileDialog` bằng hàm trả giá trị cố định.
+`PathEdit` nội bộ có hook cho test (trong `src/`, không public) để test thay `QFileDialog` bằng hàm trả giá trị cố định.
 
 CI: GitHub Actions, ma trận Ubuntu/Windows/macOS × Qt 6.5 / 6.8, qua `jurplel/install-qt-action`.
 
@@ -660,3 +681,11 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D18| Code và tài liệu dùng tiếng Anh; bản `-vi` chỉ để tham khảo                  | Quy ước dự án                                                                          |
 | D19| "Custom property table" = người dùng tự dựng property table bằng API public (G1, G3) | Bạn đã làm rõ; không phải tính năng riêng                                        |
 | D20| Thiết kế API và giai đoạn RC dùng kịch bản tham chiếu thay cho project thật  | Hiện chưa có project thật nào dùng thư viện                                            |
+| D21| Header public là tham chiếu API chuẩn; code trong SPEC chỉ tóm tắt          | Tránh hai nguồn sự thật sau M1                                                         |
+| D22| TypeId và khóa attribute là hằng `constexpr QLatin1StringView`              | Không lo thứ tự khởi tạo static; tự chuyển sang `QString`                              |
+| D23| Trạng thái riêng dạng `Property::Flags` (ReadOnly/Disabled/Hidden) + getter hiệu lực | Một enum mở rộng được thay cho từng cặp getter                                  |
+| D24| `EditorDialogScope` public; `PathEdit` giữ nội bộ                            | Editor tùy biến có mở dialog (vd. màu) cần cùng cơ chế bảo vệ focus                    |
+| D25| Builder là class cụ thể trên nền CRTP `PropertyBuilderBase`                 | Setter theo kiểu chỉ có ở kiểu phù hợp; class không phải template, export được         |
+| D26| Khóa attribute dùng từ đầy đủ (`minimum`, `regularExpression`, `dialogMode`) | Dễ đọc; enum `qpb::FileMode` lưu chế độ dialog                                        |
+| D27| `qpb/qpbcore.h` cho người chỉ dùng core; `qpb/qpb.h` gồm cả widgets         | Consumer chỉ dùng core không cần QtWidgets                                             |
+| D28| Validator nhận cả property (`(value, property)`) như `TypeHandler::validate` | Một chữ ký thống nhất; validator đọc được attribute                                   |

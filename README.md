@@ -34,4 +34,5 @@ ctest --test-dir build --output-on-failure
 - [Specification](docs/SPEC.md) ([Tiếng Việt](docs/SPEC-vi.md))
 - [Implementation plan](docs/PLAN.md) ([Tiếng Việt](docs/PLAN-vi.md))
 - [Reference use cases](docs/use-cases.md)
+- [1.0 API review](docs/api-review.md)
 - [Original brainstorm (Vietnamese)](docs/brainstorm-vi.md)
