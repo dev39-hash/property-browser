@@ -137,12 +137,19 @@ Non-copyable; no public constructor (created via `PropertyGroup::add*` or `Prope
 | `isReadOnly()`    | `bool`                 | Effective = itself **or** any ancestor is read-only                     |
 | `isEnabled()`     | `bool`                 | Effective = itself **and** all ancestors are enabled                    |
 | `isVisible()`     | `bool`                 | Hiding a group hides all its children                                   |
+| `isLive()` (1.3)  | `bool`                 | Effective = itself **or** any ancestor is live (see below)              |
 | `parent()`        | `PropertyGroup*`       | `nullptr` for the root                                                  |
-| `isModified()`    | `bool`                 | `value() != defaultValue()` (`QVariant` comparison)                     |
+| `isModified()`    | `bool`                 | `value() != defaultValue()` (`QVariant` comparison); always `false` when live (1.3) |
 | `validator()`     | `Property::Validator` = `std::function<ValidationResult(const QVariant&, const Property&)>` | Optional, runs after type validation |
-| `flags()`         | `Property::Flags` (`ReadOnly`, `Disabled`, `Hidden`) | Own state; `isReadOnly/isEnabled/isVisible` above are effective |
+| `flags()`         | `Property::Flags` (`ReadOnly`, `Disabled`, `Hidden`, `Live` (1.3)) | Own state; `isReadOnly/isEnabled/isVisible/isLive` above are effective |
 
-The corresponding setters (`setDisplayName`, `setToolTip`, `setReadOnly`, `setEnabled`, `setVisible`,
+**Live properties (1.3, `Flag::Live`, `setLive()`, builder `live()`):** values maintained by the application (a status, a
+counter, the space used), not settings. They are never modified (views never show them in bold), group resets
+(`resetToDefault()` on a group, "Reset group", "Reset to default") leave them alone, and `qpb::serialization` neither
+writes nor reads them. `resetToDefault()` called on the live property itself still resets it; it stays editable unless
+it is also read-only. [D44]
+
+The corresponding setters (`setDisplayName`, `setToolTip`, `setReadOnly`, `setEnabled`, `setVisible`, `setLive`,
 `setAttribute`, `setValidator`, `setDefaultValue`) **notify the model** when the property is attached to one
 (see 4.6), so views update.
 
@@ -358,7 +365,7 @@ bool load(PropertyGroup& group, const QSettings& settings);
 
 - Only **values** are stored; the application builds the tree, then values are written into it. Groups become nested
   JSON objects keyed by id (groups with nothing to store are left out, as `save()` writes no key for them); `QSettings` keys are paths relative to the group, under the settings' current group.
-- **Read-only properties are neither written nor read** (the application maintains them, D34). Hidden and disabled
+- **Read-only and live (1.3) properties are neither written nor read** (the application maintains them, D34, D44). Hidden and disabled
   properties are.
 - Values are restored with `Property::setValue()` (conversion → normalize → validation). Unknown keys and missing keys are
   ignored; `fromJson`/`load` return `false` if a value was rejected, and still apply the others. Wrap them in
@@ -395,6 +402,13 @@ public:
 - Sync: model → object on `valueChanged` (`QMetaProperty::write`; if the object adjusts or refuses the value, the model
   shows the object's value); object → model on the NOTIFY signal (`Property::setValue`); loops are blocked. Object
   destroyed → its group is removed. Source destroyed → groups stay, sync stops. [D41]
+- **Titles (1.3):** `Q_CLASSINFO("qpb:title", "name")` makes the group's display name the value of that Q_PROPERTY,
+  updated through its NOTIFY signal (an empty value keeps the previous title). For classes the application cannot
+  change, `setTitleProperty("name")` does the same for objects added afterwards; the class info wins. The group id
+  (and so every path) stays the object name. [D43]
+- **Live values (1.3):** metadata key `live` makes a property live (§4.2). `setLiveReadOnlyProperties(true)` makes
+  every Q_PROPERTY with a NOTIFY signal but no WRITE accessor live, for objects added afterwards. Default `false`: the
+  behaviour of 1.2 is kept. [D44]
 
 ---
 
@@ -653,6 +667,7 @@ After 1.0, new features arrive as **additions** (minor releases); existing API i
 | **1.0** | All of §4; §5.1–5.5; 7 basic types; Tree + List; reset; bold when modified; tooltips; component folder (§6); API policy (§9); examples quickstart, custom_type, inspector | **API freeze** |
 | 1.1     | `PropertyFormView` (§5.6); `PropertyFilterProxyModel` (§5.7); `multiline` attribute                      | Additive      |
 | 1.2     | `QObjectPropertySource` (reads `Q_PROPERTY`, metadata via `Q_CLASSINFO("qpb:<prop>", "min=0;max=10")`, two-way sync); serialization `qpb::serialization::toJson/fromJson/save/load` (§4.8); `Types::Int64`; `QUndoStack` example | Additive |
+| 1.3     | `Property::Flag::Live` (§4.2); `QObjectPropertySource` titles and live values (§4.9)                    | Additive      |
 | 2.0     | Only if breaking the API is truly necessary; removes everything deprecated                               | Breaking      |
 
 **The 1.0 design must leave room for 1.1/1.2** without API changes: the form view and filter are new classes on top of the
@@ -808,3 +823,5 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D40| New free functions live in nested namespaces (`qpb::serialization`)          | Functions in `qpb` taking qpb types are found by ADL and broke an unqualified `save(group, settings)` of application code (found by `future_sketches.cpp`) |
 | D41| `QObjectPropertySource` reads metadata from `Q_CLASSINFO`, needs a model, and removes groups of destroyed objects | No change to the classes being shown; property changes are only observable through the model's `valueChanged` |
 | D42| Serialization skips read-only properties                                     | They are maintained by the application; loading them would overwrite e.g. the running version with a stored one |
+| D43| `QObjectPropertySource` titles groups from a Q_PROPERTY (`qpb:title`, `setTitleProperty()`); ids stay the object name | RC trial F8: groups showed `studio_mic`; paths must stay stable for serialization and application code |
+| D44| New flag `Live` (never modified, skipped by group resets and serialization); read-only Q_PROPERTYs with NOTIFY become live only with `setLiveReadOnlyProperties(true)` | RC trial F9: live values looked like user edits. Making them live automatically would change 1.2 behaviour (§9.2), so it is opt-in |

@@ -216,6 +216,12 @@ thái, dung lượng đã dùng). Chúng không bao giờ nên trông như "đã
 
 Tổng ≈ 9,5 h.
 
+**Trạng thái:** M7.1–M7.6 xong theo đề xuất D44 (bật bằng `setLiveReadOnlyProperties()`). `Flag::Live` (core, 4 hàm test
+ở property, model, serialization), tiêu đề và giá trị live trong `QObjectPropertySource` (3 test), tree view và form view
+không phải sửa (2 test), `tests/api_compat/v1_3.cpp` và `api-1.3.txt` (chứa trọn 1.2), `examples/object_editor` có tiêu
+đề, bộ đếm live và undo bỏ qua nó, SPEC §4.2, §4.8, §4.9, D43, D44. Vòng thử RC 5 đóng F8 và F9. Còn lại: M7.7 (phát
+hành 1.3.0).
+
 ---
 
 ## 3. Phụ thuộc giữa các task

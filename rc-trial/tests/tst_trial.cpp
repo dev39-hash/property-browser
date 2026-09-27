@@ -113,6 +113,8 @@ private slots:
     void devicesFollowObjects();
     void devicesObjectRefusesValue();
     void devicesRemovedObject();
+    // Round 5 (1.3.0).
+    void devicesTitlesAndLiveValues();
     void screenshots();
 
 private:
@@ -541,6 +543,36 @@ void tst_Trial::devicesRemovedObject()
     QVERIFY(!page->form()->editor("studio_mic/name"));
     QVERIFY(page->form()->editor("field_recorder/name"));
     QCOMPARE(page->source().objects().size(), 1);
+}
+
+// --- Round 5 (1.3.0) ------------------------------------------------------------
+
+// F8: sections are titled with the device name and follow renames; paths keep
+// the object name. F9: the "used" counter is live: never bold, not reset.
+void tst_Trial::devicesTitlesAndLiveValues()
+{
+    DevicesPage* page = m_window->devices();
+    m_window->tabs()->setCurrentWidget(page);
+    qpb::PropertyModel& model = page->model();
+    Device* mic = page->devices().value(0);
+    QCOMPARE(model.find("studio_mic")->displayName(), QString("Studio mic"));
+    mic->setName("Vocal mic");
+    QCOMPARE(model.find("studio_mic")->displayName(), QString("Vocal mic"));
+    QVERIFY(model.find("studio_mic/name")); // same path
+
+    qpb::Property* used = model.find("studio_mic/used");
+    QVERIFY(used->isLive());
+    mic->record(qint64(1) << 30);
+    QCOMPARE(used->value(), QVariant::fromValue(qint64(1) << 30));
+    QVERIFY(!used->isModified());
+    QVERIFY(!model.indexOf(used).data(qpb::PropertyModel::IsModifiedRole).toBool());
+
+    // "Reset group" restores the settings but not the live counter.
+    QVERIFY(model.setValue("studio_mic/gain", 18.0));
+    QVERIFY(model.find("studio_mic")->resetToDefault());
+    QCOMPARE(mic->gain(), 6.0);
+    QCOMPARE(used->value(), QVariant::fromValue(qint64(1) << 30));
+    QCOMPARE(model.find("studio_mic")->displayName(), QString("Studio mic")); // name reset too
 }
 
 void tst_Trial::screenshots()
