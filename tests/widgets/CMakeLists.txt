@@ -12,3 +12,9 @@ qpb_add_test(tst_propertytreeview
     LIBRARIES qpb::widgets
 )
 target_include_directories(tst_propertytreeview PRIVATE "${PROJECT_SOURCE_DIR}/qpb/src")
+
+qpb_add_test(tst_propertyformview
+    SOURCES tst_propertyformview.cpp
+    LIBRARIES qpb::widgets
+)
+target_include_directories(tst_propertyformview PRIVATE "${PROJECT_SOURCE_DIR}/qpb/src")

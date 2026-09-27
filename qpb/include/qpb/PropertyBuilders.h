@@ -136,6 +136,8 @@ public:
     StringBuilder& placeholder(const QString& text);
     // The whole value must match pattern (QRegularExpression syntax).
     StringBuilder& regularExpression(const QString& pattern);
+    // Edit the value as several lines of text (Attr::Multiline). Since 1.1.
+    StringBuilder& multiline(bool multiline = true);
 };
 
 // Builder for Types::Enum.

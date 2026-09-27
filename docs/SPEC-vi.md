@@ -205,6 +205,9 @@ Khóa là hằng `qpb::Attr::*` (`QString`). Thuộc tính không nhận ra bị
 | DirPath    | `defaultDir` `mustExist`(bool)                                                             | false                 |
 | (mọi kiểu) | `editorId`(TypeId) — ghi đè editor cho riêng property này (xem 5.2)                         | —                     |
 
+**Multiline (1.1):** giá trị giữ nguyên các dấu xuống dòng; `displayText` nối các dòng bằng ` ¶ ` (ký hiệu ¶) để ô
+chỉ hiện một dòng. String không có attribute này hiển thị như cũ. [D36]
+
 **Enum:** `value()` là `value` của option được chọn (int **hoặc** QString, người dùng chọn qua overload).
 Overload `addEnum(id, QStringList labels, int index)` tạo option với `value = index`.
 
@@ -386,7 +389,7 @@ property đó. Kiểu lưu trữ và validation vẫn theo `typeId` gốc.
 | Bool     | *không tạo editor* trong Tree/List (checkbox vẽ bởi delegate qua `CheckStateRole`); `QCheckBox` trong Form | Click hoặc Space để toggle |
 | Int      | `QSpinBox`                                                    | Áp `min/max/step/prefix/suffix`; `keyboardTracking = false`             |
 | Double   | `QDoubleSpinBox`                                              | Như Int + `decimals`; khi không edit hiển thị tối đa `decimals` chữ số thập phân theo `QLocale`, bỏ số 0 thừa |
-| String   | `QLineEdit`                                                   | `maxLength`, `placeholder`, `QRegularExpressionValidator` từ `regularExpression` |
+| String   | `QLineEdit`; `QPlainTextEdit` khi `multiline` (1.1)           | `maxLength`, `placeholder`, `QRegularExpressionValidator` từ `regularExpression`; nhiều dòng: `placeholder`, cao tối thiểu 4 dòng, Tab chuyển tiếp |
 | Enum     | `QComboBox` (không editable)                                  | Commit ngay khi chọn (`notifyCommit` trên `activated`)                  |
 | FilePath | `PathEdit` nội bộ = `QLineEdit` + `QToolButton "…"`           | Nút mở `QFileDialog::getOpenFileName`/`getSaveFileName` theo `dialogMode`; chọn xong → `notifyCommit` |
 | DirPath  | `PathEdit` nội bộ (chế độ thư mục)                            | `QFileDialog::getExistingDirectory`                                    |
@@ -405,7 +408,8 @@ Hiển thị đường dẫn dài trong ô (không edit): elide ở giữa (`Qt:
   cũng dùng được; `PathEdit` nội bộ cũng dùng nó). `PropertyDelegate::eventFilter` bỏ qua `FocusOut` khi scope còn sống,
   nên editor không bị đóng/commit giữa chừng. [Quyết định D6, D24]
 - Phím: **Enter** commit + đóng; **Esc** hủy; **Tab/Shift+Tab** commit rồi mở editor ở ô Value kế tiếp/trước đó có thể edit
-  (bỏ qua group và read-only); focus-out commit.
+  (bỏ qua group và read-only); focus-out commit. Trong editor nhiều dòng (1.1) **Enter** xuống dòng, **Ctrl+Enter** commit.
+  Editor cao hơn hàng (nhiều dòng) giãn xuống dưới, hoặc lên trên khi ở cuối viewport.
 
 ### 5.5 `PropertyTreeView : QTreeView`
 
@@ -435,19 +439,44 @@ public:
 
 ### 5.6 `PropertyFormView : QScrollArea` (1.1)
 
-- Dựng `QFormLayout` cho mỗi group; group lồng thành `QGroupBox` có thể thu gọn (checkable-less, nút ▸ ở tiêu đề).
-- Mỗi property có một editor **thường trực** tạo bởi `EditorFactory` (Bool dùng `QCheckBox`).
-- Commit: editor phát tín hiệu thay đổi → `model->setData` (spinbox: `editingFinished`; line edit: `editingFinished`;
-  combo/checkbox/path: ngay lập tức hoặc qua `notifyCommit`). Validation lỗi → khôi phục giá trị cũ trên editor + tooltip lỗi.
-- Đồng bộ ngược: lắng nghe `dataChanged` → `setEditorData` (chặn vòng lặp bằng `QSignalBlocker`);
-  `rowsInserted/rowsRemoved/modelReset/layoutChanged` → dựng lại phần bị ảnh hưởng (1.1 cho phép dựng lại toàn bộ group chứa nó).
-- Tôn trọng `visible` (ẩn cả label + editor), `enabled`, `readOnly`.
+```cpp
+class PropertyFormView : public QScrollArea {
+public:
+    explicit PropertyFormView(QWidget* parent = nullptr);
+    void setModel(QAbstractItemModel* model);           // PropertyModel hoặc proxy của nó; không sở hữu
+    QAbstractItemModel* model() const;
+    QWidget* editor(const QString& path) const;         // nullptr với group và path bị lọc
+    bool isExpanded(const QString& groupPath) const;    // lưu theo path, mặc định true
+    void setExpanded(const QString& groupPath, bool expanded);
+};
+```
+
+- Các property liền nhau của một group dùng chung một `QFormLayout` (label | editor). Mỗi group là một **section** thu gọn
+  được: `QToolButton` tiêu đề checkable (chữ đậm, mũi tên) và phần thân thụt lề. Trạng thái thu gọn lưu theo path, giữ qua
+  các lần dựng lại. [D37]
+- Mỗi property có một editor **thường trực** tạo bởi `EditorFactory` (Bool dùng `QCheckBox`), hiển thị có khung.
+  Kiểu không có editor hiển thị bằng `QLabel` chỉ đọc (chọn được chữ) với `displayText`.
+- Commit (R3, `model->setData`): khi mất focus (trừ khi `EditorDialogScope` hoặc popup đang mở, hoặc focus chuyển bên trong
+  editor), khi nhấn Enter (Ctrl+Enter với text nhiều dòng), ngay lập tức với nút checkable (`toggled`) và editor gọi
+  `notifyCommit` (combo box, path). Giá trị không đổi thì không ghi. Giá trị bị từ chối → editor hiện lại giá trị của model +
+  tooltip lỗi. **Esc** đưa giá trị của model trở lại editor.
+- Đồng bộ ngược: `dataChanged` → label (tên hiển thị, đậm khi modified, tooltip), hiển thị, enabled/read-only,
+  `applyAttributes` khi `AttributesRole` đổi, `setEditorData` khi giá trị khác (chặn signal).
+  `rowsInserted/rowsRemoved/rowsMoved/modelReset/layoutChanged` → form được **dựng lại một lần**, khi quay về event loop hoặc
+  khi gọi `editor()` / `setExpanded()`; editor đang có focus được commit trước và nhận lại focus sau đó; widget cũ bị xóa
+  sau (editor có thể đang chạy handler của chính nó). [D38]
+- Tôn trọng `visible` (ẩn label + editor, hoặc cả section), `enabled` (label và editor bị disable) và `readOnly`
+  (editor bị disable, label bình thường).
+- Menu chuột phải trên label: **Reset to default**; trên tiêu đề section: **Reset group** (cùng quy tắc với tree view, D34).
 - Không dùng `QDataWidgetMapper` (không hỗ trợ cây).
 
 ### 5.7 Tìm kiếm / lọc (1.1)
 
-`PropertyFilterProxyModel : QSortFilterProxyModel` với `recursiveFilteringEnabled = true`, lọc theo `displayName`
-(không phân biệt hoa thường). Group hiển thị nếu có con khớp. `PropertyTreeView` và `PropertyFormView` làm việc với proxy.
+`PropertyFilterProxyModel : QSortFilterProxyModel` (trong `qpb::core`) với `recursiveFilteringEnabled = true`, lọc theo
+`displayName` (cột tên, `DisplayRole`), mặc định không phân biệt hoa thường. Chuỗi lọc đặt bằng hàm chuẩn
+`setFilterFixedString()` / `setFilterRegularExpression()`. Group hiển thị khi có con cháu khớp; khi tên group khớp thì mọi
+con cháu của nó cũng hiển thị (kiểm tra trong `filterAcceptsRow()`, không dùng `autoAcceptChildRows`, để lớp con vẫn thấy
+mọi hàng). Property bị ẩn không bao giờ khớp. `PropertyTreeView` và `PropertyFormView` làm việc với proxy. [D39]
 
 ---
 
@@ -709,3 +738,7 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D33| `qpb/` chỉ dùng ASCII (luật R6)                                              | MSVC cảnh báo C4819 trên code page không phải UTF-8 làm hỏng consumer dùng `/WX`        |
 | D34| Read-only/disabled chỉ chặn người dùng sửa (`setData`), không chặn code ứng dụng | RC: ứng dụng không cập nhật được ô trạng thái read-only của chính nó; reset group phụ thuộc thứ tự |
 | D35| Cột tên tự giãn theo nội dung cho tới khi độ rộng được đặt rõ ràng           | RC: ảnh chụp cho thấy tên bị cắt ở độ rộng mặc định                                   |
+| D36| String nhiều dòng là attribute của `String`, không phải kiểu mới; ô nối các dòng bằng ¶ | Lưu trữ và validation giữ nguyên; ô chỉ đủ chỗ cho một dòng          |
+| D37| Section của form dùng `QToolButton` tiêu đề checkable thay cho `QGroupBox`  | `QGroupBox` không thu gọn được nếu không có check box, mà check box dễ hiểu là "bật/tắt" |
+| D38| Form view dựng lại một lần mỗi vòng event loop khi cấu trúc đổi; truy vấn thì dựng lại ngay | Đổi bộ lọc phát nhiều signal hàng; editor có thể bị thay khi đang commit |
+| D39| Proxy lọc chấp nhận con cháu của group khớp trong `filterAcceptsRow()`      | `autoAcceptChildRows` bỏ qua `filterAcceptsRow()`, làm mất quy tắc của lớp con         |

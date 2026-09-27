@@ -174,7 +174,19 @@ void PropertyDelegate::setModelData(
 void PropertyDelegate::updateEditorGeometry(
     QWidget* editor, const QStyleOptionViewItem& option, const QModelIndex&) const
 {
-    editor->setGeometry(option.rect);
+    // Editors taller than a row (multi-line text) grow downwards, or upwards
+    // when they would leave the viewport.
+    QRect rect = option.rect;
+    if (editor->minimumHeight() > rect.height()) {
+        rect.setHeight(editor->minimumHeight());
+        if (const QWidget* viewport = editor->parentWidget()) {
+            if (rect.bottom() >= viewport->height())
+                rect.moveBottom(viewport->height() - 1);
+            if (rect.top() < 0)
+                rect.moveTop(0);
+        }
+    }
+    editor->setGeometry(rect);
 }
 
 void PropertyDelegate::paint(
@@ -298,6 +310,13 @@ bool PropertyDelegate::eventFilter(QObject* object, QEvent* event)
             return true;
         case Qt::Key_Return:
         case Qt::Key_Enter:
+            // Multi-line text: Enter starts a new line, Ctrl+Enter commits.
+            if (detail::isMultilineText(object)) {
+                if (!keyEvent->modifiers().testFlag(Qt::ControlModifier))
+                    return false;
+                d->commitAndCloseLater(editor);
+                return true;
+            }
             d->commitAndCloseLater(editor);
             return false;
         case Qt::Key_Escape:

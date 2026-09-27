@@ -41,6 +41,7 @@ private slots:
     void doubleRejectsNaN();
     void stringMaxLengthAndPattern();
     void stringInvalidPatternIsIgnored();
+    void stringMultiline();
     void enumByIndex();
     void enumByStringValue();
     void filePathMustExist();
@@ -156,6 +157,22 @@ void tst_TypeRegistry::stringMaxLengthAndPattern()
     Property& n = root->addString(QStringLiteral("n"), QString());
     QVERIFY(n.setValue(42));
     QCOMPARE(n.value(), QVariant(QStringLiteral("42")));
+}
+
+// Since 1.1: multi-line strings keep their line breaks and display on one line.
+void tst_TypeRegistry::stringMultiline()
+{
+    auto root = PropertyGroup::create(QStringLiteral("root"));
+    Property& plain = root->addString(QStringLiteral("plain"), QStringLiteral("a\nb"));
+    Property& notes
+        = root->addString(QStringLiteral("notes"), QStringLiteral("one\r\ntwo\nthree")).multiline();
+    QCOMPARE(notes.attribute(Attr::Multiline), QVariant(true));
+    QCOMPARE(notes.value().toString(), QStringLiteral("one\r\ntwo\nthree"));
+    QCOMPARE(display(notes), QStringLiteral("one \u00B6 two \u00B6 three"));
+    QCOMPARE(display(plain), QStringLiteral("a\nb")); // unchanged without the attribute
+
+    root->addString(QStringLiteral("off"), QString()).multiline(false);
+    QCOMPARE(root->child(QStringLiteral("off"))->attribute(Attr::Multiline), QVariant(false));
 }
 
 void tst_TypeRegistry::stringInvalidPatternIsIgnored()
