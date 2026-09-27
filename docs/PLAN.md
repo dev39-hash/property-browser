@@ -220,7 +220,7 @@ Total ≈ 9.5 h.
 functions across property, model, serialization), titles and live values in `QObjectPropertySource` (3 tests), tree and
 form views unchanged (2 tests), `tests/api_compat/v1_3.cpp` and `api-1.3.txt` (superset of 1.2), `examples/object_editor`
 with titles, a live counter and undo that skips it, SPEC §4.2, §4.8, §4.9, D43, D44. RC round 5 closed F8 and F9.
-Remaining: M7.7 (release 1.3.0).
+M7.7: released as `1.3.0`.
 
 ---
 
