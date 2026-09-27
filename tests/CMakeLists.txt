@@ -24,4 +24,5 @@ endfunction()
 
 add_subdirectory(api)
 add_subdirectory(core)
+add_subdirectory(widgets)
 add_subdirectory(consumer)

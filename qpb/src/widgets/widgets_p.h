@@ -38,6 +38,9 @@ signals:
 // delegate's address) so events from their child widgets can be mapped back.
 inline constexpr char EditorOwnerProperty[] = "_qpb_editorOwner";
 
+// The (persistent) index an editor was opened for (dynamic property).
+inline constexpr char EditorIndexProperty[] = "_qpb_editorIndex";
+
 // Number of EditorDialogScope objects alive for an editor (dynamic property).
 inline constexpr char DialogDepthProperty[] = "_qpb_dialogDepth";
 

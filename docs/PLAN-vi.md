@@ -95,6 +95,13 @@ model và chạy pipeline giá trị từ bản `qpb/` link static (cũng là ki
 
 ### M3 — Tree view + editor (≈ 24h)
 
+**Trạng thái:** xong, trừ việc gắn tag nội bộ `0.1.0` (M3.8) để bạn quyết định. `qpb::widgets` đã cài đặt
+(`EditorFactory` với 7 editor dựng sẵn, `PathEdit` nội bộ, `PropertyDelegate`, `PropertyTreeView`); cả 5 example đã link và chạy.
+`tests/widgets` kiểm tra factory (13 hàm) và tương tác view/delegate (19 hàm: Enter/Esc/focus-out, Tab/Shift+Tab bỏ qua hàng
+không sửa được, commit enum và path, bảo vệ focus khi mở dialog, checkbox, tooltip lỗi, các mode, hàng ẩn, menu reset, proxy model).
+Kiểm tra thủ công bằng ảnh chụp offscreen (`QPB_SCREENSHOT_DIR`). Điểm dừng quyết định sau M3.6 không xảy ra: chỉ cần một event
+filter và override `moveCursor()`.
+
 Làm phần rủi ro cao trước: Int + String + FilePath (UX editor, focus khi mở dialog).
 
 | ID    | Task                                                                                         | Giờ | Done khi |

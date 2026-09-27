@@ -394,7 +394,9 @@ Hiển thị đường dẫn dài trong ô (không edit): elide ở giữa (`Qt:
 - `createEditor/setEditorData/setModelData` ủy quyền cho `EditorFactory`. `setModelData` gọi `model->setData`;
   nếu trả `false` (validation lỗi) thì editor vẫn đóng, model giữ giá trị cũ, view hiển thị thông báo lỗi
   (tooltip tại ô, `QToolTip::showText`) — hành vi 1.0. [Quyết định D5]
-- `paint`: dùng `EditorHandler::paint` nếu có; Bool vẽ checkbox căn giữa trái; group vẽ nền `QPalette::AlternateBase`, chữ đậm.
+- `paint`: dùng `EditorHandler::paint` nếu có; checkbox lấy từ `CheckStateRole`; group vẽ nền `QPalette::Button`, chữ đậm; tên property
+  đã sửa in đậm; giá trị read-only (enabled nhưng không sửa được, không phải checkbox) dùng màu `QPalette::PlaceholderText`; chữ giá trị
+  bị cắt ở giữa khi dài. [D30]
 - **Focus khi mở dialog:** editor đang mở dialog modal giữ một `qpb::EditorDialogScope` (public, để editor tùy biến như nút chọn màu
   cũng dùng được; `PathEdit` nội bộ cũng dùng nó). `PropertyDelegate::eventFilter` bỏ qua `FocusOut` khi scope còn sống,
   nên editor không bị đóng/commit giữa chừng. [Quyết định D6, D24]
@@ -423,6 +425,8 @@ public:
   `itemsExpandable = false`, `expandAll()` và giữ expand khi có hàng mới; group hiển thị như section header (spanned, không thu gọn được). [Quyết định D4]
 - Context menu trên ô property: **Reset to default** (disabled nếu không modified hoặc read-only); trên group: **Reset group**.
 - Chuyển mode không tạo lại model, không mất giá trị, không mất selection hiện tại.
+- Override `moveCursor()` để `MoveNext`/`MovePrevious` (Tab / Shift+Tab khi đang sửa) nhảy tới giá trị sửa được kế tiếp,
+  bỏ qua group, hàng read-only, checkbox và hàng bị ẩn.
 
 ### 5.6 `PropertyFormView : QScrollArea` (1.1)
 
@@ -691,3 +695,4 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D27| `qpb/qpbcore.h` cho người chỉ dùng core; `qpb/qpb.h` gồm cả widgets         | Consumer chỉ dùng core không cần QtWidgets                                             |
 | D28| Validator nhận cả property (`(value, property)`) như `TypeHandler::validate` | Một chữ ký thống nhất; validator đọc được attribute                                   |
 | D29| Id trùng hoặc không hợp lệ chỉ ghi cảnh báo, không assert                     | Assert sẽ làm sập bản debug của ứng dụng dùng thư viện; cây vẫn nhất quán              |
+| D30| Hàng group dùng `QPalette::Button`; giá trị read-only được làm mờ          | `AlternateBase` trùng màu hàng xen kẽ; read-only cần dấu hiệu nhận biết               |
