@@ -1,0 +1,345 @@
+qpb/Attributes.h | qpb | enum class FileMode
+qpb/Attributes.h | qpb | struct EnumOption
+qpb/Attributes.h | qpb::Attr | inline constexpr QLatin1StringView Decimals{"decimals"}
+qpb/Attributes.h | qpb::Attr | inline constexpr QLatin1StringView DefaultDir{"defaultDir"}
+qpb/Attributes.h | qpb::Attr | inline constexpr QLatin1StringView DialogMode{"dialogMode"}
+qpb/Attributes.h | qpb::Attr | inline constexpr QLatin1StringView EditorId{"editorId"}
+qpb/Attributes.h | qpb::Attr | inline constexpr QLatin1StringView Filter{"filter"}
+qpb/Attributes.h | qpb::Attr | inline constexpr QLatin1StringView MaxLength{"maxLength"}
+qpb/Attributes.h | qpb::Attr | inline constexpr QLatin1StringView Maximum{"maximum"}
+qpb/Attributes.h | qpb::Attr | inline constexpr QLatin1StringView Minimum{"minimum"}
+qpb/Attributes.h | qpb::Attr | inline constexpr QLatin1StringView Multiline{"multiline"}
+qpb/Attributes.h | qpb::Attr | inline constexpr QLatin1StringView MustExist{"mustExist"}
+qpb/Attributes.h | qpb::Attr | inline constexpr QLatin1StringView Options{"options"}
+qpb/Attributes.h | qpb::Attr | inline constexpr QLatin1StringView Placeholder{"placeholder"}
+qpb/Attributes.h | qpb::Attr | inline constexpr QLatin1StringView Prefix{"prefix"}
+qpb/Attributes.h | qpb::Attr | inline constexpr QLatin1StringView RegularExpression{"regularExpression"}
+qpb/Attributes.h | qpb::Attr | inline constexpr QLatin1StringView Step{"step"}
+qpb/Attributes.h | qpb::Attr | inline constexpr QLatin1StringView Suffix{"suffix"}
+qpb/Attributes.h | qpb::EnumOption | QString label
+qpb/Attributes.h | qpb::EnumOption | QVariant value
+qpb/Attributes.h | qpb::EnumOption | friend bool operator!=(const EnumOption&a,const EnumOption&b)
+qpb/Attributes.h | qpb::EnumOption | friend bool operator==(const EnumOption&a,const EnumOption&b)
+qpb/Attributes.h | qpb::FileMode | Open
+qpb/Attributes.h | qpb::FileMode | Save
+qpb/Property.h | qpb | class PropertyGroup
+qpb/Property.h | qpb | class QPB_CORE_EXPORT Property
+qpb/Property.h | qpb::Property | Flags flags()const
+qpb/Property.h | qpb::Property | Property&operator=(const Property&)=delete
+qpb/Property.h | qpb::Property | Property(const Property&)=delete
+qpb/Property.h | qpb::Property | PropertyGroup*parent()const
+qpb/Property.h | qpb::Property | PropertyGroup*toGroup()
+qpb/Property.h | qpb::Property | QString displayName()const
+qpb/Property.h | qpb::Property | QString id()const
+qpb/Property.h | qpb::Property | QString path()const
+qpb/Property.h | qpb::Property | QString toolTip()const
+qpb/Property.h | qpb::Property | QVariant attribute(const QString&key,const QVariant&defaultValue=QVariant())const
+qpb/Property.h | qpb::Property | QVariant defaultValue()const
+qpb/Property.h | qpb::Property | QVariant value()const
+qpb/Property.h | qpb::Property | QVariantMap attributes()const
+qpb/Property.h | qpb::Property | TypeId typeId()const
+qpb/Property.h | qpb::Property | Validator validator()const
+qpb/Property.h | qpb::Property | bool hasAttribute(const QString&key)const
+qpb/Property.h | qpb::Property | bool isEnabled()const
+qpb/Property.h | qpb::Property | bool isGroup()const
+qpb/Property.h | qpb::Property | bool isLive()const
+qpb/Property.h | qpb::Property | bool isModified()const
+qpb/Property.h | qpb::Property | bool isReadOnly()const
+qpb/Property.h | qpb::Property | bool isVisible()const
+qpb/Property.h | qpb::Property | bool resetToDefault()
+qpb/Property.h | qpb::Property | bool setValue(const QVariant&value)
+qpb/Property.h | qpb::Property | const PropertyGroup*toGroup()const
+qpb/Property.h | qpb::Property | enum class Flag
+qpb/Property.h | qpb::Property | static std::unique_ptr<Property>create(const TypeId&type,const QString&id,const QVariant&value=QVariant())
+qpb/Property.h | qpb::Property | using Condition=std::function<bool(const QVariant&sourceValue)>
+qpb/Property.h | qpb::Property | using Validator=std::function<ValidationResult(const QVariant&value,const Property&property)>
+qpb/Property.h | qpb::Property | virtual ~Property()
+qpb/Property.h | qpb::Property | void clearEnabledWhen()
+qpb/Property.h | qpb::Property | void clearVisibleWhen()
+qpb/Property.h | qpb::Property | void removeAttribute(const QString&key)
+qpb/Property.h | qpb::Property | void setAttribute(const QString&key,const QVariant&value)
+qpb/Property.h | qpb::Property | void setDefaultValue(const QVariant&value)
+qpb/Property.h | qpb::Property | void setDisplayName(const QString&name)
+qpb/Property.h | qpb::Property | void setEnabled(bool enabled)
+qpb/Property.h | qpb::Property | void setEnabledWhen(const QString&sourcePath)
+qpb/Property.h | qpb::Property | void setEnabledWhen(const QString&sourcePath,Condition condition)
+qpb/Property.h | qpb::Property | void setEnabledWhen(const QString&sourcePath,const QVariant&value)
+qpb/Property.h | qpb::Property | void setEnabledWhen(const QString&sourcePath,int value)
+qpb/Property.h | qpb::Property | void setFlag(Flag flag,bool on=true)
+qpb/Property.h | qpb::Property | void setFlags(Flags flags)
+qpb/Property.h | qpb::Property | void setLive(bool live)
+qpb/Property.h | qpb::Property | void setReadOnly(bool readOnly)
+qpb/Property.h | qpb::Property | void setToolTip(const QString&toolTip)
+qpb/Property.h | qpb::Property | void setValidator(Validator validator)
+qpb/Property.h | qpb::Property | void setVisible(bool visible)
+qpb/Property.h | qpb::Property | void setVisibleWhen(const QString&sourcePath)
+qpb/Property.h | qpb::Property | void setVisibleWhen(const QString&sourcePath,Condition condition)
+qpb/Property.h | qpb::Property | void setVisibleWhen(const QString&sourcePath,const QVariant&value)
+qpb/Property.h | qpb::Property | void setVisibleWhen(const QString&sourcePath,int value)
+qpb/Property.h | qpb::Property::Flag | Disabled=0x2
+qpb/Property.h | qpb::Property::Flag | Hidden=0x4
+qpb/Property.h | qpb::Property::Flag | Live=0x8
+qpb/Property.h | qpb::Property::Flag | ReadOnly=0x1
+qpb/Property.h | qpb::Property[protected] | const detail::PropertyPrivate*d_func()const
+qpb/Property.h | qpb::Property[protected] | detail::PropertyPrivate*d_func()
+qpb/Property.h | qpb::Property[protected] | explicit Property(std::unique_ptr<detail::PropertyPrivate>d)
+qpb/PropertyBuilders.h | qpb | class PropertyBuilderBase
+qpb/PropertyBuilders.h | qpb | class QPB_CORE_EXPORT BoolBuilder:public PropertyBuilderBase<BoolBuilder>
+qpb/PropertyBuilders.h | qpb | class QPB_CORE_EXPORT DirPathBuilder:public PropertyBuilderBase<DirPathBuilder>
+qpb/PropertyBuilders.h | qpb | class QPB_CORE_EXPORT DoubleBuilder:public PropertyBuilderBase<DoubleBuilder>
+qpb/PropertyBuilders.h | qpb | class QPB_CORE_EXPORT EnumBuilder:public PropertyBuilderBase<EnumBuilder>
+qpb/PropertyBuilders.h | qpb | class QPB_CORE_EXPORT FilePathBuilder:public PropertyBuilderBase<FilePathBuilder>
+qpb/PropertyBuilders.h | qpb | class QPB_CORE_EXPORT Int64Builder:public PropertyBuilderBase<Int64Builder>
+qpb/PropertyBuilders.h | qpb | class QPB_CORE_EXPORT IntBuilder:public PropertyBuilderBase<IntBuilder>
+qpb/PropertyBuilders.h | qpb | class QPB_CORE_EXPORT StringBuilder:public PropertyBuilderBase<StringBuilder>
+qpb/PropertyBuilders.h | qpb::BoolBuilder | explicit BoolBuilder(Property&property)
+qpb/PropertyBuilders.h | qpb::DirPathBuilder | DirPathBuilder&defaultDir(const QString&directory)
+qpb/PropertyBuilders.h | qpb::DirPathBuilder | DirPathBuilder&mustExist(bool mustExist=true)
+qpb/PropertyBuilders.h | qpb::DirPathBuilder | explicit DirPathBuilder(Property&property)
+qpb/PropertyBuilders.h | qpb::DoubleBuilder | DoubleBuilder&decimals(int decimals)
+qpb/PropertyBuilders.h | qpb::DoubleBuilder | DoubleBuilder&maximum(double maximum)
+qpb/PropertyBuilders.h | qpb::DoubleBuilder | DoubleBuilder&minimum(double minimum)
+qpb/PropertyBuilders.h | qpb::DoubleBuilder | DoubleBuilder&prefix(const QString&prefix)
+qpb/PropertyBuilders.h | qpb::DoubleBuilder | DoubleBuilder&range(double minimum,double maximum)
+qpb/PropertyBuilders.h | qpb::DoubleBuilder | DoubleBuilder&step(double step)
+qpb/PropertyBuilders.h | qpb::DoubleBuilder | DoubleBuilder&suffix(const QString&suffix)
+qpb/PropertyBuilders.h | qpb::DoubleBuilder | explicit DoubleBuilder(Property&property)
+qpb/PropertyBuilders.h | qpb::EnumBuilder | explicit EnumBuilder(Property&property)
+qpb/PropertyBuilders.h | qpb::FilePathBuilder | FilePathBuilder&defaultDir(const QString&directory)
+qpb/PropertyBuilders.h | qpb::FilePathBuilder | FilePathBuilder&dialogMode(FileMode mode)
+qpb/PropertyBuilders.h | qpb::FilePathBuilder | FilePathBuilder&filter(const QString&filter)
+qpb/PropertyBuilders.h | qpb::FilePathBuilder | FilePathBuilder&mustExist(bool mustExist=true)
+qpb/PropertyBuilders.h | qpb::FilePathBuilder | explicit FilePathBuilder(Property&property)
+qpb/PropertyBuilders.h | qpb::Int64Builder | Int64Builder&maximum(qint64 maximum)
+qpb/PropertyBuilders.h | qpb::Int64Builder | Int64Builder&minimum(qint64 minimum)
+qpb/PropertyBuilders.h | qpb::Int64Builder | Int64Builder&prefix(const QString&prefix)
+qpb/PropertyBuilders.h | qpb::Int64Builder | Int64Builder&range(qint64 minimum,qint64 maximum)
+qpb/PropertyBuilders.h | qpb::Int64Builder | Int64Builder&step(qint64 step)
+qpb/PropertyBuilders.h | qpb::Int64Builder | Int64Builder&suffix(const QString&suffix)
+qpb/PropertyBuilders.h | qpb::Int64Builder | explicit Int64Builder(Property&property)
+qpb/PropertyBuilders.h | qpb::IntBuilder | IntBuilder&maximum(int maximum)
+qpb/PropertyBuilders.h | qpb::IntBuilder | IntBuilder&minimum(int minimum)
+qpb/PropertyBuilders.h | qpb::IntBuilder | IntBuilder&prefix(const QString&prefix)
+qpb/PropertyBuilders.h | qpb::IntBuilder | IntBuilder&range(int minimum,int maximum)
+qpb/PropertyBuilders.h | qpb::IntBuilder | IntBuilder&step(int step)
+qpb/PropertyBuilders.h | qpb::IntBuilder | IntBuilder&suffix(const QString&suffix)
+qpb/PropertyBuilders.h | qpb::IntBuilder | explicit IntBuilder(Property&property)
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase | Derived&attribute(const QString&key,const QVariant&value)
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase | Derived&displayName(const QString&name)
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase | Derived&editor(const TypeId&editorId)
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase | Derived&enabled(bool enabled=true)
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase | Derived&enabledWhen(const QString&sourcePath)
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase | Derived&enabledWhen(const QString&sourcePath,Property::Condition condition)
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase | Derived&enabledWhen(const QString&sourcePath,const QVariant&value)
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase | Derived&enabledWhen(const QString&sourcePath,int value)
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase | Derived&live(bool live=true)
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase | Derived&readOnly(bool readOnly=true)
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase | Derived&toolTip(const QString&toolTip)
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase | Derived&validator(Property::Validator validator)
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase | Derived&visible(bool visible=true)
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase | Derived&visibleWhen(const QString&sourcePath)
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase | Derived&visibleWhen(const QString&sourcePath,Property::Condition condition)
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase | Derived&visibleWhen(const QString&sourcePath,const QVariant&value)
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase | Derived&visibleWhen(const QString&sourcePath,int value)
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase | Property&property()const
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase | operator Property&()const
+qpb/PropertyBuilders.h | qpb::PropertyBuilderBase[protected] | explicit PropertyBuilderBase(Property&property):m_property(&property)
+qpb/PropertyBuilders.h | qpb::StringBuilder | StringBuilder&maxLength(int length)
+qpb/PropertyBuilders.h | qpb::StringBuilder | StringBuilder&multiline(bool multiline=true)
+qpb/PropertyBuilders.h | qpb::StringBuilder | StringBuilder&placeholder(const QString&text)
+qpb/PropertyBuilders.h | qpb::StringBuilder | StringBuilder&regularExpression(const QString&pattern)
+qpb/PropertyBuilders.h | qpb::StringBuilder | explicit StringBuilder(Property&property)
+qpb/PropertyFilterProxyModel.h | qpb | class QPB_CORE_EXPORT PropertyFilterProxyModel:public QSortFilterProxyModel
+qpb/PropertyFilterProxyModel.h | qpb::PropertyFilterProxyModel | explicit PropertyFilterProxyModel(QObject*parent=nullptr)
+qpb/PropertyFilterProxyModel.h | qpb::PropertyFilterProxyModel | ~PropertyFilterProxyModel()override
+qpb/PropertyFilterProxyModel.h | qpb::PropertyFilterProxyModel[protected] | bool filterAcceptsRow(int sourceRow,const QModelIndex&sourceParent)const override
+qpb/PropertyGroup.h | qpb | class QPB_CORE_EXPORT PropertyGroup:public Property
+qpb/PropertyGroup.h | qpb::PropertyGroup | BoolBuilder addBool(const QString&id,bool value)
+qpb/PropertyGroup.h | qpb::PropertyGroup | DirPathBuilder addDirPath(const QString&id,const QString&path)
+qpb/PropertyGroup.h | qpb::PropertyGroup | DoubleBuilder addDouble(const QString&id,double value)
+qpb/PropertyGroup.h | qpb::PropertyGroup | EnumBuilder addEnum(const QString&id,const QList<EnumOption>&options,const QVariant&value)
+qpb/PropertyGroup.h | qpb::PropertyGroup | EnumBuilder addEnum(const QString&id,const QStringList&labels,int currentIndex)
+qpb/PropertyGroup.h | qpb::PropertyGroup | FilePathBuilder addFilePath(const QString&id,const QString&path)
+qpb/PropertyGroup.h | qpb::PropertyGroup | Int64Builder addInt64(const QString&id,qint64 value)
+qpb/PropertyGroup.h | qpb::PropertyGroup | IntBuilder addInt(const QString&id,int value)
+qpb/PropertyGroup.h | qpb::PropertyGroup | Property&add(const TypeId&type,const QString&id,const QVariant&value)
+qpb/PropertyGroup.h | qpb::PropertyGroup | Property&add(std::unique_ptr<Property>property)
+qpb/PropertyGroup.h | qpb::PropertyGroup | Property*child(const QString&id)const
+qpb/PropertyGroup.h | qpb::PropertyGroup | Property*child(int index)const
+qpb/PropertyGroup.h | qpb::PropertyGroup | Property*find(const QString&path)const
+qpb/PropertyGroup.h | qpb::PropertyGroup | PropertyGroup&addGroup(const QString&id)
+qpb/PropertyGroup.h | qpb::PropertyGroup | QList<Property*>children()const
+qpb/PropertyGroup.h | qpb::PropertyGroup | StringBuilder addString(const QString&id,const QString&value)
+qpb/PropertyGroup.h | qpb::PropertyGroup | bool remove(const QString&id)
+qpb/PropertyGroup.h | qpb::PropertyGroup | int childCount()const
+qpb/PropertyGroup.h | qpb::PropertyGroup | int indexOf(const Property*child)const
+qpb/PropertyGroup.h | qpb::PropertyGroup | static std::unique_ptr<PropertyGroup>create(const QString&id)
+qpb/PropertyGroup.h | qpb::PropertyGroup | ~PropertyGroup()override
+qpb/PropertyGroup.h | qpb::PropertyGroup[protected] | explicit PropertyGroup(std::unique_ptr<detail::PropertyPrivate>d)
+qpb/PropertyModel.h | qpb | class Property
+qpb/PropertyModel.h | qpb | class QPB_CORE_EXPORT PropertyModel:public QAbstractItemModel
+qpb/PropertyModel.h | qpb::PropertyModel | Property*find(const QString&path)const
+qpb/PropertyModel.h | qpb::PropertyModel | Property*propertyAt(const QModelIndex&index)const
+qpb/PropertyModel.h | qpb::PropertyModel | PropertyGroup*root()const
+qpb/PropertyModel.h | qpb::PropertyModel | QHash<int,QByteArray>roleNames()const override
+qpb/PropertyModel.h | qpb::PropertyModel | QMetaObject::Connection onValueChanged(const QString&path,const QObject*context,std::function<void(const QString&path,const QVariant&value)>handler)
+qpb/PropertyModel.h | qpb::PropertyModel | QMetaObject::Connection onValueChanged(const QString&path,const QObject*context,std::function<void(const QVariant&value)>handler)
+qpb/PropertyModel.h | qpb::PropertyModel | QModelIndex index(int row,int column,const QModelIndex&parent=QModelIndex())const override
+qpb/PropertyModel.h | qpb::PropertyModel | QModelIndex indexOf(const Property*property,int column=NameColumn)const
+qpb/PropertyModel.h | qpb::PropertyModel | QModelIndex parent(const QModelIndex&child)const override
+qpb/PropertyModel.h | qpb::PropertyModel | QVariant data(const QModelIndex&index,int role=Qt::DisplayRole)const override
+qpb/PropertyModel.h | qpb::PropertyModel | QVariant headerData(int section,Qt::Orientation orientation,int role=Qt::DisplayRole)const override
+qpb/PropertyModel.h | qpb::PropertyModel | Qt::ItemFlags flags(const QModelIndex&index)const override
+qpb/PropertyModel.h | qpb::PropertyModel | bool hasChildren(const QModelIndex&parent=QModelIndex())const override
+qpb/PropertyModel.h | qpb::PropertyModel | bool resetToDefault(const QModelIndex&index)
+qpb/PropertyModel.h | qpb::PropertyModel | bool setData(const QModelIndex&index,const QVariant&value,int role=Qt::EditRole)override
+qpb/PropertyModel.h | qpb::PropertyModel | bool setValue(const QString&path,const QVariant&value)
+qpb/PropertyModel.h | qpb::PropertyModel | enum Column
+qpb/PropertyModel.h | qpb::PropertyModel | enum Role
+qpb/PropertyModel.h | qpb::PropertyModel | explicit PropertyModel(QObject*parent=nullptr)
+qpb/PropertyModel.h | qpb::PropertyModel | explicit PropertyModel(std::unique_ptr<PropertyGroup>root,QObject*parent=nullptr)
+qpb/PropertyModel.h | qpb::PropertyModel | int columnCount(const QModelIndex&parent=QModelIndex())const override
+qpb/PropertyModel.h | qpb::PropertyModel | int rowCount(const QModelIndex&parent=QModelIndex())const override
+qpb/PropertyModel.h | qpb::PropertyModel | signals:void valueChanged(const QString&path,const QVariant&newValue,const QVariant&oldValue)
+qpb/PropertyModel.h | qpb::PropertyModel | void batchValueChanged(const QStringList&paths)
+qpb/PropertyModel.h | qpb::PropertyModel | void beginBatch()
+qpb/PropertyModel.h | qpb::PropertyModel | void endBatch()
+qpb/PropertyModel.h | qpb::PropertyModel | void setRoot(std::unique_ptr<PropertyGroup>root)
+qpb/PropertyModel.h | qpb::PropertyModel | void validationFailed(const QString&path,const QVariant&rejectedValue,const QString&message)
+qpb/PropertyModel.h | qpb::PropertyModel | ~PropertyModel()override
+qpb/PropertyModel.h | qpb::PropertyModel::Column | NameColumn=0
+qpb/PropertyModel.h | qpb::PropertyModel::Column | ValueColumn=1
+qpb/PropertyModel.h | qpb::PropertyModel::Role | AttributesRole
+qpb/PropertyModel.h | qpb::PropertyModel::Role | IsGroupRole
+qpb/PropertyModel.h | qpb::PropertyModel::Role | IsModifiedRole
+qpb/PropertyModel.h | qpb::PropertyModel::Role | IsVisibleRole
+qpb/PropertyModel.h | qpb::PropertyModel::Role | PathRole
+qpb/PropertyModel.h | qpb::PropertyModel::Role | PropertyRole=Qt::UserRole + 1
+qpb/PropertyModel.h | qpb::PropertyModel::Role | TypeIdRole
+qpb/PropertyModel.h | qpb::PropertyModel::Role | UserRole=Qt::UserRole + 100
+qpb/QObjectPropertySource.h | qpb | class PropertyGroup
+qpb/QObjectPropertySource.h | qpb | class PropertyModel
+qpb/QObjectPropertySource.h | qpb | class QPB_CORE_EXPORT QObjectPropertySource:public QObject
+qpb/QObjectPropertySource.h | qpb::QObjectPropertySource | PropertyGroup*addObject(QObject*object,PropertyGroup*parentGroup=nullptr,const QString&id=QString())
+qpb/QObjectPropertySource.h | qpb::QObjectPropertySource | PropertyGroup*groupOf(const QObject*object)const
+qpb/QObjectPropertySource.h | qpb::QObjectPropertySource | PropertyModel*model()const
+qpb/QObjectPropertySource.h | qpb::QObjectPropertySource | QList<QObject*>objects()const
+qpb/QObjectPropertySource.h | qpb::QObjectPropertySource | QString titleProperty()const
+qpb/QObjectPropertySource.h | qpb::QObjectPropertySource | bool liveReadOnlyProperties()const
+qpb/QObjectPropertySource.h | qpb::QObjectPropertySource | bool removeObject(QObject*object)
+qpb/QObjectPropertySource.h | qpb::QObjectPropertySource | explicit QObjectPropertySource(PropertyModel*model,QObject*parent=nullptr)
+qpb/QObjectPropertySource.h | qpb::QObjectPropertySource | void refresh()
+qpb/QObjectPropertySource.h | qpb::QObjectPropertySource | void setLiveReadOnlyProperties(bool live)
+qpb/QObjectPropertySource.h | qpb::QObjectPropertySource | void setTitleProperty(const QString&name)
+qpb/QObjectPropertySource.h | qpb::QObjectPropertySource | ~QObjectPropertySource()override
+qpb/Serialization.h | :: | class QSettings
+qpb/Serialization.h | qpb | class PropertyGroup
+qpb/Serialization.h | qpb::serialization | QPB_CORE_EXPORT QJsonObject toJson(const PropertyGroup&group)
+qpb/Serialization.h | qpb::serialization | QPB_CORE_EXPORT bool fromJson(PropertyGroup&group,const QJsonObject&json)
+qpb/Serialization.h | qpb::serialization | QPB_CORE_EXPORT bool load(PropertyGroup&group,const QSettings&settings)
+qpb/Serialization.h | qpb::serialization | QPB_CORE_EXPORT void save(const PropertyGroup&group,QSettings&settings)
+qpb/TypeRegistry.h | qpb | class Property
+qpb/TypeRegistry.h | qpb | class QPB_CORE_EXPORT TypeRegistry
+qpb/TypeRegistry.h | qpb | struct TypeHandler
+qpb/TypeRegistry.h | qpb::TypeHandler | QMetaType storageType
+qpb/TypeRegistry.h | qpb::TypeHandler | std::function<QJsonValue(const QVariant&value,const Property&property)>toJson
+qpb/TypeRegistry.h | qpb::TypeHandler | std::function<QString(const QVariant&value,const Property&property)>displayText
+qpb/TypeRegistry.h | qpb::TypeHandler | std::function<QVariant(const QJsonValue&json,const Property&property)>fromJson
+qpb/TypeRegistry.h | qpb::TypeHandler | std::function<QVariant(const QVariant&value,const Property&property)>normalize
+qpb/TypeRegistry.h | qpb::TypeHandler | std::function<ValidationResult(const QVariant&value,const Property&property)>validate
+qpb/TypeRegistry.h | qpb::TypeRegistry | QList<TypeId>types()const
+qpb/TypeRegistry.h | qpb::TypeRegistry | TypeRegistry&operator=(const TypeRegistry&)=delete
+qpb/TypeRegistry.h | qpb::TypeRegistry | TypeRegistry(const TypeRegistry&)=delete
+qpb/TypeRegistry.h | qpb::TypeRegistry | bool contains(const TypeId&id)const
+qpb/TypeRegistry.h | qpb::TypeRegistry | bool registerType(const TypeId&id,TypeHandler handler)
+qpb/TypeRegistry.h | qpb::TypeRegistry | bool registerType(const TypeId&id,const TypeHandler&handler)
+qpb/TypeRegistry.h | qpb::TypeRegistry | bool replaceType(const TypeId&id,const TypeHandler&handler)
+qpb/TypeRegistry.h | qpb::TypeRegistry | const TypeHandler*handler(const TypeId&id)const
+qpb/TypeRegistry.h | qpb::TypeRegistry | static TypeRegistry&global()
+qpb/TypeRegistry.h | qpb::TypeRegistry | ~TypeRegistry()
+qpb/Types.h | qpb | using TypeId=QString
+qpb/Types.h | qpb::Types | inline constexpr QLatin1StringView Bool{"bool"}
+qpb/Types.h | qpb::Types | inline constexpr QLatin1StringView DirPath{"dirpath"}
+qpb/Types.h | qpb::Types | inline constexpr QLatin1StringView Double{"double"}
+qpb/Types.h | qpb::Types | inline constexpr QLatin1StringView Enum{"enum"}
+qpb/Types.h | qpb::Types | inline constexpr QLatin1StringView FilePath{"filepath"}
+qpb/Types.h | qpb::Types | inline constexpr QLatin1StringView Group{"group"}
+qpb/Types.h | qpb::Types | inline constexpr QLatin1StringView Int64{"int64"}
+qpb/Types.h | qpb::Types | inline constexpr QLatin1StringView Int{"int"}
+qpb/Types.h | qpb::Types | inline constexpr QLatin1StringView String{"string"}
+qpb/ValidationResult.h | qpb | struct ValidationResult
+qpb/ValidationResult.h | qpb::ValidationResult | QString message
+qpb/ValidationResult.h | qpb::ValidationResult | bool ok=true
+qpb/ValidationResult.h | qpb::ValidationResult | explicit operator bool()const
+qpb/ValidationResult.h | qpb::ValidationResult | static ValidationResult error(QString message)
+qpb/ValidationResult.h | qpb::ValidationResult | static ValidationResult valid()
+qpb/qpbglobal.h | macro | QPB_CORE_EXPORT
+qpb/qpbglobal.h | macro | QPB_DEPRECATED
+qpb/qpbglobal.h | macro | QPB_DEPRECATED_X(text)
+qpb/qpbglobal.h | macro | QPB_VERSION
+qpb/qpbglobal.h | macro | QPB_VERSION_CHECK(major,minor,patch)
+qpb/qpbglobal.h | macro | QPB_WIDGETS_EXPORT
+qpb/qpbglobal.h | qpb | QPB_CORE_EXPORT const char*version()noexcept
+qpb/widgets/EditorFactory.h | :: | class QPainter
+qpb/widgets/EditorFactory.h | :: | class QStyleOptionViewItem
+qpb/widgets/EditorFactory.h | :: | class QWidget
+qpb/widgets/EditorFactory.h | qpb | class Property
+qpb/widgets/EditorFactory.h | qpb | class QPB_WIDGETS_EXPORT EditorDialogScope
+qpb/widgets/EditorFactory.h | qpb | class QPB_WIDGETS_EXPORT EditorFactory
+qpb/widgets/EditorFactory.h | qpb | struct EditorHandler
+qpb/widgets/EditorFactory.h | qpb::EditorDialogScope | EditorDialogScope&operator=(const EditorDialogScope&)=delete
+qpb/widgets/EditorFactory.h | qpb::EditorDialogScope | EditorDialogScope(const EditorDialogScope&)=delete
+qpb/widgets/EditorFactory.h | qpb::EditorDialogScope | explicit EditorDialogScope(QWidget*editor)
+qpb/widgets/EditorFactory.h | qpb::EditorDialogScope | ~EditorDialogScope()
+qpb/widgets/EditorFactory.h | qpb::EditorFactory | EditorFactory&operator=(const EditorFactory&)=delete
+qpb/widgets/EditorFactory.h | qpb::EditorFactory | EditorFactory(const EditorFactory&)=delete
+qpb/widgets/EditorFactory.h | qpb::EditorFactory | QList<TypeId>editors()const
+qpb/widgets/EditorFactory.h | qpb::EditorFactory | QWidget*createEditor(QWidget*parent,const Property&property)const
+qpb/widgets/EditorFactory.h | qpb::EditorFactory | bool contains(const TypeId&id)const
+qpb/widgets/EditorFactory.h | qpb::EditorFactory | bool registerEditor(const TypeId&id,const EditorHandler&handler)
+qpb/widgets/EditorFactory.h | qpb::EditorFactory | bool replaceEditor(const TypeId&id,const EditorHandler&handler)
+qpb/widgets/EditorFactory.h | qpb::EditorFactory | const EditorHandler*handler(const TypeId&id)const
+qpb/widgets/EditorFactory.h | qpb::EditorFactory | const EditorHandler*handlerFor(const Property&property)const
+qpb/widgets/EditorFactory.h | qpb::EditorFactory | static EditorFactory&global()
+qpb/widgets/EditorFactory.h | qpb::EditorFactory | static void notifyCommit(QWidget*editor)
+qpb/widgets/EditorFactory.h | qpb::EditorFactory | ~EditorFactory()
+qpb/widgets/EditorFactory.h | qpb::EditorHandler | std::function<QVariant(QWidget*editor,const Property&property)>editorData
+qpb/widgets/EditorFactory.h | qpb::EditorHandler | std::function<QWidget*(QWidget*parent,const Property&property)>createEditor
+qpb/widgets/EditorFactory.h | qpb::EditorHandler | std::function<void(QPainter*painter,const QStyleOptionViewItem&option,const QVariant&value,const Property&property)>paint
+qpb/widgets/EditorFactory.h | qpb::EditorHandler | std::function<void(QWidget*editor,const Property&property)>applyAttributes
+qpb/widgets/EditorFactory.h | qpb::EditorHandler | std::function<void(QWidget*editor,const QVariant&value,const Property&property)>setEditorData
+qpb/widgets/PropertyDelegate.h | qpb | class QPB_WIDGETS_EXPORT PropertyDelegate:public QStyledItemDelegate
+qpb/widgets/PropertyDelegate.h | qpb::PropertyDelegate | QSize sizeHint(const QStyleOptionViewItem&option,const QModelIndex&index)const override
+qpb/widgets/PropertyDelegate.h | qpb::PropertyDelegate | QWidget*createEditor(QWidget*parent,const QStyleOptionViewItem&option,const QModelIndex&index)const override
+qpb/widgets/PropertyDelegate.h | qpb::PropertyDelegate | explicit PropertyDelegate(QObject*parent=nullptr)
+qpb/widgets/PropertyDelegate.h | qpb::PropertyDelegate | void paint(QPainter*painter,const QStyleOptionViewItem&option,const QModelIndex&index)const override
+qpb/widgets/PropertyDelegate.h | qpb::PropertyDelegate | void setEditorData(QWidget*editor,const QModelIndex&index)const override
+qpb/widgets/PropertyDelegate.h | qpb::PropertyDelegate | void setModelData(QWidget*editor,QAbstractItemModel*model,const QModelIndex&index)const override
+qpb/widgets/PropertyDelegate.h | qpb::PropertyDelegate | void updateEditorGeometry(QWidget*editor,const QStyleOptionViewItem&option,const QModelIndex&index)const override
+qpb/widgets/PropertyDelegate.h | qpb::PropertyDelegate | ~PropertyDelegate()override
+qpb/widgets/PropertyDelegate.h | qpb::PropertyDelegate[protected] | bool editorEvent(QEvent*event,QAbstractItemModel*model,const QStyleOptionViewItem&option,const QModelIndex&index)override
+qpb/widgets/PropertyDelegate.h | qpb::PropertyDelegate[protected] | bool eventFilter(QObject*object,QEvent*event)override
+qpb/widgets/PropertyFormView.h | :: | class QAbstractItemModel
+qpb/widgets/PropertyFormView.h | qpb | class QPB_WIDGETS_EXPORT PropertyFormView:public QScrollArea
+qpb/widgets/PropertyFormView.h | qpb::PropertyFormView | QAbstractItemModel*model()const
+qpb/widgets/PropertyFormView.h | qpb::PropertyFormView | QWidget*editor(const QString&path)const
+qpb/widgets/PropertyFormView.h | qpb::PropertyFormView | bool isExpanded(const QString&groupPath)const
+qpb/widgets/PropertyFormView.h | qpb::PropertyFormView | explicit PropertyFormView(QWidget*parent=nullptr)
+qpb/widgets/PropertyFormView.h | qpb::PropertyFormView | void setExpanded(const QString&groupPath,bool expanded)
+qpb/widgets/PropertyFormView.h | qpb::PropertyFormView | void setModel(QAbstractItemModel*model)
+qpb/widgets/PropertyFormView.h | qpb::PropertyFormView | ~PropertyFormView()override
+qpb/widgets/PropertyTreeView.h | qpb | class PropertyDelegate
+qpb/widgets/PropertyTreeView.h | qpb | class QPB_WIDGETS_EXPORT PropertyTreeView:public QTreeView
+qpb/widgets/PropertyTreeView.h | qpb::PropertyTreeView | Mode mode()const
+qpb/widgets/PropertyTreeView.h | qpb::PropertyTreeView | PropertyDelegate*propertyDelegate()const
+qpb/widgets/PropertyTreeView.h | qpb::PropertyTreeView | enum class Mode
+qpb/widgets/PropertyTreeView.h | qpb::PropertyTreeView | explicit PropertyTreeView(QWidget*parent=nullptr)
+qpb/widgets/PropertyTreeView.h | qpb::PropertyTreeView | int nameColumnWidth()const
+qpb/widgets/PropertyTreeView.h | qpb::PropertyTreeView | void setMode(Mode mode)
+qpb/widgets/PropertyTreeView.h | qpb::PropertyTreeView | void setModel(QAbstractItemModel*model)override
+qpb/widgets/PropertyTreeView.h | qpb::PropertyTreeView | void setNameColumnWidth(int width)
+qpb/widgets/PropertyTreeView.h | qpb::PropertyTreeView | ~PropertyTreeView()override
+qpb/widgets/PropertyTreeView.h | qpb::PropertyTreeView::Mode | List
+qpb/widgets/PropertyTreeView.h | qpb::PropertyTreeView::Mode | Tree
+qpb/widgets/PropertyTreeView.h | qpb::PropertyTreeView[protected] | QModelIndex moveCursor(CursorAction cursorAction,Qt::KeyboardModifiers modifiers)override
+qpb/widgets/PropertyTreeView.h | qpb::PropertyTreeView[protected] | void contextMenuEvent(QContextMenuEvent*event)override

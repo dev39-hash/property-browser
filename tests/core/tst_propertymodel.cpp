@@ -73,6 +73,8 @@ private slots:
     void batches();
     void resetToDefault();
     void liveIsNeverModified();
+    void onValueChangedByPath();
+    void onValueChangedForGroups();
 
     void modelTesterWholeLifecycle();
 };
@@ -541,6 +543,82 @@ void tst_PropertyModel::liveIsNeverModified()
     used.setLive(true);
     QVERIFY(changed.count() >= 1);
     QCOMPARE(name.data(PropertyModel::IsModifiedRole).toBool(), false);
+}
+
+// Since 1.4: a callback per path instead of comparing paths in valueChanged.
+void tst_PropertyModel::onValueChangedByPath()
+{
+    auto makeTree = [](int x) {
+        auto root = PropertyGroup::create(QStringLiteral("root"));
+        root->addGroup(QStringLiteral("t")).addInt(QStringLiteral("x"), x);
+        root->addInt(QStringLiteral("other"), 0);
+        return root;
+    };
+    PropertyModel model(makeTree(0));
+    QVariantList received;
+    const QMetaObject::Connection connection = model.onValueChanged(
+        QStringLiteral("t/x"), this, [&received](const QVariant& value) { received << value; });
+    QVERIFY(connection);
+
+    QVERIFY(model.setValue(QStringLiteral("t/x"), 3)); // application
+    QVERIFY(model.setValue(QStringLiteral("other"), 9)); // another path
+    const QModelIndex x
+        = model.indexOf(model.find(QStringLiteral("t/x")), PropertyModel::ValueColumn);
+    QVERIFY(model.setData(x, 4)); // user
+    QCOMPARE(received, QVariantList({3, 4}));
+
+    // Follows the path across setRoot() and remove/add.
+    model.setRoot(makeTree(0));
+    QVERIFY(model.setValue(QStringLiteral("t/x"), 5));
+    model.find(QStringLiteral("t"))->toGroup()->remove(QStringLiteral("x"));
+    model.find(QStringLiteral("t"))->toGroup()->addInt(QStringLiteral("x"), 0);
+    QVERIFY(model.setValue(QStringLiteral("t/x"), 6));
+    QCOMPARE(received, QVariantList({3, 4, 5, 6}));
+
+    // Disconnect, and the context ends the connection.
+    QVERIFY(QObject::disconnect(connection));
+    QVERIFY(model.setValue(QStringLiteral("t/x"), 7));
+    QCOMPARE(received.size(), 4);
+
+    auto context = std::make_unique<QObject>();
+    int calls = 0;
+    model.onValueChanged(
+        QStringLiteral("t/x"), context.get(), [&calls](const QVariant&) { ++calls; });
+    QVERIFY(model.setValue(QStringLiteral("t/x"), 8));
+    context.reset();
+    QVERIFY(model.setValue(QStringLiteral("t/x"), 9));
+    QCOMPARE(calls, 1);
+
+    // No context: lives as long as the model. An empty handler does nothing.
+    int modelCalls = 0;
+    QVERIFY(model.onValueChanged(
+        QStringLiteral("other"), nullptr, [&modelCalls](const QVariant&) { ++modelCalls; }));
+    QVERIFY(model.setValue(QStringLiteral("other"), 1));
+    QCOMPARE(modelCalls, 1);
+    QVERIFY(!model.onValueChanged(
+        QStringLiteral("other"), this, std::function<void(const QVariant&)>()));
+}
+
+void tst_PropertyModel::onValueChangedForGroups()
+{
+    auto root = PropertyGroup::create(QStringLiteral("root"));
+    PropertyGroup& t = root->addGroup(QStringLiteral("t"));
+    t.addInt(QStringLiteral("x"), 0);
+    t.addGroup(QStringLiteral("deep")).addInt(QStringLiteral("y"), 0);
+    root->addInt(QStringLiteral("tx"), 0); // "t" is a prefix of "tx", not its parent
+    PropertyModel model(std::move(root));
+
+    QStringList underT;
+    QStringList all;
+    model.onValueChanged(QStringLiteral("t"), this,
+        [&underT](const QString& path, const QVariant&) { underT << path; });
+    model.onValueChanged(
+        QString(), this, [&all](const QString& path, const QVariant&) { all << path; });
+    QVERIFY(model.setValue(QStringLiteral("t/x"), 1));
+    QVERIFY(model.setValue(QStringLiteral("t/deep/y"), 2));
+    QVERIFY(model.setValue(QStringLiteral("tx"), 3));
+    QCOMPARE(underT, QStringList({"t/x", "t/deep/y"}));
+    QCOMPARE(all, QStringList({"t/x", "t/deep/y", "tx"}));
 }
 
 QTEST_APPLESS_MAIN(tst_PropertyModel)

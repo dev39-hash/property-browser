@@ -149,6 +149,17 @@ dung lượng đã dùng), không phải thiết lập. Chúng không bao giờ 
 đọc. Gọi `resetToDefault()` trực tiếp trên chính property live vẫn reset nó; nó vẫn sửa được trừ khi đồng thời read-only.
 [D44]
 
+**Điều kiện (1.4):** `setEnabledWhen(sourcePath, ...)` / `setVisibleWhen(sourcePath, ...)` (+ hàm builder, `clear...()`) cho
+property được bật hoặc hiện tùy theo giá trị của property khác. Ba dạng: giá trị nguồn "đúng" (bool true, số khác 0, chuỗi
+khác rỗng, kiểu khác hợp lệ và không null), bằng một giá trị (overload `int` để số `0` viết trực tiếp không khớp nhầm dạng
+predicate), hoặc thỏa một predicate `Property::Condition`. Mỗi loại một điều kiện cho mỗi property. **`PropertyModel` đánh
+giá** khi giá trị nguồn đổi (trước khi phát `valueChanged`, nên handler thấy trạng thái mới), khi thêm/xóa hàng, khi đặt
+điều kiện, và trong `setRoot()` trước khi view đọc cây mới; chỉ khi kết quả đổi mới báo view (`dataChanged` cho property
+và cây con). Kết quả được **kết hợp với cờ riêng** (`isEnabled()` = không `Disabled`, điều kiện đúng, tổ tiên enabled),
+nên không bao giờ ghi đè `setEnabled()`/`setVisible()`. Ngoài model, sau khi bị gỡ khỏi model, hoặc khi path nguồn không
+tồn tại, điều kiện coi như đúng; nguồn thiếu phát hiện lúc gắn cây (constructor, `setRoot()`) được ghi cảnh báo một lần.
+View không cần code gì: disabled nghĩa là không sửa được, ẩn nghĩa là hàng bị ẩn. [D46]
+
 Setter tương ứng (`setDisplayName`, `setToolTip`, `setReadOnly`, `setEnabled`, `setVisible`, `setLive`,
 `setAttribute`, `setValidator`, `setDefaultValue`) **thông báo cho model** nếu property đã gắn vào model
 (xem 4.6), để view cập nhật.
@@ -284,6 +295,12 @@ public:
     void beginBatch();                                    // lồng được
     void endBatch();
 
+    // 1.4: theo path, giống QObject::connect (context kết thúc nó; nullptr = model)
+    QMetaObject::Connection onValueChanged(const QString& path, const QObject* context,
+        std::function<void(const QVariant& value)> handler);
+    QMetaObject::Connection onValueChanged(const QString& path, const QObject* context,   // path và con cháu
+        std::function<void(const QString& path, const QVariant& value)> handler);
+
 signals:
     void valueChanged(const QString& path, const QVariant& newValue, const QVariant& oldValue);
     void validationFailed(const QString& path, const QVariant& rejected, const QString& message);
@@ -406,6 +423,8 @@ public:
 - **Giá trị live (1.3):** khóa metadata `live` biến property thành live (§4.2). `setLiveReadOnlyProperties(true)` biến
   mọi Q_PROPERTY có signal NOTIFY nhưng không có WRITE thành live, cho các object thêm sau đó. Mặc định `false`: giữ
   hành vi của 1.2. [D44]
+- **Điều kiện (1.4):** khóa metadata `enabledWhen=<tên>` và `visibleWhen=<tên>`: property được bật / hiện khi Q_PROPERTY
+  `<tên>` của cùng object có giá trị "đúng" (§4.2).
 
 ---
 
@@ -665,6 +684,7 @@ Sau 1.0, tính năng mới đến dưới dạng **bổ sung** (minor), không s
 | 1.1   | `PropertyFormView` (§5.6); `PropertyFilterProxyModel` (§5.7); attribute `multiline`                          | Bổ sung       |
 | 1.2   | `QObjectPropertySource` (đọc `Q_PROPERTY`, metadata qua `Q_CLASSINFO("qpb:<prop>", "min=0;max=10")`, đồng bộ hai chiều); serialize `qpb::serialization::toJson/fromJson/save/load` (§4.8); `Types::Int64`; example `QUndoStack` | Bổ sung |
 | 1.3   | `Property::Flag::Live` (§4.2); tiêu đề và giá trị live của `QObjectPropertySource` (§4.9)                   | Bổ sung       |
+| 1.4   | Điều kiện `enabledWhen`/`visibleWhen` (§4.2); `PropertyModel::onValueChanged()` (§4.6)                      | Bổ sung       |
 | 2.0   | Chỉ khi thật sự cần phá vỡ API; gom mọi thứ đã deprecate                                                    | Breaking      |
 
 **Thiết kế 1.0 phải "chừa chỗ" cho 1.1/1.2** mà không đổi API: Form view và filter là class mới dùng
@@ -820,3 +840,5 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D42| Serialization bỏ qua property read-only                                      | Ứng dụng tự quản lý chúng; nạp lại sẽ ghi đè vd. version đang chạy bằng giá trị đã lưu |
 | D43| `QObjectPropertySource` lấy tiêu đề group từ một Q_PROPERTY (`qpb:title`, `setTitleProperty()`); id vẫn là tên object | RC F8: group hiện `studio_mic`; path phải ổn định cho serialization và code ứng dụng |
 | D44| Cờ mới `Live` (không bao giờ modified, bị reset group và serialization bỏ qua); Q_PROPERTY read-only có NOTIFY chỉ thành live khi gọi `setLiveReadOnlyProperties(true)` | RC F9: giá trị live trông như người dùng sửa. Tự động biến thành live sẽ đổi hành vi 1.2 (§9.2), nên phải bật |
+| D45| `PropertyModel::onValueChanged(path, context, handler)`, theo path           | RC F3: chuỗi `if (path == ...)`; model quản lý path và signal thay đổi, `Property` không phải QObject; theo path nên còn sau `setRoot()` |
+| D46| Điều kiện (`enabledWhen`/`visibleWhen`) kết hợp với cờ riêng, model đánh giá | RC F10: mọi ứng dụng tự nối quan hệ phụ thuộc; ghi `Disabled`/`Hidden` sẽ ghi đè `setEnabled()` của ứng dụng |

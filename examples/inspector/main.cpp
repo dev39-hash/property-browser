@@ -29,6 +29,8 @@ std::unique_ptr<qpb::PropertyGroup> createCameraProperties()
     auto& camera = root->addGroup("Camera");
     camera.addInt("fov", 60).range(10, 170).suffix("°").displayName("Field of view");
     camera.addEnum("projection", {"Perspective", "Orthographic"}, 0);
+    // 1.4: shown only for the orthographic projection.
+    camera.addDouble("orthoScale", 1.0).range(0.01, 100.0).visibleWhen("Camera/projection", 1);
     camera.addFilePath("lut", {})
         .filter("LUT files (*.cube)")
         .dialogMode(qpb::FileMode::Open)
@@ -57,6 +59,9 @@ int main(int argc, char* argv[])
         });
 
     QWidget window;
+    // 1.4: react to one property without comparing paths in valueChanged.
+    model.onValueChanged("name", &window,
+        [&window](const QVariant& name) { window.setWindowTitle(name.toString()); });
     auto* layout = new QVBoxLayout(&window);
     auto* modeBox = new QComboBox;
     modeBox->addItems({"Tree", "List"});

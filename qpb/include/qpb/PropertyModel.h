@@ -9,6 +9,7 @@
 #include <QtCore/qstringlist.h>
 #include <QtCore/qvariant.h>
 
+#include <functional>
 #include <memory>
 
 namespace qpb {
@@ -85,6 +86,19 @@ public:
     // with the paths of all properties changed in between. Batches nest.
     void beginBatch();
     void endBatch();
+
+    // Since 1.4. Calls handler with the new value whenever the value of the
+    // property at path changes (after valueChanged()), from the user or the
+    // application. Like QObject::connect: the connection ends when context is
+    // destroyed (nullptr: when the model is) and can be disconnected with the
+    // returned handle. It follows the path, not a Property, so it survives
+    // setRoot() and properties being removed and added again.
+    QMetaObject::Connection onValueChanged(const QString& path, const QObject* context,
+        std::function<void(const QVariant& value)> handler);
+    // The same for the property at path and all its descendants (path of a
+    // group; empty for the whole tree); handler also receives the path.
+    QMetaObject::Connection onValueChanged(const QString& path, const QObject* context,
+        std::function<void(const QString& path, const QVariant& value)> handler);
 
     // --- QAbstractItemModel ------------------------------------------------------
 

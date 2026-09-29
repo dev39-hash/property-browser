@@ -50,6 +50,9 @@ public:
     };
     Q_DECLARE_FLAGS(Flags, Flag)
 
+    // Test on the value of another property, see setEnabledWhen(). Since 1.4.
+    using Condition = std::function<bool(const QVariant& sourceValue)>;
+
     // Extra validation run after the type's own validation. Returning an error
     // rejects the value; the old value is kept.
     using Validator
@@ -142,11 +145,39 @@ public:
     // Since 1.3.
     void setLive(bool live);
 
+    // --- conditions (since 1.4) ------------------------------------------------
+    //
+    // Enable or show this property depending on the value of another one,
+    // given by its path from the root ("General/autosave"). The PropertyModel
+    // holding the tree evaluates the condition whenever values or the tree
+    // change. The result is combined with the property's own flags: enabled =
+    // not Disabled and condition met and ancestors enabled. Outside a model, or
+    // while the source path does not exist, a condition counts as met.
+
+    // Met when the source value is "true": a true bool, a non-zero number, a
+    // non-empty string; other types when valid and not null.
+    void setEnabledWhen(const QString& sourcePath);
+    // Met when the source value equals value. (The int overload keeps a
+    // literal 0, e.g. an enum index, from also matching Condition.)
+    void setEnabledWhen(const QString& sourcePath, const QVariant& value);
+    void setEnabledWhen(const QString& sourcePath, int value);
+    // Met when condition returns true for the source value.
+    void setEnabledWhen(const QString& sourcePath, Condition condition);
+    void clearEnabledWhen();
+    // The same for visibility.
+    void setVisibleWhen(const QString& sourcePath);
+    void setVisibleWhen(const QString& sourcePath, const QVariant& value);
+    void setVisibleWhen(const QString& sourcePath, int value);
+    void setVisibleWhen(const QString& sourcePath, Condition condition);
+    void clearVisibleWhen();
+
     // Effective state: read-only if this property or any ancestor is read-only.
     bool isReadOnly() const;
-    // Effective state: enabled only if this property and all ancestors are enabled.
+    // Effective state: enabled only if this property and all ancestors are
+    // enabled (own flag and, since 1.4, enabledWhen condition).
     bool isEnabled() const;
-    // Effective state: visible only if this property and all ancestors are visible.
+    // Effective state: visible only if this property and all ancestors are
+    // visible (own flag and, since 1.4, visibleWhen condition).
     bool isVisible() const;
     // Effective state: live if this property or any ancestor is live. Since 1.3.
     bool isLive() const;

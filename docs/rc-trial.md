@@ -80,3 +80,19 @@ The Devices page uses the two additions of 1.3: `Q_CLASSINFO("qpb:title", "name"
 | F9 | Live values shown as modified | **Closed:** `used` is live: never bold, left alone by "Reset group", not saved. |
 
 No new finding; nothing else changed for the application.
+
+## Round 6 — 1.4 (M8) before release
+
+The trial application drops its last `valueChanged` code: the inspector writes edits back with one
+`PropertyModel::onValueChanged()` callback per path (they keep working after the tree is replaced for another selected
+object), and the settings page declares `autosaveMinutes` with `enabledWhen("General/autosave")` instead of updating the
+flag by hand. 25 trial tests pass, the earlier ones unchanged.
+
+| # | Finding | Outcome |
+|---|---------|---------|
+| F3 | `if (path == ...)` chains to write values back | **Closed:** `onValueChanged(path, context, handler)`. |
+| F10 | Dependencies wired by hand | **Closed:** `enabledWhen` / `visibleWhen`, evaluated by the model, combined with the own flags. |
+
+Found while implementing (not in the trial): a literal `0` passed as the value (`enabledWhen(path, 0)`, e.g. an enum index)
+was ambiguous between the `QVariant` and the predicate overloads, since `0` is also a null pointer constant; `int`
+overloads were added before release.
