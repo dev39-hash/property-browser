@@ -1,6 +1,7 @@
 #include <qpb/PropertyModel.h>
 #include <qpb/TypeRegistry.h>
 
+#include <QtCore/qhash.h>
 #include <QtCore/qset.h>
 
 #include <utility>
@@ -94,16 +95,21 @@ public:
     void inserted(PropertyGroup*, int) override
     {
         q->endInsertRows();
+        evaluateAllConditions(true, false); // a source may still be added later
     }
 
     void aboutToRemove(PropertyGroup* parent, int row) override
     {
+        dependentsDirty = true; // may point into the removed subtree
+        // Outside a model conditions count as met.
+        resetConditions(parent->child(row));
         q->beginRemoveRows(parentIndex(parent), row, row);
     }
 
     void removed(PropertyGroup*, int) override
     {
         q->endRemoveRows();
+        evaluateAllConditions(true, false);
     }
 
     void changed(Property* property, bool recursive) override
@@ -123,6 +129,8 @@ public:
     {
         changed(property, false);
         const QString path = property->path();
+        // Dependent states first, so valueChanged() handlers see them updated.
+        evaluateDependents(path);
         if (batchDepth > 0 && !batchPaths.contains(path))
             batchPaths.append(path);
         emit q->valueChanged(path, newValue, oldValue);
@@ -151,8 +159,103 @@ public:
         }
     }
 
+    // --- conditions (1.4) ------------------------------------------------------
+
+    void conditionsChanged(Property*) override
+    {
+        // The source may simply not be added yet: no warning here.
+        evaluateAllConditions(true, false);
+    }
+
+    // Evaluates one condition; returns true if its result changed.
+    bool evaluate(Property* property, PropertyCondition* condition, bool warn)
+    {
+        if (!condition)
+            return false;
+        const Property* source = root ? root->find(condition->sourcePath) : nullptr;
+        if (!source && warn && !condition->warned) {
+            condition->warned = true;
+            qWarning("qpb: condition of \"%s\" refers to \"%s\", which does not exist; "
+                     "it counts as met",
+                qUtf8Printable(property->path()), qUtf8Printable(condition->sourcePath));
+        }
+        const bool met = !source || condition->test(source->value());
+        if (met == condition->met)
+            return false;
+        condition->met = met;
+        return true;
+    }
+
+    void evaluate(Property* property, bool notify, bool warn = true)
+    {
+        PropertyPrivate* data = PropertyPrivate::get(property);
+        const bool enabledChanged = evaluate(property, data->enabledWhen.get(), warn);
+        const bool visibleChanged = evaluate(property, data->visibleWhen.get(), warn);
+        if (notify && (enabledChanged || visibleChanged))
+            changed(property, true); // descendants' effective state too
+    }
+
+    static void resetConditions(Property* property)
+    {
+        if (!property)
+            return;
+        PropertyPrivate* data = PropertyPrivate::get(property);
+        for (PropertyCondition* condition : {data->enabledWhen.get(), data->visibleWhen.get()}) {
+            if (condition)
+                condition->met = true;
+        }
+        if (PropertyGroup* group = property->toGroup()) {
+            for (Property* child : group->children())
+                resetConditions(child);
+        }
+    }
+
+    void collectConditions(Property* property)
+    {
+        PropertyPrivate* data = PropertyPrivate::get(property);
+        for (const PropertyCondition* condition :
+            {data->enabledWhen.get(), data->visibleWhen.get()}) {
+            if (condition && !dependents[condition->sourcePath].contains(property))
+                dependents[condition->sourcePath].append(property);
+        }
+        if (PropertyGroup* group = property->toGroup()) {
+            for (Property* child : group->children())
+                collectConditions(child);
+        }
+    }
+
+    void rebuildDependents()
+    {
+        dependents.clear();
+        if (root)
+            collectConditions(root.get());
+        dependentsDirty = false;
+    }
+
+    void evaluateAllConditions(bool notify, bool warn = true)
+    {
+        rebuildDependents();
+        for (const QList<Property*>& properties : std::as_const(dependents)) {
+            for (Property* property : properties)
+                evaluate(property, notify, warn);
+        }
+    }
+
+    void evaluateDependents(const QString& sourcePath)
+    {
+        if (dependentsDirty)
+            rebuildDependents();
+        const QList<Property*> properties = dependents.value(sourcePath);
+        for (Property* property : properties)
+            evaluate(property, true);
+    }
+
     PropertyModel* q;
     std::unique_ptr<PropertyGroup> root;
+    // Properties with a condition, by source path. Rebuilt when the tree or
+    // the conditions change.
+    QHash<QString, QList<Property*>> dependents;
+    bool dependentsDirty = true;
     int batchDepth = 0;
     QStringList batchPaths;
     mutable QSet<TypeId> warnedTypes;
@@ -169,6 +272,7 @@ PropertyModel::PropertyModel(std::unique_ptr<PropertyGroup> root, QObject* paren
     : PropertyModel(parent)
 {
     d->attach(std::move(root));
+    d->evaluateAllConditions(false);
 }
 
 PropertyModel::~PropertyModel() = default;
@@ -179,6 +283,7 @@ void PropertyModel::setRoot(std::unique_ptr<PropertyGroup> root)
     d->detach();
     std::unique_ptr<PropertyGroup> old = std::move(d->root);
     d->attach(std::move(root));
+    d->evaluateAllConditions(false); // before views read the new tree
     endResetModel();
     // old is destroyed here, once views no longer refer to it.
 }
@@ -400,6 +505,32 @@ QHash<int, QByteArray> PropertyModel::roleNames() const
     names.insert(AttributesRole, QByteArrayLiteral("attributes"));
     names.insert(IsVisibleRole, QByteArrayLiteral("isVisible"));
     return names;
+}
+
+QMetaObject::Connection PropertyModel::onValueChanged(
+    const QString& path, const QObject* context, std::function<void(const QVariant& value)> handler)
+{
+    if (!handler)
+        return {};
+    return connect(this, &PropertyModel::valueChanged, context ? context : this,
+        [path, handler = std::move(handler)](const QString& changed, const QVariant& value) {
+            if (changed == path)
+                handler(value);
+        });
+}
+
+QMetaObject::Connection PropertyModel::onValueChanged(const QString& path, const QObject* context,
+    std::function<void(const QString& path, const QVariant& value)> handler)
+{
+    if (!handler)
+        return {};
+    const QString prefix = path.isEmpty() ? QString() : path + QLatin1Char('/');
+    return connect(this, &PropertyModel::valueChanged, context ? context : this,
+        [path, prefix, handler = std::move(handler)](
+            const QString& changed, const QVariant& value) {
+            if (path.isEmpty() || changed == path || changed.startsWith(prefix))
+                handler(changed, value);
+        });
 }
 
 } // namespace qpb
