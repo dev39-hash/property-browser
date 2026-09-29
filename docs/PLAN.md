@@ -222,6 +222,67 @@ form views unchanged (2 tests), `tests/api_compat/v1_3.cpp` and `api-1.3.txt` (s
 with titles, a live counter and undo that skips it, SPEC §4.2, §4.8, §4.9, D43, D44. RC round 5 closed F8 and F9.
 M7.7: released as `1.3.0`.
 
+### M8 — 1.4 (additive only): reacting to values (F3, F10)
+
+Planned after the RC trial rounds 1 and 4 ([`rc-trial.md`](rc-trial.md)). In every scenario the application listens to
+`PropertyModel::valueChanged` and compares `path` strings: once to copy edited values back into its own data (F3, an
+`if (path == ...)` chain) and once to enable or show a property depending on another one (F10). 1.4 adds a direct way
+for both; code written for 1.0–1.3 builds and behaves the same.
+
+**F3 — a callback per property.** On the model, by path, the way Qt connections work:
+
+```cpp
+QMetaObject::Connection PropertyModel::onValueChanged(const QString& path, const QObject* context,
+    std::function<void(const QVariant& value)> handler);
+
+model.onValueChanged("Transform/x", this, [this](const QVariant& v) { m_object.x = v.toDouble(); });
+```
+
+- Called after `valueChanged` for that exact path, from user edits and application writes alike. `context` ends the
+  connection when it is destroyed; the returned connection can be disconnected.
+- By path, not by `Property*`, so it survives `setRoot()` and properties being removed and added again (the inspector
+  replaces its tree for every selected object).
+- A path of a group also reports changes of its descendants, with a second overload taking
+  `std::function<void(const QString& path, const QVariant& value)>`.
+- Open decision **D45:** on the model (proposed; the model already owns change notification and paths) or on
+  `Property` (works without a model, but `Property` is not a QObject, so lifetime and disconnection need a handle type of
+  their own). Proposal: the model.
+
+**F10 — conditions between properties.** Declared once, evaluated by the model:
+
+```cpp
+general.addInt("autosaveMinutes", 5).enabledWhen("General/autosave");          // bool true / non-empty value
+camera.addDouble("orthoScale", 1.0).visibleWhen("Camera/projection", 1);        // equals a value
+limits.addInt64("quota", 0).enabledWhen("Limits/mode", [](const QVariant& v) { return v != "unlimited"; });
+```
+
+- `Property::setEnabledWhen()` / `setVisibleWhen()` (+ builder methods), each with three forms: source is truthy,
+  source equals a value, or a predicate on the source value. One condition of each kind per property; `clear...()`
+  removes it.
+- The condition is **combined** with the property's own flags (`isEnabled()` = own flag and condition and ancestors),
+  so it never overwrites what the application set with `setEnabled()` / `setVisible()`. Views need no change: they
+  already follow the effective state.
+- The model evaluates conditions when a source value changes, when the tree changes (`setRoot()`, rows added or
+  removed) and when a condition is set. A property that is not in a model, or whose source path does not exist, keeps
+  the condition "true" (nothing is hidden or disabled by a typo; a warning is logged once).
+- `QObjectPropertySource`: metadata keys `enabledWhen=<id>` and `visibleWhen=<id>`, relative to the object's group.
+- Open decision **D46:** combine with the own flags (proposed) or have the model write the flags `Disabled` / `Hidden`
+  (simpler, but it overwrites the application's own `setEnabled(false)`).
+- Out of scope: conditions on several sources, computed values, read-only conditions. The predicate form covers most
+  cases (it may read other properties through the model it captures); a general rule API can come later.
+
+| ID   | Task                                                                                              | Est. (h) | Done when |
+|------|---------------------------------------------------------------------------------------------------|----------|-----------|
+| M8.1 | SPEC: §4.2 (conditions), §4.6 (`onValueChanged`), §4.9 (metadata keys), D45, D46; `-vi`             | 1 | Decisions recorded |
+| M8.2 | `PropertyModel::onValueChanged()` (exact path, group path, context lifetime, disconnect, `setRoot()`) | 2 | Model tests pass |
+| M8.3 | Conditions in core: storage in `PropertyPrivate`, effective `isEnabled()` / `isVisible()`, evaluation in the model, change notifications, missing sources | 4 | Core tests: all three forms, flags combined, nested groups, structure changes, batches |
+| M8.4 | Builders, `QObjectPropertySource` metadata; views: tests that tree and form follow conditions (no view code expected) | 2 | Widget and source tests pass |
+| M8.5 | `tests/api_compat/v1_4.cpp` + `api-1.4.txt` (superset of 1.3); examples `settings_dialog` and `inspector` without `valueChanged` if-chains | 1.5 | Compat, snapshot and example builds pass |
+| M8.6 | RC trial round 6: the trial replaces its `valueChanged` code with `onValueChanged()` and `enabledWhen()`; F3 and F10 closed | 1.5 | Trial tests pass, report updated |
+| M8.7 | Release 1.4.0 (PR, green CI, zip, `qpb-release`)                                                    | 0.5 | Release zip |
+
+Total ≈ 12.5 h.
+
 ---
 
 ## 3. Task dependencies
@@ -232,7 +293,7 @@ M0.* ─► M1.1 ─► M1.2, M1.3 ─► M1.4 ─► M1.5
 M1.* ─► M2.1 ─► M2.2 ─► M2.3
         M2.4 ─► M2.5 ─► M2.6 ─► M2.7 ─► M2.8
 M2.4 ─► M3.1 ─► M3.2 ─► M3.3 ─► M3.4, M3.5 ─► M3.6 ─► M3.7 ─► M3.8
-M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7
+M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7 ─► M8
 ```
 
 ---
