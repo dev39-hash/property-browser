@@ -22,7 +22,10 @@ SettingsPage::SettingsPage(QSettings& settings, QWidget* parent)
     general.addEnum(
         "language", QList<qpb::EnumOption> {{"English", "en"}, {"Vietnamese", "vi"}}, "en");
     general.addBool("autosave", true);
-    general.addInt("autosaveMinutes", 5).range(1, 60).suffix(" min");
+    general.addInt("autosaveMinutes", 5)
+        .range(1, 60)
+        .suffix(" min")
+        .enabledWhen("General/autosave"); // round 6 (1.4): no valueChanged code
     general.addString("signature", QString())
         .multiline()
         .placeholder(tr("Added to exported files"));
@@ -45,14 +48,6 @@ SettingsPage::SettingsPage(QSettings& settings, QWidget* parent)
     m_model.beginBatch();
     qpb::serialization::load(*m_model.root(), m_settings);
     m_model.endBatch();
-
-    qpb::Property* minutes = m_model.find("General/autosaveMinutes");
-    minutes->setEnabled(m_model.find("General/autosave")->value().toBool());
-    connect(&m_model, &qpb::PropertyModel::valueChanged, this,
-        [minutes](const QString& path, const QVariant& value) {
-            if (path == QLatin1String("General/autosave"))
-                minutes->setEnabled(value.toBool());
-        });
 
     m_view->setModel(&m_model);
     m_form->setModel(&m_model);

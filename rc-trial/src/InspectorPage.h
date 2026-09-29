@@ -47,7 +47,6 @@ public:
 private:
     std::unique_ptr<qpb::PropertyGroup> buildTree(int row) const;
     void showObject(int row);
-    void apply(const QString& path, const QVariant& value);
 
     QList<SceneObject> m_scene;
     int m_current = -1;

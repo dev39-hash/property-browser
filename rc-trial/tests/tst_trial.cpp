@@ -115,6 +115,9 @@ private slots:
     void devicesRemovedObject();
     // Round 5 (1.3.0).
     void devicesTitlesAndLiveValues();
+    // Round 6 (1.4.0).
+    void settingsDependencyIsDeclared();
+    void inspectorCallbacksFollowSelection();
     void screenshots();
 
 private:
@@ -573,6 +576,35 @@ void tst_Trial::devicesTitlesAndLiveValues()
     QCOMPARE(mic->gain(), 6.0);
     QCOMPARE(used->value(), QVariant::fromValue(qint64(1) << 30));
     QCOMPARE(model.find("studio_mic")->displayName(), QString("Studio mic")); // name reset too
+}
+
+// --- Round 6 (1.4.0) ------------------------------------------------------------
+
+// F10: the dependency is a condition; the application's own flag is untouched,
+// and loading stored values evaluates it without any code.
+void tst_Trial::settingsDependencyIsDeclared()
+{
+    qpb::PropertyModel& model = m_window->settingsPage()->model();
+    qpb::Property* minutes = model.find("General/autosaveMinutes");
+    QVERIFY(model.setValue("General/autosave", false));
+    QVERIFY(!minutes->isEnabled());
+    QVERIFY(!minutes->flags().testFlag(qpb::Property::Flag::Disabled));
+    QVERIFY(model.setValue("General/autosave", true));
+    QVERIFY(minutes->isEnabled());
+}
+
+// F3: per-path callbacks write edits back to the selected object, also after
+// the tree was replaced for another selection.
+void tst_Trial::inspectorCallbacksFollowSelection()
+{
+    InspectorPage* page = m_window->inspector();
+    page->objectList()->setCurrentRow(2);
+    QVERIFY(page->model().setValue("Transform/y", -3.5));
+    QCOMPARE(page->scene()[2].y, -3.5);
+    page->objectList()->setCurrentRow(0);
+    QVERIFY(page->model().setValue("Transform/y", 7.0));
+    QCOMPARE(page->scene()[0].y, 7.0);
+    QCOMPARE(page->scene()[2].y, -3.5);
 }
 
 void tst_Trial::screenshots()

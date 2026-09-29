@@ -283,6 +283,13 @@ limits.addInt64("quota", 0).enabledWhen("Limits/mode", [](const QVariant& v) { r
 
 Total ≈ 12.5 h.
 
+**Status:** M8.1–M8.6 done with D45 (on the model) and D46 (combined with the own flags). `onValueChanged()` (2 test
+functions), conditions (`tests/core/tst_conditions.cpp`, 13 test functions), `QObjectPropertySource` metadata, tree and
+form views unchanged (2 tests), `tests/api_compat/v1_4.cpp` and `api-1.4.txt` (superset of 1.3); examples
+`settings_dialog` (no `valueChanged` code left) and `inspector` (`visibleWhen`, `onValueChanged`); SPEC §4.2, §4.6, §4.9,
+D45, D46. Found on the way: a literal `0` value was ambiguous with the predicate overload (`int` overloads added), and
+clearing an unmet condition did not notify views (fixed). RC round 6 closed F3 and F10. Remaining: M8.7 (release 1.4.0).
+
 ---
 
 ## 3. Task dependencies
