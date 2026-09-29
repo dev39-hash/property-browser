@@ -190,6 +190,27 @@ signals:
     void captionChanged();
 };
 
+// Since 1.4: conditions between Q_PROPERTYs of the same object.
+class Recorder : public QObject
+{
+    Q_OBJECT
+    Q_CLASSINFO("qpb:minutes", "enabledWhen=autostop")
+    Q_CLASSINFO("qpb:folder", "visibleWhen=saveToDisk")
+    Q_PROPERTY(bool autostop MEMBER m_autostop NOTIFY changed)
+    Q_PROPERTY(int minutes MEMBER m_minutes NOTIFY changed)
+    Q_PROPERTY(bool saveToDisk MEMBER m_saveToDisk NOTIFY changed)
+    Q_PROPERTY(QString folder MEMBER m_folder NOTIFY changed)
+
+public:
+    bool m_autostop = false;
+    int m_minutes = 10;
+    bool m_saveToDisk = true;
+    QString m_folder;
+
+signals:
+    void changed();
+};
+
 QStringList childIds(const PropertyGroup* group)
 {
     QStringList ids;
@@ -216,6 +237,7 @@ private slots:
     void titleFromClassInfo();
     void titleFromSetting();
     void liveProperties();
+    void conditionsFromMetadata();
 };
 
 void tst_QObjectPropertySource::propertiesAndTypes()
@@ -474,6 +496,26 @@ void tst_QObjectPropertySource::liveProperties()
     QVERIFY(!liveReading->isModified());
     // CONSTANT (no NOTIFY): read-only, not live.
     QVERIFY(!model.find(QStringLiteral("t/serial"))->isLive());
+}
+
+void tst_QObjectPropertySource::conditionsFromMetadata()
+{
+    PropertyModel model;
+    QObjectPropertySource source(&model);
+    Recorder recorder;
+    recorder.setObjectName(QStringLiteral("rec"));
+    source.addObject(&recorder);
+    Property* minutes = model.find(QStringLiteral("rec/minutes"));
+    Property* folder = model.find(QStringLiteral("rec/folder"));
+    QVERIFY(!minutes->isEnabled());
+    QVERIFY(folder->isVisible());
+
+    QVERIFY(model.setValue(QStringLiteral("rec/autostop"), true));
+    QVERIFY(minutes->isEnabled());
+    // The object changes by itself: NOTIFY updates the source, then the condition.
+    recorder.m_saveToDisk = false;
+    emit recorder.changed();
+    QVERIFY(!folder->isVisible());
 }
 
 QTEST_GUILESS_MAIN(tst_QObjectPropertySource)

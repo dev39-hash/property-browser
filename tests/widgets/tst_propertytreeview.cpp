@@ -151,6 +151,7 @@ private slots:
     void contextMenuResets();
     void contextMenuLeavesReadOnlyAlone();
     void contextMenuLeavesLiveAlone();
+    void conditions();
     void nameColumnFitsContents();
     void worksThroughProxyModel();
     void multilineEditor();
@@ -465,6 +466,22 @@ void tst_PropertyTreeView::contextMenuLeavesReadOnlyAlone()
     QApplication::sendEvent(f->view->viewport(), &event);
     QCOMPARE(x->value(), QVariant(0.0));
     QCOMPARE(locked->value(), QVariant(7.0));
+}
+
+// Since 1.4: rows follow conditions (hidden rows, no editor when disabled).
+void tst_PropertyTreeView::conditions()
+{
+    f->model.find(QStringLiteral("Camera/lut"))->setVisibleWhen(QStringLiteral("visible"));
+    f->model.find(QStringLiteral("Transform/y"))->setEnabledWhen(QStringLiteral("visible"));
+    const QModelIndex lut = f->model.indexOf(f->model.find(QStringLiteral("Camera/lut")));
+    QVERIFY(!f->view->isRowHidden(lut.row(), lut.parent()));
+
+    QVERIFY(f->model.setValue(QStringLiteral("visible"), false));
+    QVERIFY(f->view->isRowHidden(lut.row(), lut.parent()));
+    QVERIFY(!f->value(QStringLiteral("Transform/y")).flags().testFlag(Qt::ItemIsEditable));
+    QVERIFY(f->model.setValue(QStringLiteral("visible"), true));
+    QVERIFY(!f->view->isRowHidden(lut.row(), lut.parent()));
+    QVERIFY(f->value(QStringLiteral("Transform/y")).flags().testFlag(Qt::ItemIsEditable));
 }
 
 // Since 1.3: a live value is not bold and survives "Reset group".
