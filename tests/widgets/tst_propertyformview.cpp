@@ -167,6 +167,7 @@ private slots:
     void customEditorWithDialog();
     void contextMenuResets();
     void liveValues();
+    void conditions();
     void commitThatChangesTheTree();
     void typeWithoutEditorIsShownAsText();
     void modelDestroyedFirst();
@@ -494,6 +495,28 @@ void tst_PropertyFormView::liveValues()
     QVERIFY(resetFromMenu(f->title(QStringLiteral("Transform"))));
     QCOMPARE(f->stored(QStringLiteral("Transform/x")), QVariant(0.0));
     QCOMPARE(f->stored(QStringLiteral("Transform/y")), QVariant(9.0));
+}
+
+// Since 1.4: the form follows conditions without any code of its own.
+void tst_PropertyFormView::conditions()
+{
+    f->model.find(QStringLiteral("Transform/y"))->setEnabledWhen(QStringLiteral("visible"));
+    f->model.find(QStringLiteral("Camera/lut"))
+        ->setVisibleWhen(QStringLiteral("Camera/projection"), 1);
+    QWidget* y = f->view->editor(QStringLiteral("Transform/y"));
+    QWidget* lut = f->view->editor(QStringLiteral("Camera/lut"));
+    QVERIFY(y->isEnabled());
+    QVERIFY(!lut->isVisible());
+
+    auto* visible = f->editor<QCheckBox>(QStringLiteral("visible"));
+    QTest::mouseClick(visible, Qt::LeftButton, {}, QPoint(6, visible->height() / 2));
+    QVERIFY(!y->isEnabled());
+    QVERIFY(!f->label(QStringLiteral("Transform/y"))->isEnabled());
+
+    auto* projection = f->editor<QComboBox>(QStringLiteral("Camera/projection"));
+    projection->setFocus();
+    QTest::keyClick(projection, Qt::Key_Down);
+    QVERIFY(lut->isVisible());
 }
 
 // An application that adds properties in response to an edit: the editor that
