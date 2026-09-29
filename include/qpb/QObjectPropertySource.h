@@ -38,8 +38,10 @@ class QObjectPropertySourcePrivate;
 //
 // Keys of a property's class info: type (a TypeId), displayName, toolTip,
 // readOnly, hidden, disabled, exclude, live (1.3, see Property::Flag::Live),
-// and any attribute key (min and max stand for minimum and maximum). A key
-// without "=value" means true.
+// enabledWhen and visibleWhen (1.4, the name of another Q_PROPERTY of the
+// object whose value must be true, see Property::setEnabledWhen()), and any
+// attribute key (min and max stand for minimum and maximum). A key without
+// "=value" means true.
 //
 // Since 1.3 the group's display name can follow a Q_PROPERTY of the object
 // (its id stays the object name):
