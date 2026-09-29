@@ -222,6 +222,65 @@ không phải sửa (2 test), `tests/api_compat/v1_3.cpp` và `api-1.3.txt` (ch�
 đề, bộ đếm live và undo bỏ qua nó, SPEC §4.2, §4.8, §4.9, D43, D44. Vòng thử RC 5 đóng F8 và F9. M7.7: đã phát hành
 `1.3.0`.
 
+### M8 — 1.4 (chỉ bổ sung): phản ứng theo giá trị (F3, F10)
+
+Lập sau vòng thử RC 1 và 4 ([`rc-trial.md`](rc-trial.md)). Ở mọi kịch bản, ứng dụng lắng nghe
+`PropertyModel::valueChanged` và so sánh chuỗi `path`: một lần để chép giá trị đã sửa về dữ liệu của mình (F3, chuỗi
+`if (path == ...)`), một lần để bật hoặc hiện một property tùy theo property khác (F10). 1.4 thêm cách làm trực tiếp cho
+cả hai; code viết cho 1.0–1.3 build và chạy như cũ.
+
+**F3 — callback cho từng property.** Đặt trên model, theo path, giống cách kết nối của Qt:
+
+```cpp
+QMetaObject::Connection PropertyModel::onValueChanged(const QString& path, const QObject* context,
+    std::function<void(const QVariant& value)> handler);
+
+model.onValueChanged("Transform/x", this, [this](const QVariant& v) { m_object.x = v.toDouble(); });
+```
+
+- Được gọi sau `valueChanged` của đúng path đó, cho cả người dùng sửa lẫn ứng dụng ghi. `context` bị hủy thì kết nối tự
+  kết thúc; kết nối trả về có thể ngắt.
+- Theo path, không theo `Property*`, nên vẫn còn sau `setRoot()` và khi property bị xóa rồi thêm lại (inspector thay cây
+  mỗi khi chọn object khác).
+- Path của một group cũng báo thay đổi của con cháu, qua overload thứ hai nhận
+  `std::function<void(const QString& path, const QVariant& value)>`.
+- Quyết định còn mở **D45:** đặt trên model (đề xuất; model đã quản lý thông báo thay đổi và path) hay trên `Property`
+  (chạy được không cần model, nhưng `Property` không phải QObject nên cần một kiểu handle riêng để quản lý vòng đời và
+  ngắt kết nối). Đề xuất: model.
+
+**F10 — điều kiện giữa các property.** Khai báo một lần, model tự đánh giá:
+
+```cpp
+general.addInt("autosaveMinutes", 5).enabledWhen("General/autosave");          // bool true / giá trị khác rỗng
+camera.addDouble("orthoScale", 1.0).visibleWhen("Camera/projection", 1);        // bằng một giá trị
+limits.addInt64("quota", 0).enabledWhen("Limits/mode", [](const QVariant& v) { return v != "unlimited"; });
+```
+
+- `Property::setEnabledWhen()` / `setVisibleWhen()` (+ hàm builder), mỗi hàm có ba dạng: nguồn có giá trị "đúng", nguồn
+  bằng một giá trị, hoặc một predicate trên giá trị nguồn. Mỗi loại một điều kiện cho mỗi property; `clear...()` để bỏ.
+- Điều kiện được **kết hợp** với cờ riêng của property (`isEnabled()` = cờ riêng và điều kiện và tổ tiên), nên không bao
+  giờ ghi đè cái ứng dụng đặt bằng `setEnabled()` / `setVisible()`. View không phải sửa: chúng đã theo trạng thái hiệu lực.
+- Model đánh giá điều kiện khi giá trị nguồn đổi, khi cây đổi (`setRoot()`, thêm/xóa hàng) và khi đặt điều kiện.
+  Property chưa nằm trong model, hoặc path nguồn không tồn tại, coi điều kiện là "đúng" (gõ nhầm không làm ẩn hay
+  disable gì; ghi cảnh báo một lần).
+- `QObjectPropertySource`: khóa metadata `enabledWhen=<id>` và `visibleWhen=<id>`, tương đối với group của object.
+- Quyết định còn mở **D46:** kết hợp với cờ riêng (đề xuất) hay để model ghi cờ `Disabled` / `Hidden` (đơn giản hơn,
+  nhưng ghi đè `setEnabled(false)` của ứng dụng).
+- Ngoài phạm vi: điều kiện trên nhiều nguồn, giá trị tính toán, điều kiện read-only. Dạng predicate đã phủ phần lớn
+  trường hợp (predicate có thể đọc property khác qua model mà nó capture); API luật tổng quát có thể thêm sau.
+
+| ID   | Việc                                                                                              | Ước tính (h) | Xong khi |
+|------|---------------------------------------------------------------------------------------------------|--------------|----------|
+| M8.1 | SPEC: §4.2 (điều kiện), §4.6 (`onValueChanged`), §4.9 (khóa metadata), D45, D46; `-vi`             | 1 | Ghi xong quyết định |
+| M8.2 | `PropertyModel::onValueChanged()` (path chính xác, path group, vòng đời context, ngắt, `setRoot()`) | 2 | Test model đạt |
+| M8.3 | Điều kiện trong core: lưu trong `PropertyPrivate`, `isEnabled()` / `isVisible()` hiệu lực, model đánh giá, thông báo thay đổi, nguồn không tồn tại | 4 | Test core: cả ba dạng, kết hợp cờ, group lồng, đổi cấu trúc, batch |
+| M8.4 | Builder, metadata của `QObjectPropertySource`; view: test tree và form theo điều kiện (dự kiến không sửa code view) | 2 | Test widget và source đạt |
+| M8.5 | `tests/api_compat/v1_4.cpp` + `api-1.4.txt` (chứa trọn 1.3); example `settings_dialog` và `inspector` bỏ chuỗi if trên `valueChanged` | 1.5 | Test tương thích, snapshot và build example đạt |
+| M8.6 | Vòng thử RC 6: ứng dụng thử thay code `valueChanged` bằng `onValueChanged()` và `enabledWhen()`; đóng F3 và F10 | 1.5 | Test trial đạt, cập nhật báo cáo |
+| M8.7 | Phát hành 1.4.0 (PR, CI xanh, zip, `qpb-release`)                                                 | 0.5 | Có zip phát hành |
+
+Tổng ≈ 12,5 h.
+
 ---
 
 ## 3. Phụ thuộc giữa các task
@@ -232,7 +291,7 @@ M0.* ─► M1.1 ─► M1.2, M1.3 ─► M1.4 ─► M1.5
 M1.* ─► M2.1 ─► M2.2 ─► M2.3
         M2.4 ─► M2.5 ─► M2.6 ─► M2.7 ─► M2.8
 M2.4 ─► M3.1 ─► M3.2 ─► M3.3 ─► M3.4, M3.5 ─► M3.6 ─► M3.7 ─► M3.8
-M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7
+M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7 ─► M8
 ```
 
 ---
