@@ -305,6 +305,13 @@ PropertyGroup* QObjectPropertySource::addObject(
                 property->setEnabled(!detail::flag(metadata, "disabled"));
             else if (key == QLatin1String("live"))
                 property->setLive(detail::flag(metadata, "live"));
+            // 1.4: another Q_PROPERTY of the same object.
+            else if (key == QLatin1String("enabledWhen"))
+                property->setEnabledWhen(
+                    group.path() + QLatin1Char('/') + it.value().toString().trimmed());
+            else if (key == QLatin1String("visibleWhen"))
+                property->setVisibleWhen(
+                    group.path() + QLatin1Char('/') + it.value().toString().trimmed());
             else
                 property->setAttribute(key, it.value());
         }
