@@ -343,7 +343,8 @@ bool Property::isReadOnly() const
 bool Property::isEnabled() const
 {
     for (const Property* node = this; node; node = PropertyPrivate::get(node)->parent) {
-        if (PropertyPrivate::get(node)->flags.testFlag(Flag::Disabled))
+        const PropertyPrivate* data = PropertyPrivate::get(node);
+        if (data->flags.testFlag(Flag::Disabled) || (data->enabledWhen && !data->enabledWhen->met))
             return false;
     }
     return true;
@@ -352,10 +353,108 @@ bool Property::isEnabled() const
 bool Property::isVisible() const
 {
     for (const Property* node = this; node; node = PropertyPrivate::get(node)->parent) {
-        if (PropertyPrivate::get(node)->flags.testFlag(Flag::Hidden))
+        const PropertyPrivate* data = PropertyPrivate::get(node);
+        if (data->flags.testFlag(Flag::Hidden) || (data->visibleWhen && !data->visibleWhen->met))
             return false;
     }
     return true;
+}
+
+namespace {
+
+bool isTruthy(const QVariant& value)
+{
+    switch (value.typeId()) {
+    case QMetaType::Bool:
+        return value.toBool();
+    case QMetaType::QString:
+        return !value.toString().isEmpty();
+    case QMetaType::Int:
+    case QMetaType::UInt:
+    case QMetaType::LongLong:
+    case QMetaType::ULongLong:
+    case QMetaType::Double:
+    case QMetaType::Float:
+        return value.toDouble() != 0.0;
+    default:
+        return value.isValid() && !value.isNull();
+    }
+}
+
+Property::Condition equalTo(const QVariant& expected)
+{
+    return [expected](const QVariant& value) { return value == expected; };
+}
+
+} // namespace
+
+void detail::PropertyPrivate::setCondition(std::unique_ptr<detail::PropertyCondition>& slot,
+    const QString& sourcePath, Property::Condition test)
+{
+    const bool wasUnmet = slot && !slot->met;
+    if (test) {
+        slot = std::make_unique<detail::PropertyCondition>();
+        slot->sourcePath = sourcePath;
+        slot->test = std::move(test);
+    } else {
+        slot.reset();
+    }
+    // A condition that was not met no longer applies: the effective state
+    // may change even if the new one (if any) evaluates the same.
+    if (wasUnmet)
+        notifyChanged(true);
+    if (detail::TreeObserver* treeObserver = observer())
+        treeObserver->conditionsChanged(q); // evaluates, notifies changes
+}
+
+void Property::setEnabledWhen(const QString& sourcePath)
+{
+    d->setCondition(d->enabledWhen, sourcePath, isTruthy);
+}
+
+void Property::setEnabledWhen(const QString& sourcePath, const QVariant& value)
+{
+    d->setCondition(d->enabledWhen, sourcePath, equalTo(value));
+}
+
+void Property::setEnabledWhen(const QString& sourcePath, int value)
+{
+    setEnabledWhen(sourcePath, QVariant(value));
+}
+
+void Property::setEnabledWhen(const QString& sourcePath, Condition condition)
+{
+    d->setCondition(d->enabledWhen, sourcePath, std::move(condition));
+}
+
+void Property::clearEnabledWhen()
+{
+    d->setCondition(d->enabledWhen, QString(), Condition());
+}
+
+void Property::setVisibleWhen(const QString& sourcePath)
+{
+    d->setCondition(d->visibleWhen, sourcePath, isTruthy);
+}
+
+void Property::setVisibleWhen(const QString& sourcePath, const QVariant& value)
+{
+    d->setCondition(d->visibleWhen, sourcePath, equalTo(value));
+}
+
+void Property::setVisibleWhen(const QString& sourcePath, int value)
+{
+    setVisibleWhen(sourcePath, QVariant(value));
+}
+
+void Property::setVisibleWhen(const QString& sourcePath, Condition condition)
+{
+    d->setCondition(d->visibleWhen, sourcePath, std::move(condition));
+}
+
+void Property::clearVisibleWhen()
+{
+    d->setCondition(d->visibleWhen, QString(), Condition());
 }
 
 } // namespace qpb

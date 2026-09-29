@@ -1,6 +1,6 @@
 // Reference scenario 2 (docs/use-cases.md): application settings backed by
 // QSettings, with string-valued enums, read-only entries and a property that
-// is enabled only while another one is on.
+// is enabled only while another one is on (enabledWhen, 1.4).
 
 #include <qpb/qpb.h>
 
@@ -24,7 +24,8 @@ std::unique_ptr<qpb::PropertyGroup> createSettings(const QSettings& settings)
     general.addBool("autosave", settings.value("General/autosave", true).toBool());
     general.addInt("autosaveMinutes", settings.value("General/autosaveMinutes", 5).toInt())
         .range(1, 60)
-        .suffix(" min");
+        .suffix(" min")
+        .enabledWhen("General/autosave"); // 1.4: evaluated by the model
 
     auto& paths = root->addGroup("Paths");
     paths.addDirPath("projectDir", settings.value("Paths/projectDir", QDir::homePath()).toString())
@@ -55,13 +56,6 @@ int main(int argc, char* argv[])
     QSettings settings("qpb", "settings_dialog");
 
     qpb::PropertyModel model(createSettings(settings));
-    qpb::Property* minutes = model.find("General/autosaveMinutes");
-    minutes->setEnabled(model.find("General/autosave")->value().toBool());
-    QObject::connect(&model, &qpb::PropertyModel::valueChanged,
-        [minutes](const QString& path, const QVariant& value) {
-            if (path == QLatin1String("General/autosave"))
-                minutes->setEnabled(value.toBool());
-        });
 
     QDialog dialog;
     auto* layout = new QVBoxLayout(&dialog);
