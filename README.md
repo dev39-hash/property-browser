@@ -6,7 +6,7 @@ and editors without modifying the library. Since 1.2 it can also edit the Q_PROP
 to JSON or `QSettings`; 1.3 adds live values and titles taken from the objects; 1.4 adds conditions between properties
 (`enabledWhen`, `visibleWhen`) and per-property change callbacks.
 
-Status: 1.3.0 released. The public API is stable within a major version (see below).
+Status: 1.4.0 released. The public API is stable within a major version (see below).
 
 ```cpp
 auto root = qpb::PropertyGroup::create("Camera");

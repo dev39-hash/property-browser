@@ -286,7 +286,7 @@ Tổng ≈ 12,5 h.
 phải sửa (2 test), `tests/api_compat/v1_4.cpp` và `api-1.4.txt` (chứa trọn 1.3); example `settings_dialog` (không còn code
 `valueChanged`) và `inspector` (`visibleWhen`, `onValueChanged`); SPEC §4.2, §4.6, §4.9, D45, D46. Phát hiện trong lúc làm:
 số `0` viết trực tiếp bị mơ hồ với overload predicate (đã thêm overload `int`), và bỏ một điều kiện đang sai không báo
-view (đã sửa). Vòng thử RC 6 đóng F3 và F10. Còn lại: M8.7 (phát hành 1.4.0).
+view (đã sửa). Vòng thử RC 6 đóng F3 và F10. M8.7: đã phát hành `1.4.0`.
 
 ---
 

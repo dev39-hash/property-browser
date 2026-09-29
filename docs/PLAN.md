@@ -288,7 +288,7 @@ functions), conditions (`tests/core/tst_conditions.cpp`, 13 test functions), `QO
 form views unchanged (2 tests), `tests/api_compat/v1_4.cpp` and `api-1.4.txt` (superset of 1.3); examples
 `settings_dialog` (no `valueChanged` code left) and `inspector` (`visibleWhen`, `onValueChanged`); SPEC §4.2, §4.6, §4.9,
 D45, D46. Found on the way: a literal `0` value was ambiguous with the predicate overload (`int` overloads added), and
-clearing an unmet condition did not notify views (fixed). RC round 6 closed F3 and F10. Remaining: M8.7 (release 1.4.0).
+clearing an unmet condition did not notify views (fixed). RC round 6 closed F3 and F10. M8.7: released as `1.4.0`.
 
 ---
 
