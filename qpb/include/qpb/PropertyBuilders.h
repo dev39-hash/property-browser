@@ -63,6 +63,47 @@ public:
         m_property->setLive(live);
         return self();
     }
+    // Since 1.4. See Property::setEnabledWhen() / setVisibleWhen().
+    Derived& enabledWhen(const QString& sourcePath)
+    {
+        m_property->setEnabledWhen(sourcePath);
+        return self();
+    }
+    Derived& enabledWhen(const QString& sourcePath, const QVariant& value)
+    {
+        m_property->setEnabledWhen(sourcePath, value);
+        return self();
+    }
+    Derived& enabledWhen(const QString& sourcePath, int value)
+    {
+        m_property->setEnabledWhen(sourcePath, value);
+        return self();
+    }
+    Derived& enabledWhen(const QString& sourcePath, Property::Condition condition)
+    {
+        m_property->setEnabledWhen(sourcePath, std::move(condition));
+        return self();
+    }
+    Derived& visibleWhen(const QString& sourcePath)
+    {
+        m_property->setVisibleWhen(sourcePath);
+        return self();
+    }
+    Derived& visibleWhen(const QString& sourcePath, const QVariant& value)
+    {
+        m_property->setVisibleWhen(sourcePath, value);
+        return self();
+    }
+    Derived& visibleWhen(const QString& sourcePath, int value)
+    {
+        m_property->setVisibleWhen(sourcePath, value);
+        return self();
+    }
+    Derived& visibleWhen(const QString& sourcePath, Property::Condition condition)
+    {
+        m_property->setVisibleWhen(sourcePath, std::move(condition));
+        return self();
+    }
     Derived& validator(Property::Validator validator)
     {
         m_property->setValidator(std::move(validator));

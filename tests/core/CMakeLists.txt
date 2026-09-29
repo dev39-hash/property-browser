@@ -35,3 +35,8 @@ qpb_add_test(tst_qobjectpropertysource
     SOURCES tst_qobjectpropertysource.cpp
     LIBRARIES qpb::core
 )
+
+qpb_add_test(tst_conditions
+    SOURCES tst_conditions.cpp
+    LIBRARIES qpb::core
+)
