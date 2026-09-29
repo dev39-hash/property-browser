@@ -34,6 +34,17 @@ public:
         = 0;
     virtual void beginBatch() = 0;
     virtual void endBatch() = 0;
+    // A condition (enabledWhen / visibleWhen) was set or cleared on property.
+    virtual void conditionsChanged(Property* property) = 0;
+};
+
+// A condition on another property's value (1.4), evaluated by the model.
+struct PropertyCondition
+{
+    QString sourcePath; // from the root, like PropertyGroup::find()
+    Property::Condition test;
+    bool met = true; // last evaluation; true while not evaluated
+    bool warned = false; // missing source reported
 };
 
 class PropertyPrivate
@@ -71,6 +82,10 @@ public:
 
     void notifyChanged(bool recursive = false);
 
+    // Sets (test non-empty) or clears a condition and lets the model evaluate it.
+    void setCondition(std::unique_ptr<PropertyCondition>& slot, const QString& sourcePath,
+        Property::Condition test);
+
     Property* q = nullptr;
     QString id;
     TypeId typeId;
@@ -82,6 +97,8 @@ public:
     Property::Flags flags;
     Property::Validator validator;
     PropertyGroup* parent = nullptr;
+    std::unique_ptr<PropertyCondition> enabledWhen; // 1.4
+    std::unique_ptr<PropertyCondition> visibleWhen; // 1.4
 
     // Groups only.
     std::vector<std::unique_ptr<Property>> children;
