@@ -149,6 +149,18 @@ counter, the space used), not settings. They are never modified (views never sho
 writes nor reads them. `resetToDefault()` called on the live property itself still resets it; it stays editable unless
 it is also read-only. [D44]
 
+**Conditions (1.4):** `setEnabledWhen(sourcePath, ...)` / `setVisibleWhen(sourcePath, ...)` (+ builder methods, `clear...()`)
+make a property enabled or visible depending on another property's value. Three forms: the source value is "true"
+(true bool, non-zero number, non-empty string, other types valid and not null), equals a value (an `int` overload keeps a
+literal `0` from matching the predicate form), or passes a `Property::Condition` predicate. One condition of each kind per
+property. The **`PropertyModel` evaluates** them when a source value changes (before `valueChanged` is emitted, so
+handlers see the new states), when rows are added or removed, when a condition is set, and in `setRoot()` before views
+read the new tree; only a changed result notifies views (`dataChanged` for the property and its subtree). The result is
+**combined with the own flags** (`isEnabled()` = not `Disabled`, condition met, ancestors enabled), so it never
+overwrites `setEnabled()`/`setVisible()`. Outside a model, after removal from it, or while the source path does not exist,
+a condition counts as met; a missing source found when a tree is attached (constructor, `setRoot()`) is logged once.
+Views need no code: disabled means not editable, hidden means a hidden row. [D46]
+
 The corresponding setters (`setDisplayName`, `setToolTip`, `setReadOnly`, `setEnabled`, `setVisible`, `setLive`,
 `setAttribute`, `setValidator`, `setDefaultValue`) **notify the model** when the property is attached to one
 (see 4.6), so views update.
@@ -285,6 +297,12 @@ public:
     void beginBatch();                                    // nestable
     void endBatch();
 
+    // 1.4: per path, like QObject::connect (context ends it; nullptr = the model)
+    QMetaObject::Connection onValueChanged(const QString& path, const QObject* context,
+        std::function<void(const QVariant& value)> handler);
+    QMetaObject::Connection onValueChanged(const QString& path, const QObject* context,   // path and descendants
+        std::function<void(const QString& path, const QVariant& value)> handler);
+
 signals:
     void valueChanged(const QString& path, const QVariant& newValue, const QVariant& oldValue);
     void validationFailed(const QString& path, const QVariant& rejected, const QString& message);
@@ -409,6 +427,8 @@ public:
 - **Live values (1.3):** metadata key `live` makes a property live (§4.2). `setLiveReadOnlyProperties(true)` makes
   every Q_PROPERTY with a NOTIFY signal but no WRITE accessor live, for objects added afterwards. Default `false`: the
   behaviour of 1.2 is kept. [D44]
+- **Conditions (1.4):** metadata keys `enabledWhen=<name>` and `visibleWhen=<name>`: the property is enabled / visible
+  while the Q_PROPERTY `<name>` of the same object is "true" (§4.2).
 
 ---
 
@@ -668,6 +688,7 @@ After 1.0, new features arrive as **additions** (minor releases); existing API i
 | 1.1     | `PropertyFormView` (§5.6); `PropertyFilterProxyModel` (§5.7); `multiline` attribute                      | Additive      |
 | 1.2     | `QObjectPropertySource` (reads `Q_PROPERTY`, metadata via `Q_CLASSINFO("qpb:<prop>", "min=0;max=10")`, two-way sync); serialization `qpb::serialization::toJson/fromJson/save/load` (§4.8); `Types::Int64`; `QUndoStack` example | Additive |
 | 1.3     | `Property::Flag::Live` (§4.2); `QObjectPropertySource` titles and live values (§4.9)                    | Additive      |
+| 1.4     | Conditions `enabledWhen`/`visibleWhen` (§4.2); `PropertyModel::onValueChanged()` (§4.6)                 | Additive      |
 | 2.0     | Only if breaking the API is truly necessary; removes everything deprecated                               | Breaking      |
 
 **The 1.0 design must leave room for 1.1/1.2** without API changes: the form view and filter are new classes on top of the
@@ -825,3 +846,5 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D42| Serialization skips read-only properties                                     | They are maintained by the application; loading them would overwrite e.g. the running version with a stored one |
 | D43| `QObjectPropertySource` titles groups from a Q_PROPERTY (`qpb:title`, `setTitleProperty()`); ids stay the object name | RC trial F8: groups showed `studio_mic`; paths must stay stable for serialization and application code |
 | D44| New flag `Live` (never modified, skipped by group resets and serialization); read-only Q_PROPERTYs with NOTIFY become live only with `setLiveReadOnlyProperties(true)` | RC trial F9: live values looked like user edits. Making them live automatically would change 1.2 behaviour (§9.2), so it is opt-in |
+| D45| `PropertyModel::onValueChanged(path, context, handler)`, by path            | RC trial F3: `if (path == ...)` chains; the model owns paths and change signals, `Property` is not a QObject; by path it survives `setRoot()` |
+| D46| Conditions (`enabledWhen`/`visibleWhen`) combined with the own flags, evaluated by the model | RC trial F10: dependencies wired by hand in every application; writing `Disabled`/`Hidden` would overwrite the application's own `setEnabled()` |
