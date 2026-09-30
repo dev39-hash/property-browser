@@ -6,6 +6,7 @@
 #include <QContextMenuEvent>
 #include <QDir>
 #include <QDoubleSpinBox>
+#include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
@@ -19,6 +20,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
+#include <QToolButton>
 
 #include "DevicesPage.h"
 #include "InspectorPage.h"
@@ -121,6 +123,8 @@ private slots:
     void inspectorCallbacksFollowSelection();
     // Round 7 (1.5.0).
     void settingsResetAllButton();
+    // Round 8 (1.6.0).
+    void settingsUnderApplicationStyleSheet();
     void screenshots();
 
 private:
@@ -148,6 +152,7 @@ void tst_Trial::init()
 void tst_Trial::cleanup()
 {
     m_window.reset();
+    qApp->setStyleSheet(QString());
 }
 
 void tst_Trial::inspectorEditsWriteBackToScene()
@@ -642,6 +647,56 @@ void tst_Trial::settingsResetAllButton()
     QCOMPARE(batch.at(0).at(0).toStringList(),
         QStringList({"General/language", "Limits/cacheBytes", "About/lastSaved"}));
     QCOMPARE(model.find("About/lastSaved")->value().toString(), QString("never"));
+}
+
+// Round 8 (1.6): the application themes its whole UI with a dark style sheet
+// (generic rules as real applications have them) and uses qpb's hooks.
+void tst_Trial::settingsUnderApplicationStyleSheet()
+{
+    qApp->setStyleSheet(
+        "QWidget { background-color: #1a1c20; color: #e0e4ea; }"
+        "QLabel { color: #e0e4ea; }"
+        "QToolButton:checked { background-color: #3d2e10; color: #e87c00; }"
+        "qpb--PropertyTreeView { qproperty-groupBackground: #2c3038;"
+        "  qproperty-modifiedForeground: #ffa040; }"
+        "QToolButton[qpbPart=\"groupTitle\"], QToolButton[qpbPart=\"groupTitle\"]:checked {"
+        "  background-color: #2c3038; color: #4080ff; }"
+        "QLabel[qpbPart=\"label\"][qpbModified=\"true\"] { color: #ffa040; }");
+    SettingsPage* page = m_window->settingsPage();
+    m_window->tabs()->setCurrentWidget(page);
+    qpb::PropertyModel& model = page->model();
+
+    // Tree view: the colours come from the sheet.
+    page->view()->ensurePolished();
+    QCOMPARE(page->view()->groupBackground().color(), QColor("#2c3038"));
+    QCOMPARE(page->view()->modifiedForeground(), QColor("#ffa040"));
+
+    // Form: a modified label stays bold and takes the modified colour; the
+    // section title has its own rule, not the generic checked tool button one.
+    page->setFormLayout(true);
+    qpb::PropertyFormView* form = page->form();
+    QVERIFY(model.setValue("General/language", "vi"));
+    QLabel* language = nullptr;
+    for (QLabel* label : form->findChildren<QLabel*>()) {
+        if (label->buddy() && label->buddy() == form->editor("General/language"))
+            language = label;
+    }
+    QVERIFY(language);
+    QTRY_VERIFY(language->font().bold());
+    QCOMPARE(language->palette().color(QPalette::WindowText), QColor("#ffa040"));
+    QToolButton* general = nullptr;
+    for (QToolButton* button : form->findChildren<QToolButton*>()) {
+        if (button->property("qpbPart").toString() == "groupTitle" && button->text() == "General")
+            general = button;
+    }
+    QVERIFY(general);
+    QVERIFY(general->isChecked()); // expanded
+    QCOMPARE(general->palette().color(QPalette::ButtonText), QColor("#4080ff"));
+
+    // Reset: the label is plain again.
+    m_window->settingsPage()->resetAll();
+    QTRY_VERIFY(!language->font().bold());
+    QCOMPARE(language->palette().color(QPalette::WindowText), QColor("#e0e4ea"));
 }
 
 void tst_Trial::screenshots()

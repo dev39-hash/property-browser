@@ -6,6 +6,24 @@ All notable changes to qpb are documented here. Each release has the sections
 From 1.0.0 on, releases within a major version never require changes to consuming code or CMake.
 Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC trial shows a problem.
 
+## Unreleased
+
+Sixth feature release of 1.x: additions only; code written for 1.0-1.5 builds and behaves the same.
+
+### Added
+- Theming with style sheets (`docs/SPEC.md` section 5.8, `examples/custom_theme`):
+  - `PropertyTreeView` colour properties `groupBackground`, `groupForeground`, `modifiedForeground` and
+    `readOnlyForeground`, settable from a sheet with `qproperty-` (invalid values keep the defaults);
+  - style sheet selectors on the widgets of `PropertyFormView` and of the file / directory editors: the dynamic
+    properties `qpbPart` (`group`, `groupTitle`, `groupBody`, `label`, `value`, `browse`) and `qpbModified`.
+
+### Fixed
+- `PropertyFormView`: labels of modified properties lost their bold font under any application style sheet with a rule
+  for `QLabel`.
+
+### Upgrade notes
+- Nothing to do.
+
 ## 1.5.0 - 2026-09-30
 
 Fifth feature release of 1.x: additions only; code written for 1.0-1.4 builds and behaves the same.
