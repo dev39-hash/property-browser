@@ -314,9 +314,11 @@ Step-by-step guide and tooling: [`RELEASING.md`](RELEASING.md), `tools/make_rele
 3. Add `tests/api_compat/v<x_y>.cpp` for the new (minor) release and update the snapshot.
 4. Tag `vX.Y.Z` on `main`.
 5. Produce artifacts: `qpb-X.Y.Z.zip` (the `qpb/` folder only) attached to the GitHub Release; update the `qpb-release` branch
-   (`git subtree split --prefix qpb -b qpb-release`) for consumers using `git subtree pull`.
+   (`git subtree split --prefix qpb -b qpb-release`) and tag its tip `qpb-vX.Y.Z`, for consumers using `git subtree` or
+   `git submodule` (SPEC §6.2, D47).
 
-**Consumer side when upgrading:** replace `components/qpb/` → rebuild → read the *Upgrade notes*. For 1.x the expectation is "nothing to do".
+**Consumer side when upgrading:** replace `components/qpb/` (zip, `git subtree pull` or submodule checkout of
+`qpb-vX.Y.Z`) → rebuild → read the *Upgrade notes*. For 1.x the expectation is "nothing to do".
 
 ---
 
@@ -355,7 +357,7 @@ Step-by-step guide and tooling: [`RELEASING.md`](RELEASING.md), `tools/make_rele
 | Namespace / target names / include prefix | **Settled: `qpb`, `qpb::core`, `qpb::widgets`, `<qpb/...>`** |
 | Build system of consuming projects        | **Settled: CMake only**                         |
 | Language of code and docs                 | **Settled: English** (`-vi` files for reference)|
-| How consumers sync the component folder   | Open — default: manual copy from the release zip |
+| How consumers sync the component folder   | **Settled:** release zip (default), `git subtree` or `git submodule` from `qpb-release`, pinned by `qpb-vX.Y.Z` tags (SPEC §6.2, D47) |
 | License                                   | Open — assumed MIT                              |
 | Meaning of "custom property table"        | **Settled:** users build their own property tables with the library's public API (G1, G3); no extra concept |
 | Primary data source                       | Open — assumed explicit builder; settle before M1.3 |

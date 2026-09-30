@@ -608,7 +608,7 @@ nên mọi lỗi tích hợp lộ ra ngay trong repo.
 my-app/
 ├── CMakeLists.txt
 ├── components/
-│   └── qpb/        ← chép từ property-browser/qpb (hoặc git subtree/submodule)
+│   └── qpb/        ← component folder: zip phát hành, git subtree hoặc git submodule (bên dưới)
 └── src/
 ```
 
@@ -623,16 +623,44 @@ target_link_libraries(my_app PRIVATE qpb::widgets)   # qpb::core được kéo t
 #include <qpb/qpb.h>   // hoặc include từng header
 ```
 
-**Cập nhật thư viện:** xóa `components/qpb/`, chép bản mới vào, build lại. Đọc `CHANGELOG.md` mục của bản mới.
+**Cập nhật thư viện:** thay nguyên cả `components/qpb/` bằng bản mới (không chép đè file vào folder cũ: file mà bản
+mới đã bỏ không được sót lại), build lại, và đọc `CHANGELOG.md` mục của bản mới.
 Không cần sửa CMake hay code của consumer khi cùng major version (G5, S6).
 
-Ba cách giữ folder đồng bộ (đều được hỗ trợ, do consumer chọn):
+Ba cách được hỗ trợ để lấy và cập nhật folder, do consumer chọn. Cả ba đều cho ra cùng một `components/qpb/` với nội
+dung của file zip phát hành, nên đoạn CMake ở trên giống nhau cho mọi cách. [D47]
 
-| Cách             | Lệnh cập nhật                                                    | Ghi chú                                  |
-|------------------|------------------------------------------------------------------|------------------------------------------|
-| Chép tay         | Tải `qpb-x.y.z.zip` từ GitHub Release, giải nén đè               | Đơn giản nhất                            |
-| `git subtree`    | `git subtree pull --prefix components/qpb <remote> qpb-release --squash` | Cần nhánh `qpb-release` chỉ chứa folder `qpb/` (tạo bằng `git subtree split`) |
-| `git submodule`  | Trỏ tới repo + dùng `add_subdirectory(components/property-browser/qpb)` | Kéo cả repo dev; tests/examples không build khi là subproject |
+| Cách                     | Phù hợp với                       | Cố định version bằng                            |
+|--------------------------|-----------------------------------|-------------------------------------------------|
+| Zip phát hành (mặc định) | Mọi project, không cần git        | File zip đã giải nén (`components/qpb/VERSION`) |
+| `git subtree`            | Project git commit luôn cả folder | Tag trong lệnh `add` / `pull`                   |
+| `git submodule`          | Project git vốn đã dùng submodule | Commit được ghi cho `components/qpb`            |
+
+Mỗi bản phát hành công bố cho các cách trên (xem `docs/RELEASING.md`):
+
+- `qpb-X.Y.Z.zip` trên GitHub Release của tag `vX.Y.Z`: chỉ gồm folder `qpb/`;
+- nhánh `qpb-release`: lịch sử của riêng `qpb/` (`git subtree split`), đỉnh nhánh luôn là bản phát hành mới nhất;
+- tag `qpb-vX.Y.Z` trên commit của bản đó trong `qpb-release`. `vX.Y.Z` gắn cho cả repo nên subtree và submodule không
+  dùng được, vì chúng cần component nằm ở gốc.
+
+```sh
+# Zip phát hành — lần đầu và mọi lần cập nhật
+rm -rf components/qpb && unzip qpb-X.Y.Z.zip -d components     # zip chứa qpb/
+
+# git subtree — folder được commit trong repo của consumer
+git subtree add  --prefix components/qpb <remote> qpb-vX.Y.Z --squash     # lần đầu
+git subtree pull --prefix components/qpb <remote> qpb-vX.Y.Z --squash     # cập nhật
+
+# git submodule — repo của consumer ghi một commit của qpb-release
+git submodule add -b qpb-release <remote> components/qpb                  # lần đầu, rồi cố định version:
+git -C components/qpb fetch --tags && git -C components/qpb checkout qpb-vX.Y.Z
+git add components/qpb && git commit -m "Use qpb X.Y.Z"                   # cập nhật: lặp lại hai dòng này
+```
+
+Với submodule, `git submodule update --remote components/qpb` chuyển lên bản phát hành mới nhất (đỉnh của
+`qpb-release`); khi clone nó tải cả lịch sử phát triển, nhưng chỉ checkout component. Sửa đổi cục bộ trong folder sẽ bị
+zip ghi đè, thành conflict khi merge với subtree, và phải commit bên trong submodule; những sửa đổi đó nên đưa về
+upstream.
 
 ### 6.3 Yêu cầu với `qpb/CMakeLists.txt` (để không "làm bẩn" project chủ)
 
@@ -842,3 +870,4 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D44| Cờ mới `Live` (không bao giờ modified, bị reset group và serialization bỏ qua); Q_PROPERTY read-only có NOTIFY chỉ thành live khi gọi `setLiveReadOnlyProperties(true)` | RC F9: giá trị live trông như người dùng sửa. Tự động biến thành live sẽ đổi hành vi 1.2 (§9.2), nên phải bật |
 | D45| `PropertyModel::onValueChanged(path, context, handler)`, theo path           | RC F3: chuỗi `if (path == ...)`; model quản lý path và signal thay đổi, `Property` không phải QObject; theo path nên còn sau `setRoot()` |
 | D46| Điều kiện (`enabledWhen`/`visibleWhen`) kết hợp với cờ riêng, model đánh giá | RC F10: mọi ứng dụng tự nối quan hệ phụ thuộc; ghi `Disabled`/`Hidden` sẽ ghi đè `setEnabled()` của ứng dụng |
+| D47| Ba cách đồng bộ component folder (mặc định zip phát hành, `git subtree`, `git submodule` trỏ tới `qpb-release`), đều cho ra `components/qpb/` với nội dung của zip; mỗi bản phát hành gắn thêm tag `qpb-vX.Y.Z` trên `qpb-release` | Trước đây subtree chỉ theo được bản mới nhất, còn submodule kéo cả repo phát triển về một đường dẫn khác (`components/property-browser/qpb`). Một đường dẫn chung giữ CMake của consumer không đổi; tag cho người dùng git cố định và nâng cấp đúng một version |

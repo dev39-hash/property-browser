@@ -26,8 +26,11 @@ tools/make_release.sh <version>
 The script refuses to run on a dirty tree, a `qpb/VERSION` that does not match, or a missing CHANGELOG section. It creates
 
 - `dist/qpb-<version>.zip`: the `qpb/` folder only, exactly what consumers copy to `components/qpb/`;
-- the local branch `qpb-release`: the history of `qpb/` alone (via `git subtree split`), for consumers using
-  `git subtree pull --prefix components/qpb <remote> qpb-release --squash`.
+- the local branch `qpb-release`: the history of `qpb/` alone (via `git subtree split`), whose tip is now this release.
+
+These are the three ways consumers get the folder (docs/SPEC.md section 6.2, D47): the zip, `git subtree` and
+`git submodule`. The last two need the tag `qpb-v<version>` on `qpb-release`, created below; `v<version>` tags the whole
+repository and cannot be used by them.
 
 ## 3. Publish (maintainer)
 
@@ -35,13 +38,16 @@ The script prints the commands:
 
 ```sh
 git tag -a v<version> -m "qpb <version>"
-git push origin v<version>
+git tag -a qpb-v<version> qpb-release -m "qpb <version> component folder"
+git push origin v<version> qpb-v<version>
 git push origin qpb-release
 ```
 
-Then create a GitHub Release for the tag and attach `dist/qpb-<version>.zip`.
+Then create a GitHub Release for the tag `v<version>` and attach `dist/qpb-<version>.zip`.
 
 ## Rules
 
 - Within 1.x, never publish a release whose `tests/api_compat/*` or `api_snapshot` test fails (docs/SPEC.md section 9).
 - `1.0.0` is tagged only after a release candidate passed the RC trial (docs/PLAN.md, RC) without API changes.
+- Every release has both tags, and `qpb-v<version>` contains exactly the `qpb/` folder of `v<version>`
+  (`git rev-parse v<version>:qpb` equals `git rev-parse qpb-v<version>^{tree}`). Tags are never moved once pushed.
