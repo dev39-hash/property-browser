@@ -26,6 +26,10 @@ More in [`examples/`](examples): quickstart, a custom `QColor` type, an inspecto
 plugin configuration, (1.1) a form view and a tree view sharing one search filter, and (1.2) an editor for QObjects
 with undo/redo and JSON files.
 
+To build and run them all in Qt Creator, open [`examples/qtcreator/CMakeLists.txt`](examples/qtcreator/CMakeLists.txt)
+(or [`qpb_examples.pro`](examples/qtcreator/qpb_examples.pro) with qmake), pick a Qt 6.5+ kit and choose the example in
+the run target selector. The qmake project only serves the examples; projects integrate qpb with CMake (see below).
+
 ## Using qpb in a project
 
 qpb is distributed as a self-contained component folder. Copy `qpb/` into your project (for example to
