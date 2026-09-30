@@ -288,6 +288,54 @@ phải sửa (2 test), `tests/api_compat/v1_4.cpp` và `api-1.4.txt` (chứa tr�
 số `0` viết trực tiếp bị mơ hồ với overload predicate (đã thêm overload `int`), và bỏ một điều kiện đang sai không báo
 view (đã sửa). Vòng thử RC 6 đóng F3 và F10. M8.7: đã phát hành `1.4.0`.
 
+### M9 — 1.5 (chỉ bổ sung): reset toàn bộ và checkbox trong chuỗi Tab (F4, F5)
+
+Lên kế hoạch sau vòng thử RC 1 và 3 ([`rc-trial.md`](rc-trial.md)): hai phát hiện được giữ lại ở 1.0 vì có thể giải
+quyết sau mà không phá vỡ gì. Code viết cho 1.0–1.4 build và chạy như cũ. 1.5 cũng phát hành bản sửa đã ghi ở mục
+*Unreleased* của CHANGELOG (cảnh báo MSVC C4458 khi build `qpb/`).
+
+**F4 — reset cả cây từ model.** `PropertyModel::resetToDefault()` nhận một index mà gốc cây thì không có, nên ứng dụng
+phải viết `model.root()->resetToDefault()`. 1.5 thêm lời gọi mà người dùng sẽ tìm trên model:
+
+```cpp
+bool PropertyModel::resetAllToDefault();
+
+connect(resetButton, &QPushButton::clicked, &model, &PropertyModel::resetAllToDefault);
+```
+
+- Tác dụng giống `root()->resetToDefault()`: là code ứng dụng nên property read-only và disabled cũng được reset (D34),
+  property live được giữ nguyên (D44); chỉ một `batchValueChanged` cho cả cây. Trả về false nếu có reset bị từ chối;
+  true với model không có root (không có gì để reset).
+- `resetToDefault(QModelIndex())` vẫn trả về false: cho nó reset tất cả sẽ đổi hành vi đã ghi trong tài liệu (§9.2).
+
+**F5 — checkbox trong chuỗi Tab.** Trong `PropertyTreeView`, Tab / Shift+Tab nối các editor và bỏ qua property Bool
+(SPEC §5.5), vốn là checkbox không có editor; người dùng bàn phím phải tới chúng bằng phím mũi tên.
+
+```cpp
+view.setTabStopsOnCheckBoxes(true);   // cũng là một Q_PROPERTY
+```
+
+- Mặc định tắt: chuỗi Tab của 1.4 không đổi.
+- Khi bật: Tab / Shift+Tab dừng cả ở ô giá trị của property Bool mà người dùng đổi được (enabled, không read-only, đang
+  hiện). Ở đó không mở editor; Space bật tắt (như hiện nay), và Tab / Shift+Tab tiếp theo đi tiếp theo chuỗi, ra khỏi
+  view ở hai đầu như trước.
+- Chỉ tree view: trong `PropertyFormView` checkbox là widget và vốn đã nằm trong chuỗi Tab.
+- Quyết định còn mở **D49:** bật theo lựa chọn (đề xuất) hay thành mặc định. Đổi mặc định sẽ đổi trải nghiệm bàn phím
+  của mọi ứng dụng sau khi nâng cấp, điều §9.2 cấm; bật theo lựa chọn giống D44.
+- Quyết định **D48** ghi lại lựa chọn cho F4: thêm hàm mới thay vì gán ý nghĩa cho `resetToDefault(QModelIndex())`.
+
+| ID   | Việc                                                                                              | Ước tính (h) | Xong khi |
+|------|---------------------------------------------------------------------------------------------------|----------|-----------|
+| M9.1 | SPEC: §4.6 (`resetAllToDefault`), §5.5 (`tabStopsOnCheckBoxes`), §8 (1.5), D48, D49; `-vi`           | 1 | Đã ghi quyết định |
+| M9.2 | `PropertyModel::resetAllToDefault()`                                                              | 1 | Test model: group lồng nhau, reset read-only, bỏ qua live, một `batchValueChanged`, reset bị từ chối → false, không có root → true |
+| M9.3 | `PropertyTreeView::setTabStopsOnCheckBoxes()`: `moveCursor()` và Tab / Shift+Tab từ hàng checkbox  | 2.5 | Test widget: tắt thì giữ chuỗi 1.4; bật thì dừng ở checkbox cả hai chiều, Space bật tắt, Tab tiếp theo mở editor kế tiếp, bỏ qua checkbox disabled / read-only / ẩn, qua proxy, ở cuối view |
+| M9.4 | `tests/api_compat/v1_5.cpp` + `api-1.5.txt` (chứa trọn 1.4); `examples/settings_dialog` dùng cả hai bổ sung | 1 | Test tương thích, snapshot và build example đạt |
+| M9.5 | Vòng thử RC 7: trang settings dùng `resetAllToDefault()` và `setTabStopsOnCheckBoxes(true)`; đóng F4 và F5 | 1.5 | Test trial đạt, cập nhật báo cáo |
+| M9.6 | Phát hành 1.5.0 (PR, zip, tag `v1.5.0` và `qpb-v1.5.0`, `qpb-release`, GitHub Release)              | 0.5 | Có zip phát hành |
+
+Tổng ≈ 7.5 h. GitHub Actions đang tắt (tài khoản không khởi động được job), nên "CI xanh" nghĩa là chạy đủ `ctest` ở
+máy local (Windows, MSVC, Qt 6.11) cho tới khi bật lại; trong thời gian đó Linux và macOS không được kiểm tra.
+
 ---
 
 ## 3. Phụ thuộc giữa các task
@@ -298,7 +346,7 @@ M0.* ─► M1.1 ─► M1.2, M1.3 ─► M1.4 ─► M1.5
 M1.* ─► M2.1 ─► M2.2 ─► M2.3
         M2.4 ─► M2.5 ─► M2.6 ─► M2.7 ─► M2.8
 M2.4 ─► M3.1 ─► M3.2 ─► M3.3 ─► M3.4, M3.5 ─► M3.6 ─► M3.7 ─► M3.8
-M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7 ─► M8
+M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7 ─► M8 ─► M9
 ```
 
 ---
