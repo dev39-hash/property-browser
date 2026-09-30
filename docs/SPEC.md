@@ -610,7 +610,7 @@ property-browser/                  (development repo)
 │       └── widgets/
 ├── CMakeLists.txt                 # dev: add_subdirectory(qpb) + tests + examples
 ├── tests/   (core, widgets, api_compat, consumer)
-├── examples/ (quickstart, custom_type, inspector)
+├── examples/ (quickstart, custom_type, inspector, ...; qtcreator/: CMake and qmake projects for Qt Creator)
 ├── tools/
 └── docs/
 ```
