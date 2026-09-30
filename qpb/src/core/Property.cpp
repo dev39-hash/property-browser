@@ -64,10 +64,10 @@ bool PropertyPrivate::assign(const QVariant& input, Origin origin)
     if (!handler)
         return false;
 
-    TreeObserver* treeObserver = observer();
+    TreeObserver* tree = observer();
     const auto reject = [&](const QString& message) {
-        if (treeObserver)
-            treeObserver->validationFailed(q, input, message);
+        if (tree)
+            tree->validationFailed(q, input, message);
         return false;
     };
 
@@ -96,15 +96,15 @@ bool PropertyPrivate::assign(const QVariant& input, Origin origin)
 
     const QVariant oldValue = value;
     value = candidate;
-    if (treeObserver)
-        treeObserver->valueChanged(q, value, oldValue);
+    if (tree)
+        tree->valueChanged(q, value, oldValue);
     return true;
 }
 
 void PropertyPrivate::notifyChanged(bool recursive)
 {
-    if (TreeObserver* treeObserver = observer())
-        treeObserver->changed(q, recursive);
+    if (TreeObserver* tree = observer())
+        tree->changed(q, recursive);
 }
 
 } // namespace detail
@@ -403,8 +403,8 @@ void detail::PropertyPrivate::setCondition(std::unique_ptr<detail::PropertyCondi
     // may change even if the new one (if any) evaluates the same.
     if (wasUnmet)
         notifyChanged(true);
-    if (detail::TreeObserver* treeObserver = observer())
-        treeObserver->conditionsChanged(q); // evaluates, notifies changes
+    if (detail::TreeObserver* tree = observer())
+        tree->conditionsChanged(q); // evaluates, notifies changes
 }
 
 void Property::setEnabledWhen(const QString& sourcePath)
