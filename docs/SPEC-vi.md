@@ -518,6 +518,8 @@ public:
     void setNameColumnWidth(int px);
     PropertyDelegate* propertyDelegate() const;
     void setTabStopsOnCheckBoxes(bool on);  bool tabStopsOnCheckBoxes() const;   // 1.5, Q_PROPERTY, mặc định false
+    // 1.6, Q_PROPERTY cho style sheet (§5.8): groupBackground (QBrush), groupForeground,
+    // modifiedForeground, readOnlyForeground (QColor), mỗi cái có setter
 };
 ```
 
@@ -535,6 +537,8 @@ public:
   property Bool mà người dùng đổi được (enabled, không read-only, đang hiện). Ở đó không mở editor; Space bật tắt nó, và
   Tab / Shift+Tab tiếp theo đi tiếp theo chuỗi, ra khỏi view ở hai đầu như trước. Form view không cần tùy chọn này:
   checkbox của nó là widget nằm trong chuỗi focus thông thường. [D49]
+- Hàng group in đậm trên màu `Button` của palette (hoặc `groupBackground`), tên đã sửa in đậm (màu `modifiedForeground`),
+  giá trị read-only màu `PlaceholderText` (hoặc `readOnlyForeground`); xem §5.8 về style sheet. [D50]
 
 ### 5.6 `PropertyFormView : QScrollArea` (1.1)
 
@@ -566,6 +570,8 @@ public:
   sau (editor có thể đang chạy handler của chính nó). [D38]
 - Tôn trọng `visible` (ẩn label + editor, hoặc cả section), `enabled` (label và editor bị disable) và `readOnly`
   (editor bị disable, label bình thường).
+- Các widget của nó mang selector style sheet của §5.8 (`qpbPart`, `qpbModified`); tiêu đề và nhãn đậm vẫn đậm khi style
+  sheet reset font của widget con được style. [D51, D52]
 - Menu chuột phải trên label: **Reset to default**; trên tiêu đề section: **Reset group** (cùng quy tắc với tree view, D34).
 - Không dùng `QDataWidgetMapper` (không hỗ trợ cây).
 
@@ -576,6 +582,54 @@ public:
 `setFilterFixedString()` / `setFilterRegularExpression()`. Group hiển thị khi có con cháu khớp; khi tên group khớp thì mọi
 con cháu của nó cũng hiển thị (kiểm tra trong `filterAcceptsRow()`, không dùng `autoAcceptChildRows`, để lớp con vẫn thấy
 mọi hàng). Property bị ẩn không bao giờ khớp. `PropertyTreeView` và `PropertyFormView` làm việc với proxy. [D39]
+
+### 5.8 Style sheet (1.6)
+
+Ứng dụng đổi theme cho qpb bằng Qt style sheet như mọi widget khác; `examples/custom_theme` có sẵn một theme dark và
+light hoàn chỉnh. Selector chuẩn phủ các view và mọi editor: `qpb--PropertyTreeView` / `qpb--PropertyFormView` (hoặc
+`QTreeView` / `QScrollArea`), `::item` với `:hover`, `:selected`, `:alternate`, `::branch`, `QHeaderView::section`, và
+editor theo class Qt của chúng: `qpb--PropertyTreeView QLineEdit` cho editor trong ô (tạo không có khung),
+`qpb--PropertyFormView QLineEdit` trong form. Những gì qpb tự vẽ hoặc tự dựng có móc riêng:
+
+**Tree view** (item không phải widget): các property màu, đặt từ sheet bằng `qproperty-`. [D50]
+
+| Property | Kiểu | Mặc định (màu không hợp lệ / `Qt::NoBrush`) |
+|---|---|---|
+| `groupBackground` | `QBrush` | màu `Button` của palette (`background-color` của sheet đặt nó trùng màu các hàng khác) |
+| `groupForeground` | `QColor` | màu chữ của item |
+| `modifiedForeground` | `QColor` | màu chữ của item |
+| `readOnlyForeground` | `QColor` | màu `PlaceholderText` của palette |
+
+Rule `::item` khớp và có `color` hoặc `background` được ưu tiên, như mọi item view. `qproperty-` không đặt được font: tên
+group và tên property đã sửa vẫn in đậm. Như mọi giá trị `qproperty-`, chúng vẫn còn khi gỡ sheet: ứng dụng chuyển sang
+một theme không có chúng phải đặt lại thành giá trị không hợp lệ. Cột branch bên trái hàng group do view vẽ; rule
+`::branch` thay thế mũi tên mở/đóng gốc, nên cần thêm `image:` cho `:closed` và `:open`.
+
+**Form view và editor đường dẫn**: dynamic property trên các widget. Tên và giá trị property là API (không bao giờ đổi,
+§9.2); tên class của widget nội bộ (`qpb--detail--...`) thì không. [D51]
+
+| Widget | Selector |
+|---|---|
+| khối, nút tiêu đề, thân của một group | `QWidget[qpbPart="group"]`, `QToolButton[qpbPart="groupTitle"]`, `QWidget[qpbPart="groupBody"]` |
+| nhãn của một property | `QLabel[qpbPart="label"]`; thêm `[qpbModified="true"]` khi property đã sửa |
+| chữ read-only của kiểu không có editor | `QLabel[qpbPart="value"]` |
+| nút chọn của editor file và thư mục (cả hai view) | `QToolButton[qpbPart="browse"]` |
+
+`qpbModified` theo model; nhãn được polish lại khi nó đổi, nên rule của nó có tác dụng ngay. Tiêu đề section là
+`QToolButton` checkable (checked khi đang mở), nên rule cho nó cũng nên phủ `:checked` khi ứng dụng có style
+`QToolButton:checked`. Style sheet reset font của widget con được style khi polish chúng; form đặt lại độ đậm của tiêu đề
+và nhãn đã sửa sau đó. [D52]
+
+```css
+qpb--PropertyTreeView {
+    qproperty-groupBackground: #2c3038;
+    qproperty-modifiedForeground: #e87c00;
+}
+QToolButton[qpbPart="groupTitle"], QToolButton[qpbPart="groupTitle"]:checked {
+    background: #2c3038; color: #e87c00; border: none; border-bottom: 1px solid #e87c00;
+}
+QLabel[qpbPart="label"][qpbModified="true"] { color: #e87c00; }
+```
 
 ---
 
@@ -725,6 +779,7 @@ Sau 1.0, tính năng mới đến dưới dạng **bổ sung** (minor), không s
 | 1.3   | `Property::Flag::Live` (§4.2); tiêu đề và giá trị live của `QObjectPropertySource` (§4.9)                   | Bổ sung       |
 | 1.4   | Điều kiện `enabledWhen`/`visibleWhen` (§4.2); `PropertyModel::onValueChanged()` (§4.6)                      | Bổ sung       |
 | 1.5   | `PropertyModel::resetAllToDefault()` (§4.6); `PropertyTreeView::setTabStopsOnCheckBoxes()` (§5.5)           | Bổ sung       |
+| 1.6   | Móc style sheet (§5.8): property màu của tree view, selector `qpbPart` / `qpbModified` của form view         | Bổ sung       |
 | 2.0   | Chỉ khi thật sự cần phá vỡ API; gom mọi thứ đã deprecate                                                    | Breaking      |
 
 **Thiết kế 1.0 phải "chừa chỗ" cho 1.1/1.2** mà không đổi API: Form view và filter là class mới dùng
@@ -885,3 +940,6 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D47| Ba cách đồng bộ component folder (mặc định zip phát hành, `git subtree`, `git submodule` trỏ tới `qpb-release`), đều cho ra `components/qpb/` với nội dung của zip; mỗi bản phát hành gắn thêm tag `qpb-vX.Y.Z` trên `qpb-release` | Trước đây subtree chỉ theo được bản mới nhất, còn submodule kéo cả repo phát triển về một đường dẫn khác (`components/property-browser/qpb`). Một đường dẫn chung giữ CMake của consumer không đổi; tag cho người dùng git cố định và nâng cấp đúng một version |
 | D48| `PropertyModel::resetAllToDefault()` reset cả cây; `resetToDefault(QModelIndex())` vẫn trả về `false` | RC F4: root không có index nên ứng dụng phải đi qua `root()->resetToDefault()`. Gán ý nghĩa đó cho index không hợp lệ sẽ đổi hành vi đã ghi trong tài liệu (§9.2) |
 | D49| Checkbox chỉ vào chuỗi Tab của tree view khi gọi `setTabStopsOnCheckBoxes(true)` | RC F5: người dùng bàn phím chỉ tới được checkbox bằng phím mũi tên. Đặt làm mặc định sẽ đổi hành vi bàn phím của mọi ứng dụng sau khi nâng cấp (§9.2), nên phải bật, giống D44 |
+| D50| Tree view đưa các màu nó tự vẽ ra thành `Q_PROPERTY` (`groupBackground`, `groupForeground`, `modifiedForeground`, `readOnlyForeground`), đặt từ style sheet bằng `qproperty-`; font giữ cố định | Item không phải widget, nên không selector nào tới được hàng group hay tên đã sửa; `qproperty-` là cách của Qt để sheet chạm tới phần được vẽ. Nó không đặt được font, và chữ đậm là dấu hiệu cấu trúc |
+| D51| Form view và editor đường dẫn gắn dynamic property `qpbPart` và `qpbModified` lên widget, là API; tên class nội bộ thì không | Selector ổn định theo kiểu ứng dụng vốn dùng (`Widget[prop="value"]`), không phụ thuộc class nội bộ có thể đổi |
+| D52| Tiêu đề và nhãn đậm của form view được đặt lại sau khi style sheet reset font | Chương trình thử của M10: mọi rule sheet cho `QLabel` làm mất chữ đậm của nhãn đã sửa, nên dấu hiệu "đã sửa" biến mất dưới theme của ứng dụng |

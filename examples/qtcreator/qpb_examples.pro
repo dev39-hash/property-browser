@@ -17,7 +17,7 @@ TEMPLATE = subdirs
 
 !versionAtLeast(QT_VERSION, 6.5.0): error("qpb requires Qt 6.5 or newer, found $$QT_VERSION")
 
-QPB_EXAMPLES = quickstart custom_type inspector settings_dialog plugin_config form_view object_editor
+QPB_EXAMPLES = quickstart custom_type inspector settings_dialog plugin_config form_view object_editor custom_theme
 
 SUBDIRS = qpb
 qpb.subdir = qmake/qpb

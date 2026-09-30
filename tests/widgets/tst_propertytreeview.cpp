@@ -112,6 +112,25 @@ struct Fixture
     QLineEdit* other = nullptr;
 };
 
+// Whether any pixel of image inside rect is close to the pure colour red,
+// green or blue: text drawn in such a colour on black stays recognisable when
+// it is anti-aliased (and "tofu" boxes of font-less test platforms count too).
+bool hasPixels(const QImage& image, const QRect& rect, Qt::GlobalColor pure)
+{
+    for (int y = rect.top(); y <= rect.bottom(); ++y) {
+        for (int x = rect.left(); x <= rect.right(); ++x) {
+            const QColor c = image.pixelColor(x, y);
+            const int r = c.red(), g = c.green(), b = c.blue();
+            if ((pure == Qt::red && r > 150 && g < 80 && b < 80)
+                || (pure == Qt::green && g > 150 && r < 80 && b < 80)
+                || (pure == Qt::blue && b > 150 && r < 80 && g < 80)
+                || (pure == Qt::yellow && r > 150 && g > 150 && b < 80))
+                return true;
+        }
+    }
+    return false;
+}
+
 // True while the view has an editor open (editors carry the delegate's marker).
 bool editorOpen(const PropertyTreeView* view)
 {
@@ -143,6 +162,7 @@ private slots:
     void tabStopsOnCheckBoxesSkipsUnchangeable();
     void tabStopsOnCheckBoxesAtTheEnd();
     void tabStopsOnCheckBoxesThroughProxy();
+    void styleSheetColours();
     void enumCommitsOnSelection();
     void pathDialogKeepsEditorOpen();
     void customEditorWithDialogScope();
@@ -353,6 +373,66 @@ void tst_PropertyTreeView::tabStopsOnCheckBoxesThroughProxy()
     QTest::keyClick(view, Qt::Key_Tab);
     QTRY_COMPARE(view->currentIndex(), proxy.mapFromSource(f->value(QStringLiteral("Transform/x"))));
     view->setModel(&f->model); // before the proxy goes away
+}
+
+// Since 1.6 (SPEC §5.8, D50): colours of what the view paints itself, set
+// from a style sheet with qproperty-.
+void tst_PropertyTreeView::styleSheetColours()
+{
+    PropertyTreeView* view = f->view;
+    QCOMPARE(view->groupBackground().style(), Qt::NoBrush);
+    QVERIFY(!view->groupForeground().isValid());
+    QVERIFY(!view->modifiedForeground().isValid());
+    QVERIFY(!view->readOnlyForeground().isValid());
+    QVERIFY(f->model.setValue(QStringLiteral("Camera/fov"), 90));
+    const QModelIndex transform = f->model.indexOf(f->model.find(QStringLiteral("Transform")));
+    const QRect group = view->visualRect(transform);
+    const QPoint groupPixel(group.right() - 2, group.center().y()); // right of the title
+
+    // Defaults: the palette's Button behind group rows, as in 1.0-1.5.
+    QImage image = view->viewport()->grab().toImage();
+    QCOMPARE(image.pixelColor(groupPixel), view->palette().color(QPalette::Button));
+
+    // The sheet's background-color also sets the palette's Button: without
+    // groupBackground, group rows would look like any other row.
+    const QString sheet = QStringLiteral(
+        "qpb--PropertyTreeView { background-color: #000000; alternate-background-color: #000000;"
+        "  color: #ffffff; selection-background-color: #000000;"
+        "  qproperty-groupBackground: #203040; qproperty-groupForeground: #00ff00;"
+        "  qproperty-modifiedForeground: #ff0000; qproperty-readOnlyForeground: #0000ff; }"
+        "qpb--PropertyTreeView::item:hover { background-color: #333333; }");
+    view->setStyleSheet(sheet);
+    view->ensurePolished();
+    QCOMPARE(view->groupBackground().color(), QColor(0x20, 0x30, 0x40));
+    QCOMPARE(view->groupForeground(), QColor(Qt::green));
+    QCOMPARE(view->modifiedForeground(), QColor(Qt::red));
+    QCOMPARE(view->readOnlyForeground(), QColor(Qt::blue));
+    view->setCurrentIndex(QModelIndex());
+    view->clearSelection();
+
+    const auto name = [this](const QString& path) {
+        return f->view->visualRect(f->model.indexOf(f->model.find(path)));
+    };
+    image = view->viewport()->grab().toImage();
+    QCOMPARE(image.pixelColor(groupPixel), QColor(0x20, 0x30, 0x40));
+    QVERIFY(hasPixels(image, group, Qt::green));
+    QVERIFY(hasPixels(image, name(QStringLiteral("Camera/fov")), Qt::red)); // modified
+    QVERIFY(!hasPixels(image, name(QStringLiteral("Transform/x")), Qt::red));
+    QVERIFY(hasPixels(image, f->view->visualRect(f->value(QStringLiteral("Transform/locked"))),
+        Qt::blue)); // read-only
+
+    // A matching ::item rule with a color still wins, as in any view.
+    view->setStyleSheet(sheet + QStringLiteral("qpb--PropertyTreeView::item { color: #ffff00; }"));
+    image = view->viewport()->grab().toImage();
+    QVERIFY(hasPixels(image, name(QStringLiteral("Camera/fov")), Qt::yellow));
+    QVERIFY(!hasPixels(image, name(QStringLiteral("Camera/fov")), Qt::red));
+
+    // Invalid values select the defaults again.
+    view->setStyleSheet(QString());
+    view->setGroupBackground(QBrush());
+    view->setModifiedForeground(QColor());
+    QCOMPARE(view->groupBackground().style(), Qt::NoBrush);
+    QVERIFY(!view->modifiedForeground().isValid());
 }
 
 void tst_PropertyTreeView::enumCommitsOnSelection()

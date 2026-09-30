@@ -3,6 +3,8 @@
 
 #include <qpb/qpbglobal.h>
 
+#include <QtGui/qbrush.h>
+#include <QtGui/qcolor.h>
 #include <QtWidgets/qtreeview.h>
 
 #include <memory>
@@ -27,6 +29,10 @@ class QPB_WIDGETS_EXPORT PropertyTreeView : public QTreeView
     Q_OBJECT
     Q_PROPERTY(Mode mode READ mode WRITE setMode)
     Q_PROPERTY(bool tabStopsOnCheckBoxes READ tabStopsOnCheckBoxes WRITE setTabStopsOnCheckBoxes)
+    Q_PROPERTY(QBrush groupBackground READ groupBackground WRITE setGroupBackground)
+    Q_PROPERTY(QColor groupForeground READ groupForeground WRITE setGroupForeground)
+    Q_PROPERTY(QColor modifiedForeground READ modifiedForeground WRITE setModifiedForeground)
+    Q_PROPERTY(QColor readOnlyForeground READ readOnlyForeground WRITE setReadOnlyForeground)
 
 public:
     enum class Mode {
@@ -57,6 +63,22 @@ public:
     // 1.0-1.4: check boxes are reached with the arrow keys.
     bool tabStopsOnCheckBoxes() const;
     void setTabStopsOnCheckBoxes(bool on);
+
+    // Since 1.6. Colours of what the view paints itself, for style sheets
+    // (qpb--PropertyTreeView { qproperty-groupBackground: #2c3038; }) or code
+    // (docs/SPEC.md section 5.8). An invalid colour or Qt::NoBrush selects the
+    // default: the palette's Button behind group rows, the item text colour for
+    // group names and names of modified properties (both stay bold), and
+    // PlaceholderText for read-only values. A matching style sheet ::item rule
+    // with a color (or background) takes precedence, as in any item view.
+    QBrush groupBackground() const;
+    void setGroupBackground(const QBrush& brush);
+    QColor groupForeground() const;
+    void setGroupForeground(const QColor& color);
+    QColor modifiedForeground() const;
+    void setModifiedForeground(const QColor& color);
+    QColor readOnlyForeground() const;
+    void setReadOnlyForeground(const QColor& color);
 
 protected:
     void contextMenuEvent(QContextMenuEvent* event) override;
