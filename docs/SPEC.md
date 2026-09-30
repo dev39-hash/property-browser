@@ -612,7 +612,7 @@ so integration problems show up inside the repo.
 my-app/
 ├── CMakeLists.txt
 ├── components/
-│   └── qpb/        ← copied from property-browser/qpb (or git subtree/submodule)
+│   └── qpb/        ← the component folder: release zip, git subtree or git submodule (below)
 └── src/
 ```
 
@@ -627,16 +627,44 @@ target_link_libraries(my_app PRIVATE qpb::widgets)   # pulls in qpb::core
 #include <qpb/qpb.h>   // or include individual headers
 ```
 
-**Updating the library:** delete `components/qpb/`, copy the new version in, rebuild. Read the new release's section in `CHANGELOG.md`.
+**Updating the library:** replace `components/qpb/` with the new version as a whole (never merge files into the old
+folder: files removed by the new version must not linger), rebuild, and read the new release's section in `CHANGELOG.md`.
 No change to the consumer's CMake or code within the same major version (G5, S6).
 
-Three supported ways to keep the folder in sync (the consumer chooses):
+Three supported ways to get and update the folder; the consumer chooses. All three produce the same `components/qpb/`
+with the content of the release zip, so the CMake above is the same for each. [D47]
 
-| Method           | Update command                                                   | Notes                                    |
-|------------------|------------------------------------------------------------------|------------------------------------------|
-| Manual copy      | Download `qpb-x.y.z.zip` from the GitHub Release, extract over it | Simplest                                 |
-| `git subtree`    | `git subtree pull --prefix components/qpb <remote> qpb-release --squash` | Needs a `qpb-release` branch containing only `qpb/` (created with `git subtree split`) |
-| `git submodule`  | Point to the repo and use `add_subdirectory(components/property-browser/qpb)` | Pulls the whole dev repo; tests/examples are not built as a subproject |
+| Method                | Suits                                 | Pinned to a version by                                |
+|-----------------------|---------------------------------------|-------------------------------------------------------|
+| Release zip (default) | Any project, no git needed            | The zip that was extracted (`components/qpb/VERSION`) |
+| `git subtree`         | Git projects that commit the folder   | The tag in the `add` / `pull` command                 |
+| `git submodule`       | Git projects already using submodules | The commit recorded for `components/qpb`              |
+
+What every release publishes for them (see `docs/RELEASING.md`):
+
+- `qpb-X.Y.Z.zip` on the GitHub Release of tag `vX.Y.Z`: the `qpb/` folder only;
+- the branch `qpb-release`: the history of `qpb/` alone (`git subtree split`), its tip always the newest release;
+- the tag `qpb-vX.Y.Z` on the `qpb-release` commit of that release. `vX.Y.Z` tags the whole repository and cannot be
+  used by subtree or submodule, which need the component at the root.
+
+```sh
+# Release zip — first time and every update
+rm -rf components/qpb && unzip qpb-X.Y.Z.zip -d components     # the zip contains qpb/
+
+# git subtree — the folder is committed in the consumer's repository
+git subtree add  --prefix components/qpb <remote> qpb-vX.Y.Z --squash     # first time
+git subtree pull --prefix components/qpb <remote> qpb-vX.Y.Z --squash     # update
+
+# git submodule — the consumer's repository records a commit of qpb-release
+git submodule add -b qpb-release <remote> components/qpb                  # first time, then pin:
+git -C components/qpb fetch --tags && git -C components/qpb checkout qpb-vX.Y.Z
+git add components/qpb && git commit -m "Use qpb X.Y.Z"                   # same two lines to update
+```
+
+With a submodule, `git submodule update --remote components/qpb` moves to the newest release (the tip of
+`qpb-release`); its clone also downloads the development history, but only the component is checked out. A local change
+to the folder is overwritten by the zip, shows up as a merge conflict with subtree, and must be committed inside the
+submodule; changes belong upstream instead.
 
 ### 6.3 Requirements for `qpb/CMakeLists.txt` (do not pollute the host project)
 
@@ -848,3 +876,4 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D44| New flag `Live` (never modified, skipped by group resets and serialization); read-only Q_PROPERTYs with NOTIFY become live only with `setLiveReadOnlyProperties(true)` | RC trial F9: live values looked like user edits. Making them live automatically would change 1.2 behaviour (§9.2), so it is opt-in |
 | D45| `PropertyModel::onValueChanged(path, context, handler)`, by path            | RC trial F3: `if (path == ...)` chains; the model owns paths and change signals, `Property` is not a QObject; by path it survives `setRoot()` |
 | D46| Conditions (`enabledWhen`/`visibleWhen`) combined with the own flags, evaluated by the model | RC trial F10: dependencies wired by hand in every application; writing `Disabled`/`Hidden` would overwrite the application's own `setEnabled()` |
+| D47| Three ways to sync the component folder (release zip by default, `git subtree`, `git submodule` of `qpb-release`), all giving `components/qpb/` with the zip's content; every release also tags `qpb-vX.Y.Z` on `qpb-release` | Before, subtree could only follow the newest release, and the submodule pulled the development repository to another path (`components/property-browser/qpb`). One path keeps the consumer's CMake identical; the tags let git users pin and upgrade to an exact version |

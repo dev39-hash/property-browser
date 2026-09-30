@@ -312,9 +312,11 @@ Hướng dẫn chi tiết và công cụ: [`RELEASING.md`](RELEASING.md), `tools
 3. Thêm `tests/api_compat/v<x_y>.cpp` cho bản mới (bản minor) và cập nhật snapshot.
 4. Tag `vX.Y.Z` trên `main`.
 5. Tạo artifact: `qpb-X.Y.Z.zip` (chỉ folder `qpb/`) đính kèm GitHub Release; cập nhật nhánh `qpb-release`
-   (`git subtree split --prefix qpb -b qpb-release`) cho consumer dùng `git subtree pull`.
+   (`git subtree split --prefix qpb -b qpb-release`) và gắn tag `qpb-vX.Y.Z` lên đỉnh nhánh, cho consumer dùng
+   `git subtree` hoặc `git submodule` (SPEC §6.2, D47).
 
-**Phía consumer khi nâng cấp:** thay `components/qpb/` → build lại → đọc *Upgrade notes*. Với 1.x mong đợi là "không cần làm gì".
+**Phía consumer khi nâng cấp:** thay `components/qpb/` (zip, `git subtree pull` hoặc checkout `qpb-vX.Y.Z` trong
+submodule) → build lại → đọc *Upgrade notes*. Với 1.x mong đợi là "không cần làm gì".
 
 ---
 
@@ -352,7 +354,7 @@ Hướng dẫn chi tiết và công cụ: [`RELEASING.md`](RELEASING.md), `tools
 | Namespace / tên target / prefix include   | **Chốt: `qpb`, `qpb::core`, `qpb::widgets`, `<qpb/...>`** |
 | Build system của các project dùng qpb     | **Chốt: chỉ CMake**                            |
 | Ngôn ngữ code và tài liệu                  | **Chốt: tiếng Anh** (bản `-vi` để tham khảo)   |
-| Cách đồng bộ folder components            | Mở — mặc định chép tay từ zip                  |
+| Cách đồng bộ folder components            | **Chốt:** zip phát hành (mặc định), `git subtree` hoặc `git submodule` từ `qpb-release`, cố định version bằng tag `qpb-vX.Y.Z` (SPEC §6.2, D47) |
 | License                                   | Mở — giả định MIT                              |
 | "Custom property table" nghĩa là gì?      | **Chốt:** người dùng tự dựng property table bằng API public của thư viện (G1, G3); không thêm khái niệm mới |
 | Nguồn dữ liệu chính?                      | Mở — giả định builder tường minh; cần chốt trước M1.3 |
