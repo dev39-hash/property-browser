@@ -1,0 +1,166 @@
+/* ═══════════════════════════════════════════════════════════════════
+   qpb custom theme (docs/SPEC.md section 5.8)
+
+   One template for both themes: @{group.token} placeholders are replaced
+   with the values of the active theme (see main.cpp) before the sheet is
+   applied. Part 1 styles standard Qt widgets with standard selectors, which
+   also covers qpb's views and editors. Part 2 uses qpb's own hooks for what
+   the property browser paints or builds itself.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Standard widgets ─────────────────────────────────────────── */
+
+QWidget {
+    background-color: @{bg.window};
+    color: @{text.primary};
+}
+
+QToolTip {
+    color: @{text.primary};
+    background-color: @{bg.surface};
+    border: 1px solid @{border.default};
+}
+
+QMenu {
+    background-color: @{bg.surface};
+    border: 1px solid @{border.default};
+}
+QMenu::item:selected { background-color: @{selection.bg}; }
+QMenu::item:disabled { color: @{text.disabled}; }
+
+QLabel { background: transparent; }
+QLabel:disabled { color: @{text.disabled}; }
+
+QPushButton {
+    background-color: @{bg.elevated};
+    border: 1px solid @{border.default};
+    border-radius: 3px;
+    padding: 4px 12px;
+}
+QPushButton:hover   { border-color: @{accent.primary}; }
+QPushButton:pressed { background-color: @{accent.pressed}; color: @{text.on-accent}; }
+
+QLineEdit, QPlainTextEdit, QComboBox, QAbstractSpinBox {
+    background-color: @{bg.elevated};
+    border: 1px solid @{border.default};
+    border-radius: 3px;
+    padding: 1px 4px;
+    selection-background-color: @{accent.primary};
+    selection-color: @{text.on-accent};
+}
+QLineEdit:focus, QPlainTextEdit:focus, QComboBox:focus, QAbstractSpinBox:focus {
+    border-color: @{accent.primary};
+}
+QLineEdit:disabled, QPlainTextEdit:disabled, QComboBox:disabled, QAbstractSpinBox:disabled {
+    background-color: @{bg.disabled};
+    color: @{text.disabled};
+    border-color: @{border.disabled};
+}
+QComboBox QAbstractItemView {
+    background-color: @{bg.surface};
+    border: 1px solid @{border.default};
+    selection-background-color: @{selection.bg};
+    selection-color: @{text.primary};
+}
+
+QCheckBox { background: transparent; }
+QCheckBox::indicator, QTreeView::indicator {
+    width: 12px;
+    height: 12px;
+    background-color: @{bg.elevated};
+    border: 1px solid @{border.strong};
+    border-radius: 3px;
+}
+QCheckBox::indicator:checked, QTreeView::indicator:checked {
+    background-color: @{accent.primary};
+    border-color: @{accent.primary};
+}
+QCheckBox::indicator:disabled, QTreeView::indicator:disabled {
+    background-color: @{bg.disabled};
+    border-color: @{border.disabled};
+}
+
+QScrollArea { border: 1px solid @{border.default}; }
+QScrollBar:vertical { background: @{bg.surface}; width: 10px; margin: 0; }
+QScrollBar::handle:vertical { background: @{border.strong}; border-radius: 4px; min-height: 20px; }
+QScrollBar::handle:vertical:hover { background: @{text.muted}; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar:horizontal { background: @{bg.surface}; height: 10px; margin: 0; }
+QScrollBar::handle:horizontal { background: @{border.strong}; border-radius: 4px; min-width: 20px; }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
+
+QSplitter::handle { background-color: @{border.default}; }
+QSplitter::handle:hover { background-color: @{accent.primary}; }
+
+/* ── Tree view: standard selectors ───────────────────────────────── */
+
+qpb--PropertyTreeView {
+    background-color: @{bg.surface};
+    alternate-background-color: @{bg.alternate};
+    border: 1px solid @{border.default};
+    outline: none;
+}
+qpb--PropertyTreeView::item:hover    { background-color: @{bg.elevated}; }
+qpb--PropertyTreeView::item:selected { background-color: @{selection.bg}; color: @{text.primary}; }
+/* The branch column (expand arrows) is left to the style: a ::branch rule
+   would replace the arrows and need images for :closed and :open. */
+
+QHeaderView::section {
+    background-color: @{bg.surface};
+    color: @{text.muted};
+    border: none;
+    border-bottom: 1px solid @{border.default};
+    border-right: 1px solid @{border.default};
+    padding: 3px 6px;
+}
+
+/* Editors inside cells are made without a frame: keep them flat. */
+qpb--PropertyTreeView QLineEdit,
+qpb--PropertyTreeView QComboBox,
+qpb--PropertyTreeView QAbstractSpinBox,
+qpb--PropertyTreeView QPlainTextEdit {
+    border: 1px solid @{accent.primary};
+    border-radius: 0;
+    padding: 0 3px;
+}
+
+/* ── 2. qpb hooks (1.6) ──────────────────────────────────────────── */
+
+/* Tree view: the colours of what the view paints itself (qproperty-). */
+qpb--PropertyTreeView {
+    qproperty-groupBackground: @{bg.group};
+    qproperty-groupForeground: @{accent.primary};
+    qproperty-modifiedForeground: @{accent.bright};
+    qproperty-readOnlyForeground: @{text.muted};
+}
+
+/* Form view: sections. The title is a checkable QToolButton, so cover
+   :checked as well when the application styles checked tool buttons. */
+QWidget[qpbPart="group"] { background: transparent; }
+QToolButton[qpbPart="groupTitle"],
+QToolButton[qpbPart="groupTitle"]:checked {
+    background-color: @{bg.group};
+    color: @{accent.primary};
+    border: none;
+    border-bottom: 1px solid @{accent.primary};
+    border-radius: 0;
+    padding: 4px 6px;
+    text-align: left;
+}
+QToolButton[qpbPart="groupTitle"]:hover { background-color: @{bg.elevated}; }
+
+/* Form view: labels, modified labels (they stay bold), read-only text. */
+QLabel[qpbPart="label"] { color: @{text.primary}; }
+QLabel[qpbPart="label"][qpbModified="true"] { color: @{accent.bright}; }
+QLabel[qpbPart="label"]:disabled { color: @{text.disabled}; }
+QLabel[qpbPart="value"] { color: @{text.muted}; }
+
+/* File and directory editors (both views): the "..." button. */
+QToolButton[qpbPart="browse"] {
+    background-color: @{bg.elevated};
+    border: 1px solid @{border.default};
+    border-left: none;
+    padding: 0 6px;
+}
+QToolButton[qpbPart="browse"]:hover   { color: @{accent.primary}; }
+QToolButton[qpbPart="browse"]:pressed { background-color: @{accent.pressed}; color: @{text.on-accent}; }
