@@ -6,7 +6,8 @@
 #
 # Produces:
 #   dist/qpb-<version>.zip   the qpb/ component folder only, as consumers copy it
-#   branch qpb-release       history of qpb/ alone, for `git subtree pull`
+#   branch qpb-release       history of qpb/ alone, for git subtree / submodule
+#                            consumers (tagged qpb-v<version> when publishing)
 
 set -euo pipefail
 
@@ -39,6 +40,10 @@ git archive --format=zip --prefix=qpb/ -o "$archive" HEAD:qpb
 echo "created $archive"
 
 git subtree split --prefix=qpb --branch=qpb-release >/dev/null 2>&1
+if [[ "$(git rev-parse HEAD:qpb)" != "$(git rev-parse 'qpb-release^{tree}')" ]]; then
+    echo "error: qpb-release does not end with the qpb/ folder of HEAD" >&2
+    exit 1
+fi
 echo "updated local branch qpb-release ($(git rev-parse --short qpb-release))"
 
 cat <<MSG
@@ -46,7 +51,8 @@ cat <<MSG
 Local release artifacts are ready. To publish (after CI is green on this commit):
 
   git tag -a v$version -m "qpb $version"
-  git push origin v$version
+  git tag -a qpb-v$version qpb-release -m "qpb $version component folder"
+  git push origin v$version qpb-v$version
   git push origin qpb-release
   # then create a GitHub Release for v$version and attach $archive
 MSG

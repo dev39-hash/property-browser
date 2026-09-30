@@ -45,12 +45,41 @@ Requirements: C++17 or newer, Qt 6.5 or newer, CMake 3.21 or newer. The componen
 CMake settings. Static libraries are built by default; with `-DQPB_BUILD_SHARED=ON` you must deploy the qpb libraries
 next to your executable.
 
-Get the folder from a release (`qpb-<version>.zip`), or keep it in sync with
-`git subtree pull --prefix components/qpb <this repository> qpb-release --squash`.
+### Getting and updating the folder
+
+Three ways, all giving the same `components/qpb/`, so the CMake above does not depend on the choice. Each release
+publishes `qpb-<version>.zip` on its GitHub Release and the tag `qpb-v<version>` on the branch `qpb-release`, which holds
+the component folder alone.
+
+- **Release zip** (default, no git needed). Delete the old folder first, so files removed by the new version do not
+  linger:
+
+  ```sh
+  rm -rf components/qpb && unzip qpb-1.4.0.zip -d components
+  ```
+
+- **git subtree**: the folder is committed in your repository; pick the version with the tag.
+
+  ```sh
+  git subtree add  --prefix components/qpb <this repository> qpb-v1.4.0 --squash   # first time
+  git subtree pull --prefix components/qpb <this repository> qpb-v1.5.0 --squash   # update
+  ```
+
+- **git submodule**: your repository records a commit of `qpb-release`.
+
+  ```sh
+  git submodule add -b qpb-release <this repository> components/qpb                # first time
+  git -C components/qpb fetch --tags && git -C components/qpb checkout qpb-v1.4.0  # first time and every update
+  git add components/qpb && git commit -m "Use qpb 1.4.0"
+  ```
+
+  `git submodule update --remote components/qpb` moves to the newest release instead of a chosen one.
+
+Do not edit files inside `components/qpb/`: the next update replaces them.
 
 ## Upgrading
 
-Replace `components/qpb/` with the new version and rebuild; read the version's *Upgrade notes* in
+Replace `components/qpb/` with the new version (as above) and rebuild; read the version's *Upgrade notes* in
 `qpb/CHANGELOG.md`. Within a major version (1.x) this never requires changes to your code or CMake:
 
 - nothing public is removed or changed, only added;
