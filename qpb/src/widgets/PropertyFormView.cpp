@@ -18,6 +18,7 @@
 #include <QtWidgets/qlineedit.h>
 #include <QtWidgets/qmenu.h>
 #include <QtWidgets/qscrollbar.h>
+#include <QtWidgets/qstyle.h>
 #include <QtWidgets/qtoolbutton.h>
 #include <QtWidgets/qtooltip.h>
 
@@ -75,6 +76,37 @@ bool isUserEditable(const QModelIndex& value)
 {
     const Qt::ItemFlags flags = value.flags();
     return flags.testFlag(Qt::ItemIsEditable) || flags.testFlag(Qt::ItemIsUserCheckable);
+}
+
+// Applies the style sheet rules again after a selector property changed.
+void repolish(QWidget* widget)
+{
+    widget->style()->unpolish(widget);
+    widget->style()->polish(widget);
+}
+
+// Group titles and labels of modified properties are bold. Only the weight is
+// set, everything else is inherited (from the parent or a style sheet); a
+// style sheet resets the font when it polishes the widget, so eventFilter()
+// sets it again (D52).
+bool wantsBold(const QWidget* widget)
+{
+    const QString part = widget->property(StylePartProperty).toString();
+    return part == QLatin1String("groupTitle")
+        || (part == QLatin1String("label") && widget->property(StyleModifiedProperty).toBool());
+}
+
+void updateEmphasis(QWidget* widget)
+{
+    if (wantsBold(widget)) {
+        if (!widget->font().bold()) {
+            QFont bold;
+            bold.setBold(true);
+            widget->setFont(bold);
+        }
+    } else if (widget->testAttribute(Qt::WA_SetFont)) {
+        widget->setFont(QFont()); // inherit again
+    }
 }
 
 } // namespace
@@ -176,18 +208,20 @@ public:
     {
         FormRow* row = addRow(name);
         row->section = new QWidget;
+        row->section->setProperty(StylePartProperty, QStringLiteral("group"));
         auto* sectionLayout = new QVBoxLayout(row->section);
         sectionLayout->setContentsMargins(0, 0, 0, 0);
 
         row->title = new QToolButton;
+        row->title->setProperty(StylePartProperty, QStringLiteral("groupTitle"));
         row->title->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
         row->title->setAutoRaise(true);
         row->title->setCheckable(true);
         row->title->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-        QFont font = row->title->font();
-        font.setBold(true);
-        row->title->setFont(font);
+        row->title->installEventFilter(this);
+        updateEmphasis(row->title);
         row->body = new QWidget;
+        row->body->setProperty(StylePartProperty, QStringLiteral("groupBody"));
         auto* bodyLayout = new QVBoxLayout(row->body);
         bodyLayout->setContentsMargins(q->fontMetrics().height(), 0, 0, 0);
         sectionLayout->addWidget(row->title);
@@ -208,6 +242,9 @@ public:
         FormRow* row = addRow(name);
         row->form = form;
         row->label = new QLabel;
+        row->label->setProperty(StylePartProperty, QStringLiteral("label"));
+        row->label->setProperty(StyleModifiedProperty, false);
+        row->label->installEventFilter(this);
         const Property* property = propertyOf(name);
         QWidget* editor
             = property ? EditorFactory::global().createEditor(nullptr, *property) : nullptr;
@@ -225,6 +262,7 @@ public:
                     [this, editor] { commitEditor(editor); });
         } else {
             auto* text = new QLabel; // a type without an editor: display only
+            text->setProperty(StylePartProperty, QStringLiteral("value"));
             text->setTextInteractionFlags(Qt::TextSelectableByMouse);
             editor = text;
         }
@@ -260,9 +298,12 @@ public:
         row.label->setText(displayName);
         row.label->setToolTip(toolTip);
         row.label->setEnabled(enabled);
-        QFont font = row.label->font();
-        font.setBold(name.data(PropertyModel::IsModifiedRole).toBool());
-        row.label->setFont(font);
+        const bool modified = name.data(PropertyModel::IsModifiedRole).toBool();
+        if (row.label->property(StyleModifiedProperty).toBool() != modified) {
+            row.label->setProperty(StyleModifiedProperty, modified);
+            repolish(row.label); // rules for [qpbModified="true"] apply at once
+        }
+        updateEmphasis(row.label);
 
         if (!row.hasEditor) {
             static_cast<QLabel*>(row.editor)->setText(value.data(Qt::DisplayRole).toString());
@@ -391,6 +432,11 @@ public:
     bool eventFilter(QObject* object, QEvent* event) override
     {
         switch (event->type()) {
+        case QEvent::FontChange:
+            // A style sheet replaced the font of a bold title or label (D52).
+            if (auto* widget = qobject_cast<QWidget*>(object); widget && wantsBold(widget))
+                updateEmphasis(widget);
+            break;
         case QEvent::FocusOut: {
             FormRow* row = rowFor(object);
             if (!row || rebuilding)
