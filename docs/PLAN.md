@@ -346,6 +346,81 @@ chain (4 test functions: both directions, skipped check boxes, end of the view, 
 SPEC §4.6, §5.5, §8, D48, D49. `ctest` passes 30/30 locally. RC round 7 closed F4 and F5. M9.6: released as
 `1.5.0`.
 
+### M10 — 1.6 (additive only): theming with style sheets (QSS)
+
+Requested by the maintainer: applications theme their whole UI with a style sheet and want the property browser to
+follow it. A probe with an application-wide dark sheet (like the ones real applications use: rules for `QWidget`,
+`QLabel`, `QToolButton:checked`, `QTreeView::item:hover`, editors) showed that the standard Qt selectors already cover
+most of qpb (tree view, header, item hover/selection, alternate rows, scroll bars, tool tips, menus and every editor, in
+cells and in the form), but not four things qpb draws or sets up itself:
+
+1. **Tree view, group rows:** their background (`palette().button()`, set by the delegate) is lost as soon as the sheet
+   has `::item` rules, and no selector can address group rows (items are not widgets).
+2. **Tree view, emphasis colours:** names of modified properties are bold and read-only values dimmed
+   (`PlaceholderText`), but a sheet can change neither colour; with `::item` rules the dimming is lost too.
+3. **Form view, modified labels lose their bold font** under any sheet with a rule for `QLabel` (Qt resets the fonts of
+   styled child widgets) — a bug: the "modified" cue disappears.
+4. **Form view, group titles** are plain checkable `QToolButton`s: they pick up the application's generic
+   `QToolButton:checked` rule while expanded, and nothing identifies them for a rule of their own.
+
+1.6 adds hooks for these; code written for 1.0–1.5 builds and behaves the same, with or without a style sheet.
+
+**Tree view: colour properties, settable from a sheet with `qproperty-`.**
+
+```cpp
+Q_PROPERTY(QBrush groupBackground ...)     // default: palette Button (as before)
+Q_PROPERTY(QColor groupForeground ...)     // default: the item text colour
+Q_PROPERTY(QColor modifiedForeground ...)  // default: the item text colour (names stay bold)
+Q_PROPERTY(QColor readOnlyForeground ...)  // default: palette PlaceholderText (as before)
+```
+
+```css
+qpb--PropertyTreeView {
+    qproperty-groupBackground: #2c3038;
+    qproperty-modifiedForeground: #e87c00;
+}
+```
+
+- An invalid colour / `Qt::NoBrush` means the default. The delegate paints the group background itself before the
+  style draws the item, so it survives `::item` rules, and it sets both `Text` and `WindowText` so that the style sheet
+  style (which switches to `WindowText` for items without a matching rule) keeps the emphasis colours. A matching
+  `::item` rule with a `color` still wins, as in any Qt view.
+- Colours only: `qproperty-` cannot set fonts, and bold (groups, modified names) is the structural cue.
+
+**Form view: stable selectors on its widgets (dynamic properties).**
+
+| Widget | Selector |
+|---|---|
+| a group's section / title button / body | `QWidget[qpbPart="group"]`, `QToolButton[qpbPart="groupTitle"]`, `QWidget[qpbPart="groupBody"]` |
+| a property's label | `QLabel[qpbPart="label"]`, and `[qpbModified="true"]` while it is modified |
+| the read-only text of a type without editor | `QLabel[qpbPart="value"]` |
+| the browse button of path editors (both views) | `QToolButton[qpbPart="browse"]` |
+
+- `qpbModified` is updated with the value and the label is re-polished, so rules for it apply at once.
+- Bold labels and titles are re-applied after a style sheet has reset their font (fixes 3.).
+- The C++ class names of internal widgets (`qpb--detail--PathEdit`, ...) are not part of the API; only these properties
+  are.
+
+**Example `examples/custom_theme`:** one sheet template with `@{token}` placeholders and a dark and a light token table
+(graphite and orange), switched at runtime; a tree view and a form view on the same model; it styles standard widgets
+with standard selectors and qpb's parts with the hooks above.
+
+Decisions: **D50** colour properties on the tree view (items are not widgets; `qproperty-` is Qt's way to reach
+painted parts from a sheet); **D51** dynamic properties `qpbPart` / `qpbModified` as the form view's style sheet API,
+class names of internal widgets excluded; **D52** emphasis fonts are kept under style sheets (re-applied after a sheet
+resets them).
+
+| ID    | Task                                                                                           | Est. (h) | Done when |
+|-------|------------------------------------------------------------------------------------------------|----------|-----------|
+| M10.1 | SPEC: §5.5 (colour properties), §5.6 (selectors, bold kept), new §5.8 (style sheets), §8 (1.6), D50–D52; `-vi` | 1.5 | Decisions recorded |
+| M10.2 | Tree view: the four properties, group background painted by the delegate, `Text` + `WindowText` | 3 | Widget tests: defaults, set by `qproperty-` from a sheet, pixels of group rows and emphasis colours under a sheet with `::item` rules |
+| M10.3 | Form view and path editor: `qpbPart`, `qpbModified` with re-polish, bold kept under sheets       | 2.5 | Widget tests: selectors match, `qpbModified` follows edits and resets, labels stay bold with a `QLabel` rule |
+| M10.4 | `tests/api_compat/v1_6.cpp` + `api-1.6.txt`; `examples/custom_theme` (+ Qt Creator projects)       | 2 | Compat, snapshot and example builds pass; screenshots checked in both themes |
+| M10.5 | RC trial round 8: the trial application runs under a dark sheet using the hooks; new findings recorded | 1.5 | Trial tests pass, report updated |
+| M10.6 | Release 1.6.0                                                                                    | 0.5 | Release zip |
+
+Total ≈ 11 h.
+
 ---
 
 ## 3. Task dependencies
@@ -356,7 +431,7 @@ M0.* ─► M1.1 ─► M1.2, M1.3 ─► M1.4 ─► M1.5
 M1.* ─► M2.1 ─► M2.2 ─► M2.3
         M2.4 ─► M2.5 ─► M2.6 ─► M2.7 ─► M2.8
 M2.4 ─► M3.1 ─► M3.2 ─► M3.3 ─► M3.4, M3.5 ─► M3.6 ─► M3.7 ─► M3.8
-M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7 ─► M8 ─► M9
+M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7 ─► M8 ─► M9 ─► M10
 ```
 
 ---
