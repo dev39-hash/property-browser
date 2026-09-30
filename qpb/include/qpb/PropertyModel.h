@@ -80,6 +80,10 @@ public:
     // Resets the property at index (a group: all its descendants) to the
     // default value. Returns false if any reset was rejected.
     bool resetToDefault(const QModelIndex& index);
+    // Since 1.5. Resets the whole tree like root()->resetToDefault(): read-only
+    // and disabled properties too, live ones not; one batchValueChanged().
+    // Returns false if any reset was rejected, true for a model without a root.
+    bool resetAllToDefault();
 
     // Groups value changes: valueChanged() is still emitted for every change,
     // and batchValueChanged() is emitted once, by the outermost endBatch(),
