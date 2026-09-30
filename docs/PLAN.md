@@ -339,6 +339,13 @@ view.setTabStopsOnCheckBoxes(true);   // also a Q_PROPERTY
 Total ≈ 7.5 h. GitHub Actions is disabled for now (the account cannot start jobs), so "green CI" means the full
 `ctest` run locally (Windows, MSVC, Qt 6.11) until it is enabled again; Linux and macOS are not covered meanwhile.
 
+**Status:** M9.1–M9.5 done with D48 and D49 as proposed (a new method; opt-in). `resetAllToDefault()` (1 test
+function), `setTabStopsOnCheckBoxes()` with a `focusNextPrevChild()` override so Tab on a check box goes on along the
+chain (4 test functions: both directions, skipped check boxes, end of the view, proxy), `tests/api_compat/v1_5.cpp` and
+`api-1.5.txt` (superset of 1.4), `examples/settings_dialog` with "Restore Defaults" and check boxes in the Tab chain,
+SPEC §4.6, §5.5, §8, D48, D49. `ctest` passes 30/30 locally. RC round 7 closed F4 and F5. M9.6 (release 1.5.0) waits
+for the maintainer.
+
 ---
 
 ## 3. Task dependencies
