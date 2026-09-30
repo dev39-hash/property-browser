@@ -91,10 +91,21 @@ public:
     }
 
     // A value cell Tab can stop at.
-    bool isEditableValue(const QModelIndex& nameIndex) const
+    bool isTabStop(const QModelIndex& nameIndex) const
     {
         const QModelIndex value = nameIndex.siblingAtColumn(PropertyModel::ValueColumn);
-        return value.isValid() && value.flags().testFlag(Qt::ItemIsEditable)
+        if (!value.isValid() || q->isRowHidden(nameIndex.row(), nameIndex.parent()))
+            return false;
+        return value.flags().testFlag(Qt::ItemIsEditable) || isCheckBoxStop(nameIndex);
+    }
+
+    // A check box the user can change, when check boxes are Tab stops.
+    bool isCheckBoxStop(const QModelIndex& nameIndex) const
+    {
+        const QModelIndex value = nameIndex.siblingAtColumn(PropertyModel::ValueColumn);
+        const Qt::ItemFlags flags = value.flags();
+        return tabStopsOnCheckBoxes && value.isValid() && flags.testFlag(Qt::ItemIsUserCheckable)
+            && flags.testFlag(Qt::ItemIsEnabled)
             && !q->isRowHidden(nameIndex.row(), nameIndex.parent());
     }
 
@@ -108,6 +119,7 @@ public:
     QList<QMetaObject::Connection> connections;
     bool nameWidthFixed = false; // set explicitly: stop fitting it to the contents
     bool resizing = false; // fitNameColumn() is resizing the section
+    bool tabStopsOnCheckBoxes = false;
 };
 
 } // namespace detail
@@ -196,6 +208,16 @@ PropertyDelegate* PropertyTreeView::propertyDelegate() const
     return d->delegate;
 }
 
+bool PropertyTreeView::tabStopsOnCheckBoxes() const
+{
+    return d->tabStopsOnCheckBoxes;
+}
+
+void PropertyTreeView::setTabStopsOnCheckBoxes(bool on)
+{
+    d->tabStopsOnCheckBoxes = on;
+}
+
 void PropertyTreeView::contextMenuEvent(QContextMenuEvent* event)
 {
     const QModelIndex index = indexAt(event->pos());
@@ -233,9 +255,23 @@ QModelIndex PropertyTreeView::moveCursor(CursorAction cursorAction, Qt::Keyboard
         index = forward ? indexBelow(index) : indexAbove(index);
         if (!index.isValid())
             return QModelIndex();
-        if (d->isEditableValue(index))
+        if (d->isTabStop(index))
             return index.siblingAtColumn(PropertyModel::ValueColumn);
     }
+}
+
+bool PropertyTreeView::focusNextPrevChild(bool next)
+{
+    // A check box stop has no editor, so Tab reaches the view itself: go on
+    // along the chain instead of leaving it (at either end, leave as usual).
+    if (state() != EditingState && d->isCheckBoxStop(currentIndex())) {
+        const QModelIndex target = moveCursor(next ? MoveNext : MovePrevious, Qt::NoModifier);
+        if (target.isValid()) {
+            setCurrentIndex(target);
+            return true;
+        }
+    }
+    return QTreeView::focusNextPrevChild(next);
 }
 
 } // namespace qpb
