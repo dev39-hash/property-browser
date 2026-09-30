@@ -96,3 +96,20 @@ flag by hand. 25 trial tests pass, the earlier ones unchanged.
 Found while implementing (not in the trial): a literal `0` passed as the value (`enabledWhen(path, 0)`, e.g. an enum index)
 was ambiguous between the `QVariant` and the predicate overloads, since `0` is also a null pointer constant; `int`
 overloads were added before release.
+
+## Round 7 — 1.5 (M9) before release
+
+The round-6 application, unchanged, was first built against the component folder of the M9 branch: all its tests pass,
+so upgrading needs no code change. Then the settings page adopted the two additions of 1.5: "Reset all" calls
+`PropertyModel::resetAllToDefault()` instead of `root()->resetToDefault()`, and its tree view calls
+`setTabStopsOnCheckBoxes(true)`. The keyboard test now expects Tab to stop on the autosave check box (the only change to
+an earlier test, and the behaviour the option was added for); a new test clicks "Reset all". All trial tests pass. This
+round ran on Windows (MSVC 19.51, Qt 6.11.1) with the steps of `run_trial.sh` done by hand, since GitHub Actions is not
+available at the moment.
+
+| # | Finding | Outcome |
+|---|---------|---------|
+| F4 | Resetting the whole tree through `root()` | **Closed:** `resetAllToDefault()`; one `batchValueChanged`, and the read-only `lastSaved` is reset as before. |
+| F5 | Tab skips check boxes | **Closed:** with `setTabStopsOnCheckBoxes(true)` Tab stops on autosave without opening an editor, Space toggles it, and the next Tab goes on (past autosaveMinutes while that is disabled). |
+
+No new finding. Every finding of rounds 1–7 is now closed or confirmed.

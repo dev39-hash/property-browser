@@ -8,9 +8,20 @@ Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC tria
 
 ## Unreleased
 
+Fifth feature release of 1.x: additions only; code written for 1.0-1.4 builds and behaves the same.
+
+### Added
+- `PropertyModel::resetAllToDefault()`: resets the whole tree in one batch, like `root()->resetToDefault()`
+  (read-only and disabled properties too, live ones not); connectable to a "Restore Defaults" button.
+- `PropertyTreeView::setTabStopsOnCheckBoxes()` (also a Q_PROPERTY): Tab / Shift+Tab also stop on check boxes, where
+  Space toggles them. Off by default.
+
 ### Fixed
 - Building `qpb/` with MSVC no longer reports warning C4458 ("declaration hides class member") in
   `src/core/Property.cpp`.
+
+### Upgrade notes
+- Nothing to do. Tab keeps skipping check boxes unless `setTabStopsOnCheckBoxes(true)` is called.
 
 ## 1.4.0 - 2026-09-29
 

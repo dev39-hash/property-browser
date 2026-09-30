@@ -10,6 +10,7 @@
 #include <QListWidget>
 #include <QMenu>
 #include <QPlainTextEdit>
+#include <QPushButton>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QSlider>
@@ -118,6 +119,8 @@ private slots:
     // Round 6 (1.4.0).
     void settingsDependencyIsDeclared();
     void inspectorCallbacksFollowSelection();
+    // Round 7 (1.5.0).
+    void settingsResetAllButton();
     void screenshots();
 
 private:
@@ -275,9 +278,10 @@ void tst_Trial::settingsResetAll()
     QCOMPARE(model.find("General/autosaveMinutes")->value().toInt(), 5);
 }
 
-// Tab chains the editors: it never stops on the read-only About entries, on
-// autosaveMinutes while autosave is off, or on check boxes (SPEC 5.5, finding
-// F5). Check boxes are reached with the arrow keys and toggled with Space.
+// Tab chains the editors: it never stops on the read-only About entries or on
+// autosaveMinutes while autosave is off. Since round 7 (1.5, finding F5) the
+// page calls setTabStopsOnCheckBoxes(true), so Tab also stops on the autosave
+// check box; the arrow keys and Space still work as before.
 void tst_Trial::settingsKeyboardNavigation()
 {
     SettingsPage* page = m_window->settingsPage();
@@ -294,8 +298,8 @@ void tst_Trial::settingsKeyboardNavigation()
             visited << currentPath(view);
     }
     QCOMPARE(visited,
-        QStringList({"General/language", "General/autosaveMinutes", "General/signature",
-            "Paths/projectDir", "Paths/cacheDir", "Limits/cacheBytes"}));
+        QStringList({"General/language", "General/autosave", "General/autosaveMinutes",
+            "General/signature", "Paths/projectDir", "Paths/cacheDir", "Limits/cacheBytes"}));
 
     // Down from language to the autosave check box, Space toggles it.
     auto* language = openEditor<QWidget>(view, valueIndex(model, "General/language"));
@@ -308,6 +312,13 @@ void tst_Trial::settingsKeyboardNavigation()
     QCOMPARE(model.find("General/autosave")->value().toBool(), false);
 
     QVERIFY(openEditor<QWidget>(view, valueIndex(model, "General/language")));
+    pressTab(); // the check box: no editor opens, Space toggles it
+    QTRY_COMPARE(currentPath(view), QString("General/autosave"));
+    QTRY_VERIFY(view->hasFocus());
+    QTest::keyClick(view, Qt::Key_Space);
+    QCOMPARE(model.find("General/autosave")->value().toBool(), true);
+    QTest::keyClick(view, Qt::Key_Space);
+    QCOMPARE(model.find("General/autosave")->value().toBool(), false);
     pressTab(); // autosave is off: skips autosaveMinutes
     QTRY_COMPARE(currentPath(view), QString("General/signature"));
 }
@@ -605,6 +616,32 @@ void tst_Trial::inspectorCallbacksFollowSelection()
     QVERIFY(page->model().setValue("Transform/y", 7.0));
     QCOMPARE(page->scene()[0].y, 7.0);
     QCOMPARE(page->scene()[2].y, -3.5);
+}
+
+// F4: "Reset all" calls PropertyModel::resetAllToDefault(): one batch, and
+// the read-only status the application maintains is reset as well.
+void tst_Trial::settingsResetAllButton()
+{
+    SettingsPage* page = m_window->settingsPage();
+    m_window->tabs()->setCurrentWidget(page);
+    qpb::PropertyModel& model = page->model();
+    QVERIFY(model.setValue("General/language", "vi"));
+    QVERIFY(model.setValue("Limits/cacheBytes", qint64(1) << 20));
+    page->save();
+    QVERIFY(model.find("About/lastSaved")->value().toString() != QString("never"));
+
+    QPushButton* reset = nullptr;
+    for (QPushButton* button : page->findChildren<QPushButton*>()) {
+        if (button->text() == QString("Reset all"))
+            reset = button;
+    }
+    QVERIFY(reset);
+    QSignalSpy batch(&model, &qpb::PropertyModel::batchValueChanged);
+    reset->click();
+    QCOMPARE(batch.count(), 1);
+    QCOMPARE(batch.at(0).at(0).toStringList(),
+        QStringList({"General/language", "Limits/cacheBytes", "About/lastSaved"}));
+    QCOMPARE(model.find("About/lastSaved")->value().toString(), QString("never"));
 }
 
 void tst_Trial::screenshots()

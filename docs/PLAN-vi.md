@@ -336,6 +336,12 @@ view.setTabStopsOnCheckBoxes(true);   // cũng là một Q_PROPERTY
 Tổng ≈ 7.5 h. GitHub Actions đang tắt (tài khoản không khởi động được job), nên "CI xanh" nghĩa là chạy đủ `ctest` ở
 máy local (Windows, MSVC, Qt 6.11) cho tới khi bật lại; trong thời gian đó Linux và macOS không được kiểm tra.
 
+**Trạng thái:** M9.1–M9.5 xong theo D48 và D49 như đề xuất (thêm hàm mới; bật theo lựa chọn). `resetAllToDefault()`
+(1 hàm test), `setTabStopsOnCheckBoxes()` cùng override `focusNextPrevChild()` để Tab tại checkbox đi tiếp theo chuỗi
+(4 hàm test: hai chiều, bỏ qua checkbox, cuối view, qua proxy), `tests/api_compat/v1_5.cpp` và `api-1.5.txt` (chứa trọn
+1.4), `examples/settings_dialog` có "Restore Defaults" và checkbox trong chuỗi Tab, SPEC §4.6, §5.5, §8, D48, D49.
+`ctest` đạt 30/30 ở local. Vòng thử RC 7 đóng F4 và F5. M9.6 (phát hành 1.5.0) chờ maintainer.
+
 ---
 
 ## 3. Phụ thuộc giữa các task
