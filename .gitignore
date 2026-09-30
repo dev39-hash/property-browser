@@ -1,5 +1,7 @@
 # Build trees
 /build*/
+/examples/*/build*/
+/examples/*/.qtcreator/
 /out/
 cmake-build-*/
 
@@ -17,3 +19,6 @@ compile_commands.json
 .DS_Store
 Thumbs.db
 dist/
+
+# Local tool settings
+.mcp.json
