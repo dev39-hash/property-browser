@@ -421,7 +421,7 @@ màu trên `PropertyTreeView` (1 hàm test kiểm pixel, cả khi rule `::item` 
 của form và nút chọn đường dẫn, chữ đậm được đặt lại sau khi sheet reset (3 hàm test; test hồi quy fail nếu bỏ bản
 sửa), `tests/api_compat/v1_6.cpp` và `api-1.6.txt` (chứa trọn 1.5), `examples/custom_theme` (đã xem ảnh chụp: dark, light,
 không sheet), SPEC §5.5, §5.6, §5.8, §8, D50–D52. `ctest` đạt 33/33 ở local. Vòng thử RC 8 chạy ứng dụng thử dưới sheet
-của ứng dụng dùng các móc; F11 và F12 là hành vi của Qt, đã ghi tài liệu. M10.6 (phát hành 1.6.0) chờ maintainer.
+của ứng dụng dùng các móc; F11 và F12 là hành vi của Qt, đã ghi tài liệu. M10.6: đã phát hành `1.6.0`.
 
 ---
 
