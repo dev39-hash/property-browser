@@ -429,7 +429,7 @@ Colour properties on `PropertyTreeView` (1 test function with pixel checks, also
 functions; the regression test fails without the fix), `tests/api_compat/v1_6.cpp` and `api-1.6.txt` (superset of 1.5),
 `examples/custom_theme` (screenshots checked: dark, light, no sheet), SPEC §5.5, §5.6, §5.8, §8, D50–D52. `ctest`
 passes 33/33 locally. RC round 8 ran the trial under an application sheet with the hooks; F11 and F12 are Qt behaviour,
-documented. M10.6 (release 1.6.0) waits for the maintainer.
+documented. M10.6: released as `1.6.0`.
 
 ---
 
