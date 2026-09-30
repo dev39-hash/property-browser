@@ -343,8 +343,8 @@ Total ≈ 7.5 h. GitHub Actions is disabled for now (the account cannot start jo
 function), `setTabStopsOnCheckBoxes()` with a `focusNextPrevChild()` override so Tab on a check box goes on along the
 chain (4 test functions: both directions, skipped check boxes, end of the view, proxy), `tests/api_compat/v1_5.cpp` and
 `api-1.5.txt` (superset of 1.4), `examples/settings_dialog` with "Restore Defaults" and check boxes in the Tab chain,
-SPEC §4.6, §5.5, §8, D48, D49. `ctest` passes 30/30 locally. RC round 7 closed F4 and F5. M9.6 (release 1.5.0) waits
-for the maintainer.
+SPEC §4.6, §5.5, §8, D48, D49. `ctest` passes 30/30 locally. RC round 7 closed F4 and F5. M9.6: released as
+`1.5.0`.
 
 ---
 
