@@ -6,6 +6,12 @@ All notable changes to qpb are documented here. Each release has the sections
 From 1.0.0 on, releases within a major version never require changes to consuming code or CMake.
 Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC trial shows a problem.
 
+## Unreleased
+
+### Fixed
+- Building `qpb/` with MSVC no longer reports warning C4458 ("declaration hides class member") in
+  `src/core/Property.cpp`.
+
 ## 1.4.0 - 2026-09-29
 
 Fourth feature release of 1.x: additions only; code written for 1.0-1.3 builds and behaves the same.
