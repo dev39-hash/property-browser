@@ -6,7 +6,7 @@ All notable changes to qpb are documented here. Each release has the sections
 From 1.0.0 on, releases within a major version never require changes to consuming code or CMake.
 Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC trial shows a problem.
 
-## Unreleased
+## 1.6.0 - 2026-09-30
 
 Sixth feature release of 1.x: additions only; code written for 1.0-1.5 builds and behaves the same.
 
