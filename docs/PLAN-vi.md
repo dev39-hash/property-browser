@@ -414,6 +414,15 @@ của widget nội bộ; **D52** font nhấn được giữ dưới style sheet 
 
 Tổng ≈ 11 h.
 
+**Trạng thái:** M10.1–M10.5 xong theo D50–D52 như đề xuất. Chương trình thử cũng sửa lại hai phỏng đoán ban đầu: hàng
+group không mất nền vì rule `::item`, mà vì `background-color` của sheet đặt `Button` của palette trùng màu các hàng; và
+style của style sheet giữ màu `Text` của item (mã nguồn Qt 6.5 và 6.11), nên không cần xử lý thêm `WindowText`. Property
+màu trên `PropertyTreeView` (1 hàm test kiểm pixel, cả khi rule `::item` thắng), `qpbPart` / `qpbModified` trên widget
+của form và nút chọn đường dẫn, chữ đậm được đặt lại sau khi sheet reset (3 hàm test; test hồi quy fail nếu bỏ bản
+sửa), `tests/api_compat/v1_6.cpp` và `api-1.6.txt` (chứa trọn 1.5), `examples/custom_theme` (đã xem ảnh chụp: dark, light,
+không sheet), SPEC §5.5, §5.6, §5.8, §8, D50–D52. `ctest` đạt 33/33 ở local. Vòng thử RC 8 chạy ứng dụng thử dưới sheet
+của ứng dụng dùng các móc; F11 và F12 là hành vi của Qt, đã ghi tài liệu. M10.6 (phát hành 1.6.0) chờ maintainer.
+
 ---
 
 ## 3. Phụ thuộc giữa các task

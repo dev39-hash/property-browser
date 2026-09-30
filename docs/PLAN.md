@@ -421,6 +421,16 @@ resets them).
 
 Total ≈ 11 h.
 
+**Status:** M10.1–M10.5 done with D50–D52 as proposed. The probe also corrected two first guesses: group rows did not
+lose their background to `::item` rules, a sheet's `background-color` gives the palette's `Button` the rows' colour; and
+the style sheet style keeps an item's `Text` colour (Qt 6.5 and 6.11 sources), so no `WindowText` workaround was needed.
+Colour properties on `PropertyTreeView` (1 test function with pixel checks, also for a winning `::item` rule),
+`qpbPart` / `qpbModified` on the form's widgets and the browse button, bold re-applied after a sheet resets it (3 test
+functions; the regression test fails without the fix), `tests/api_compat/v1_6.cpp` and `api-1.6.txt` (superset of 1.5),
+`examples/custom_theme` (screenshots checked: dark, light, no sheet), SPEC §5.5, §5.6, §5.8, §8, D50–D52. `ctest`
+passes 33/33 locally. RC round 8 ran the trial under an application sheet with the hooks; F11 and F12 are Qt behaviour,
+documented. M10.6 (release 1.6.0) waits for the maintainer.
+
 ---
 
 ## 3. Task dependencies

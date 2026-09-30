@@ -113,3 +113,24 @@ available at the moment.
 | F5 | Tab skips check boxes | **Closed:** with `setTabStopsOnCheckBoxes(true)` Tab stops on autosave without opening an editor, Space toggles it, and the next Tab goes on (past autosaveMinutes while that is disabled). |
 
 No new finding. Every finding of rounds 1–7 is now closed or confirmed.
+
+## Round 8 — 1.6 (M10) before release
+
+The round-7 application, unchanged, was first built against the component folder of the M10 branch: all its tests pass.
+Then the trial themed its whole UI with a dark application style sheet, written the way real applications write them
+(rules for `QWidget`, `QLabel`, `QToolButton:checked`) plus qpb's hooks: `qproperty-groupBackground` and
+`qproperty-modifiedForeground` for the tree view, `QToolButton[qpbPart="groupTitle"]` and
+`QLabel[qpbPart="label"][qpbModified="true"]` for the form. A new test checks both views under that sheet: the tree view
+takes its colours from the sheet; in the form, a modified label stays bold in the modified colour, the "General" title
+gets its own rule instead of the generic checked tool button one, and "Reset all" makes the label plain again. All trial
+tests pass (Windows, MSVC 19.51, Qt 6.11.1).
+
+Before the hooks, the probe for M10 (docs/PLAN.md) had shown the four gaps they close; the one that was a bug, modified
+labels of the form losing their bold font under any sheet with a `QLabel` rule, is fixed (D52).
+
+Found while writing `examples/custom_theme` (not in the trial; Qt behaviour, documented in SPEC 5.8):
+
+| # | Finding | Outcome |
+|---|---------|---------|
+| F11 | Colours set with `qproperty-` stay when the style sheet is removed (switching to "no style sheet" kept the light theme's group colours). | Documented; the example sets the four colours back to invalid values when it removes its sheet. |
+| F12 | A `::branch` rule of the tree view (to colour the column left of group rows) removes the native expand arrows. | Documented: such a rule needs `image:` for `:closed` / `:open`; the example leaves the branch column to the style. |
