@@ -354,10 +354,11 @@ follow it. A probe with an application-wide dark sheet (like the ones real appli
 most of qpb (tree view, header, item hover/selection, alternate rows, scroll bars, tool tips, menus and every editor, in
 cells and in the form), but not four things qpb draws or sets up itself:
 
-1. **Tree view, group rows:** their background (`palette().button()`, set by the delegate) is lost as soon as the sheet
-   has `::item` rules, and no selector can address group rows (items are not widgets).
+1. **Tree view, group rows:** their background is the palette's `Button`, which a sheet's `background-color` sets to
+   the colour of every other row, so group rows no longer stand out; and no selector can address group rows (items are
+   not widgets).
 2. **Tree view, emphasis colours:** names of modified properties are bold and read-only values dimmed
-   (`PlaceholderText`), but a sheet can change neither colour; with `::item` rules the dimming is lost too.
+   (`PlaceholderText`), but a sheet can change neither colour.
 3. **Form view, modified labels lose their bold font** under any sheet with a rule for `QLabel` (Qt resets the fonts of
    styled child widgets) — a bug: the "modified" cue disappears.
 4. **Form view, group titles** are plain checkable `QToolButton`s: they pick up the application's generic
@@ -381,10 +382,9 @@ qpb--PropertyTreeView {
 }
 ```
 
-- An invalid colour / `Qt::NoBrush` means the default. The delegate paints the group background itself before the
-  style draws the item, so it survives `::item` rules, and it sets both `Text` and `WindowText` so that the style sheet
-  style (which switches to `WindowText` for items without a matching rule) keeps the emphasis colours. A matching
-  `::item` rule with a `color` still wins, as in any Qt view.
+- An invalid colour / `Qt::NoBrush` means the default. The delegate passes them to the style in the item's
+  `backgroundBrush` and `Text` colour, which the style sheet style keeps (checked in Qt 6.5 and 6.11 sources); a
+  matching `::item` rule with a `color` or `background` still wins, as in any Qt view.
 - Colours only: `qproperty-` cannot set fonts, and bold (groups, modified names) is the structural cue.
 
 **Form view: stable selectors on its widgets (dynamic properties).**
@@ -413,7 +413,7 @@ resets them).
 | ID    | Task                                                                                           | Est. (h) | Done when |
 |-------|------------------------------------------------------------------------------------------------|----------|-----------|
 | M10.1 | SPEC: §5.5 (colour properties), §5.6 (selectors, bold kept), new §5.8 (style sheets), §8 (1.6), D50–D52; `-vi` | 1.5 | Decisions recorded |
-| M10.2 | Tree view: the four properties, group background painted by the delegate, `Text` + `WindowText` | 3 | Widget tests: defaults, set by `qproperty-` from a sheet, pixels of group rows and emphasis colours under a sheet with `::item` rules |
+| M10.2 | Tree view: the four properties, used by the delegate for group rows, modified names, read-only values | 3 | Widget tests: defaults, set by `qproperty-` from a sheet, pixels of group rows and emphasis colours under a sheet with `::item` rules |
 | M10.3 | Form view and path editor: `qpbPart`, `qpbModified` with re-polish, bold kept under sheets       | 2.5 | Widget tests: selectors match, `qpbModified` follows edits and resets, labels stay bold with a `QLabel` rule |
 | M10.4 | `tests/api_compat/v1_6.cpp` + `api-1.6.txt`; `examples/custom_theme` (+ Qt Creator projects)       | 2 | Compat, snapshot and example builds pass; screenshots checked in both themes |
 | M10.5 | RC trial round 8: the trial application runs under a dark sheet using the hooks; new findings recorded | 1.5 | Trial tests pass, report updated |

@@ -350,10 +350,10 @@ chương trình thử với style sheet dark cho toàn ứng dụng (giống she
 header, hover/selection của item, hàng xen kẽ, thanh cuộn, tooltip, menu và mọi editor, trong ô lẫn trong form), nhưng
 chưa phủ bốn thứ qpb tự vẽ hoặc tự thiết lập:
 
-1. **Tree view, hàng group:** nền (`palette().button()`, do delegate đặt) mất ngay khi sheet có rule `::item`, và không
-   selector nào nhắm được hàng group (item không phải widget).
+1. **Tree view, hàng group:** nền là màu `Button` của palette, mà `background-color` của sheet đặt trùng màu với mọi
+   hàng khác, nên hàng group không còn nổi bật; và không selector nào nhắm được hàng group (item không phải widget).
 2. **Tree view, màu nhấn:** tên property đã sửa in đậm và giá trị read-only bị làm mờ (`PlaceholderText`), nhưng sheet
-   không đổi được màu nào; khi có rule `::item` thì mất luôn phần làm mờ.
+   không đổi được màu nào.
 3. **Form view, nhãn đã sửa mất chữ đậm** dưới mọi sheet có rule cho `QLabel` (Qt đặt lại font của widget con được
    style) — một lỗi: dấu hiệu "đã sửa" biến mất.
 4. **Form view, tiêu đề group** là `QToolButton` checkable thông thường: khi đang mở chúng dính rule `QToolButton:checked`
@@ -377,9 +377,9 @@ qpb--PropertyTreeView {
 }
 ```
 
-- Màu không hợp lệ / `Qt::NoBrush` nghĩa là mặc định. Delegate tự tô nền group trước khi style vẽ item, nên nền vẫn còn
-  khi có rule `::item`, và đặt cả `Text` lẫn `WindowText` để style của style sheet (vốn chuyển sang `WindowText` cho item
-  không khớp rule nào) vẫn giữ màu nhấn. Rule `::item` khớp và có `color` vẫn thắng, như mọi view của Qt.
+- Màu không hợp lệ / `Qt::NoBrush` nghĩa là mặc định. Delegate đưa chúng cho style qua `backgroundBrush` và màu `Text`
+  của item, mà style của style sheet giữ nguyên (đã kiểm trong mã nguồn Qt 6.5 và 6.11); rule `::item` khớp và có
+  `color` hoặc `background` vẫn thắng, như mọi view của Qt.
 - Chỉ màu: `qproperty-` không đặt được font, và chữ đậm (group, tên đã sửa) là dấu hiệu cấu trúc.
 
 **Form view: selector ổn định trên các widget (dynamic property).**
@@ -406,7 +406,7 @@ của widget nội bộ; **D52** font nhấn được giữ dưới style sheet 
 | ID    | Việc                                                                                           | Ước tính (h) | Xong khi |
 |-------|------------------------------------------------------------------------------------------------|----------|-----------|
 | M10.1 | SPEC: §5.5 (property màu), §5.6 (selector, giữ chữ đậm), §5.8 mới (style sheet), §8 (1.6), D50–D52; `-vi` | 1.5 | Đã ghi quyết định |
-| M10.2 | Tree view: bốn property, delegate tự tô nền group, `Text` + `WindowText`                         | 3 | Test widget: mặc định, đặt bằng `qproperty-` từ sheet, pixel của hàng group và màu nhấn dưới sheet có rule `::item` |
+| M10.2 | Tree view: bốn property, delegate dùng cho hàng group, tên đã sửa, giá trị read-only            | 3 | Test widget: mặc định, đặt bằng `qproperty-` từ sheet, pixel của hàng group và màu nhấn dưới sheet có rule `::item` |
 | M10.3 | Form view và editor path: `qpbPart`, `qpbModified` kèm polish lại, giữ chữ đậm dưới sheet        | 2.5 | Test widget: selector khớp, `qpbModified` theo sửa và reset, nhãn vẫn đậm khi có rule `QLabel` |
 | M10.4 | `tests/api_compat/v1_6.cpp` + `api-1.6.txt`; `examples/custom_theme` (+ dự án Qt Creator)        | 2 | Test tương thích, snapshot và build example đạt; ảnh chụp đã kiểm ở cả hai theme |
 | M10.5 | Vòng thử RC 8: ứng dụng thử chạy dưới sheet dark dùng các móc; ghi phát hiện mới                 | 1.5 | Test trial đạt, cập nhật báo cáo |

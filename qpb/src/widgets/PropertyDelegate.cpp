@@ -2,6 +2,7 @@
 #include <qpb/PropertyModel.h>
 #include <qpb/widgets/EditorFactory.h>
 #include <qpb/widgets/PropertyDelegate.h>
+#include <qpb/widgets/PropertyTreeView.h>
 
 #include <QtCore/qpointer.h>
 #include <QtCore/qtimer.h>
@@ -87,6 +88,19 @@ public:
     // Message of the last validation failure during setModelData().
     QString lastError;
 };
+
+namespace {
+
+// Sets the colour an item's text is drawn with (a style sheet ::item rule with
+// a color still replaces it). Active and inactive groups only, so that
+// disabled items keep looking disabled.
+void setItemTextColor(QPalette& palette, const QColor& color)
+{
+    for (const QPalette::ColorGroup group : {QPalette::Active, QPalette::Inactive})
+        palette.setColor(group, QPalette::Text, color);
+}
+
+} // namespace
 
 } // namespace detail
 
@@ -195,20 +209,34 @@ void PropertyDelegate::paint(
     QStyleOptionViewItem opt = option;
     initStyleOption(&opt, index);
 
+    // Colours a PropertyTreeView may set, e.g. from a style sheet (1.6).
+    const auto* tree = qobject_cast<const PropertyTreeView*>(opt.widget);
     const bool isGroup = index.data(PropertyModel::IsGroupRole).toBool();
     if (isGroup) {
         opt.font.setBold(true);
-        if (!(opt.state & QStyle::State_Selected))
-            opt.backgroundBrush = opt.palette.button();
+        if (!(opt.state & QStyle::State_Selected)) {
+            // A style sheet's background-color also sets Button, to the colour
+            // of the other rows; groupBackground keeps group rows apart.
+            const QBrush background = tree ? tree->groupBackground() : QBrush();
+            opt.backgroundBrush
+                = background.style() != Qt::NoBrush ? background : opt.palette.button();
+        }
+        if (tree && tree->groupForeground().isValid())
+            detail::setItemTextColor(opt.palette, tree->groupForeground());
     } else if (index.column() == PropertyModel::NameColumn
         && index.data(PropertyModel::IsModifiedRole).toBool()) {
         opt.font.setBold(true);
+        if (tree && tree->modifiedForeground().isValid())
+            detail::setItemTextColor(opt.palette, tree->modifiedForeground());
     } else if (index.column() == PropertyModel::ValueColumn) {
         // Read-only values (enabled, but neither editable nor checkable) are dimmed.
         const Qt::ItemFlags flags = index.flags();
         if (flags.testFlag(Qt::ItemIsEnabled) && !flags.testFlag(Qt::ItemIsEditable)
             && !flags.testFlag(Qt::ItemIsUserCheckable)) {
-            opt.palette.setColor(QPalette::Text, opt.palette.color(QPalette::PlaceholderText));
+            const QColor color = tree && tree->readOnlyForeground().isValid()
+                ? tree->readOnlyForeground()
+                : opt.palette.color(QPalette::PlaceholderText);
+            detail::setItemTextColor(opt.palette, color);
         }
     }
     if (index.column() == PropertyModel::ValueColumn)
