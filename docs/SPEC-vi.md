@@ -605,7 +605,7 @@ property-browser/                  (repo phát triển)
 │       └── widgets/
 ├── CMakeLists.txt                 # dev: add_subdirectory(qpb) + tests + examples
 ├── tests/   (core, widgets, api_compat, consumer)
-├── examples/ (quickstart, custom_type, inspector)
+├── examples/ (quickstart, custom_type, inspector, ...; qtcreator/: dự án CMake và qmake cho Qt Creator)
 ├── tools/
 └── docs/
 ```

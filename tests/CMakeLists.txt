@@ -34,6 +34,10 @@ add_test(NAME architecture_rules
     COMMAND "${CMAKE_COMMAND}" "-DQPB_DIR=${PROJECT_SOURCE_DIR}/qpb"
         -P "${PROJECT_SOURCE_DIR}/tools/check_architecture.cmake"
 )
+add_test(NAME qtcreator_examples_listed
+    COMMAND "${CMAKE_COMMAND}" "-DEXAMPLES_DIR=${PROJECT_SOURCE_DIR}/examples"
+        -P "${PROJECT_SOURCE_DIR}/tools/check_qtcreator_examples.cmake"
+)
 add_test(NAME size_quickstart_s1
     COMMAND "${CMAKE_COMMAND}" -DLIMIT=30
         "-DFILES=${PROJECT_SOURCE_DIR}/examples/quickstart/main.cpp"
