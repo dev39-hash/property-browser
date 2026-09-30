@@ -12,6 +12,8 @@ QT += widgets
 QPB_EXAMPLE_DIR = $$QPB_EXAMPLES_DIR/$$EXAMPLE
 SOURCES += $$files($$QPB_EXAMPLE_DIR/*.cpp)
 HEADERS += $$files($$QPB_EXAMPLE_DIR/*.h)
+RESOURCES += $$files($$QPB_EXAMPLE_DIR/*.qrc)
+OTHER_FILES += $$files($$QPB_EXAMPLE_DIR/*.qss)
 
 LIBS += -L$$QPB_BUILD_DIR -lqpb
 msvc: PRE_TARGETDEPS += $$QPB_BUILD_DIR/qpb.lib

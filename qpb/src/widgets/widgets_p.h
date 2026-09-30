@@ -44,6 +44,12 @@ inline constexpr char EditorIndexProperty[] = "_qpb_editorIndex";
 // Number of EditorDialogScope objects alive for an editor (dynamic property).
 inline constexpr char DialogDepthProperty[] = "_qpb_dialogDepth";
 
+// Style sheet selectors (docs/SPEC.md section 5.8, public: never rename).
+// QWidget[qpbPart="groupTitle"]: the role of one of the views' widgets.
+inline constexpr char StylePartProperty[] = "qpbPart";
+// QLabel[qpbModified="true"]: the label of a modified property.
+inline constexpr char StyleModifiedProperty[] = "qpbModified";
+
 // True while an EditorDialogScope exists for editor or one of its ancestors.
 bool isShowingDialog(const QWidget* editor);
 

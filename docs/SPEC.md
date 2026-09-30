@@ -523,6 +523,8 @@ public:
     void setNameColumnWidth(int px);
     PropertyDelegate* propertyDelegate() const;
     void setTabStopsOnCheckBoxes(bool on);  bool tabStopsOnCheckBoxes() const;   // 1.5, Q_PROPERTY, default false
+    // 1.6, Q_PROPERTYs for style sheets (§5.8): groupBackground (QBrush), groupForeground,
+    // modifiedForeground, readOnlyForeground (QColor), each with a setter
 };
 ```
 
@@ -541,6 +543,8 @@ public:
   value cell of a Bool property the user can change (enabled, not read-only, visible). No editor opens there; Space
   toggles it, and the next Tab / Shift+Tab goes on along the chain, leaving the view at either end as before. The form
   view needs no such option: its check boxes are widgets in the normal focus chain. [D49]
+- Group rows are bold on the palette's `Button` (or `groupBackground`), modified names bold (in `modifiedForeground`),
+  read-only values in `PlaceholderText` (or `readOnlyForeground`); see §5.8 for style sheets. [D50]
 
 ### 5.6 `PropertyFormView : QScrollArea` (1.1)
 
@@ -571,6 +575,8 @@ public:
   afterwards; old widgets are deleted later (an editor may be running its own handler). [D38]
 - Honours `visible` (hides label + editor, or the whole section), `enabled` (label and editor disabled) and `readOnly`
   (editor disabled, label normal).
+- Its widgets carry the style sheet selectors of §5.8 (`qpbPart`, `qpbModified`); bold titles and labels stay bold when a
+  style sheet resets the fonts of styled child widgets. [D51, D52]
 - Context menu on a label: **Reset to default**; on a section title: **Reset group** (same rules as the tree view, D34).
 - Does not use `QDataWidgetMapper` (no tree support).
 
@@ -581,6 +587,55 @@ public:
 `setFilterFixedString()` / `setFilterRegularExpression()`. A group is shown when a descendant matches; when a group's name
 matches, its descendants are shown too (checked in `filterAcceptsRow()`, not with `autoAcceptChildRows`, so subclasses see
 every row). Hidden properties never match. `PropertyTreeView` and `PropertyFormView` work with the proxy. [D39]
+
+### 5.8 Style sheets (1.6)
+
+Applications theme qpb with Qt style sheets like any other widget; `examples/custom_theme` shows a complete dark and
+light theme. Standard selectors cover the views and every editor: `qpb--PropertyTreeView` / `qpb--PropertyFormView`
+(or `QTreeView` / `QScrollArea`), `::item` with `:hover`, `:selected`, `:alternate`, `::branch`, `QHeaderView::section`,
+and the editors by their Qt classes: `qpb--PropertyTreeView QLineEdit` for editors in cells (created without a frame),
+`qpb--PropertyFormView QLineEdit` in the form. What qpb paints or builds itself has hooks of its own:
+
+**Tree view** (items are not widgets): colour properties, set from a sheet with `qproperty-`. [D50]
+
+| Property | Type | Default (invalid colour / `Qt::NoBrush`) |
+|---|---|---|
+| `groupBackground` | `QBrush` | the palette's `Button` (a sheet's `background-color` sets it to the colour of the other rows) |
+| `groupForeground` | `QColor` | the item text colour |
+| `modifiedForeground` | `QColor` | the item text colour |
+| `readOnlyForeground` | `QColor` | the palette's `PlaceholderText` |
+
+A matching `::item` rule with a `color` or `background` takes precedence, as in any item view. Fonts cannot be set
+with `qproperty-`: group names and names of modified properties stay bold. Like every `qproperty-` value, they stay when
+the sheet is removed: an application switching to a theme without them sets them back to invalid values. The branch
+column left of group rows is drawn by the view; a `::branch` rule replaces its native expand arrows, so it also needs
+`image:` for `:closed` and `:open`.
+
+**Form view and path editors**: dynamic properties on their widgets. The property names and values are API (never
+renamed, §9.2); class names of internal widgets (`qpb--detail--...`) are not. [D51]
+
+| Widget | Selector |
+|---|---|
+| a group's section, title button, body | `QWidget[qpbPart="group"]`, `QToolButton[qpbPart="groupTitle"]`, `QWidget[qpbPart="groupBody"]` |
+| a property's label | `QLabel[qpbPart="label"]`; also `[qpbModified="true"]` while the property is modified |
+| read-only text of a type without editor | `QLabel[qpbPart="value"]` |
+| browse button of file and directory editors (both views) | `QToolButton[qpbPart="browse"]` |
+
+`qpbModified` follows the model; the label is re-polished when it changes, so its rules apply at once. The section
+title is a checkable `QToolButton` (checked while expanded), so a rule for it should also cover `:checked` when the
+application styles `QToolButton:checked`. A style sheet resets the font of styled child widgets when it polishes them;
+the form sets the bold weight of titles and modified labels again afterwards. [D52]
+
+```css
+qpb--PropertyTreeView {
+    qproperty-groupBackground: #2c3038;
+    qproperty-modifiedForeground: #e87c00;
+}
+QToolButton[qpbPart="groupTitle"], QToolButton[qpbPart="groupTitle"]:checked {
+    background: #2c3038; color: #e87c00; border: none; border-bottom: 1px solid #e87c00;
+}
+QLabel[qpbPart="label"][qpbModified="true"] { color: #e87c00; }
+```
 
 ---
 
@@ -730,6 +785,7 @@ After 1.0, new features arrive as **additions** (minor releases); existing API i
 | 1.3     | `Property::Flag::Live` (§4.2); `QObjectPropertySource` titles and live values (§4.9)                    | Additive      |
 | 1.4     | Conditions `enabledWhen`/`visibleWhen` (§4.2); `PropertyModel::onValueChanged()` (§4.6)                 | Additive      |
 | 1.5     | `PropertyModel::resetAllToDefault()` (§4.6); `PropertyTreeView::setTabStopsOnCheckBoxes()` (§5.5)      | Additive      |
+| 1.6     | Style sheet hooks (§5.8): tree view colour properties, form view selectors `qpbPart` / `qpbModified`     | Additive      |
 | 2.0     | Only if breaking the API is truly necessary; removes everything deprecated                               | Breaking      |
 
 **The 1.0 design must leave room for 1.1/1.2** without API changes: the form view and filter are new classes on top of the
@@ -892,3 +948,6 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D47| Three ways to sync the component folder (release zip by default, `git subtree`, `git submodule` of `qpb-release`), all giving `components/qpb/` with the zip's content; every release also tags `qpb-vX.Y.Z` on `qpb-release` | Before, subtree could only follow the newest release, and the submodule pulled the development repository to another path (`components/property-browser/qpb`). One path keeps the consumer's CMake identical; the tags let git users pin and upgrade to an exact version |
 | D48| `PropertyModel::resetAllToDefault()` resets the whole tree; `resetToDefault(QModelIndex())` keeps returning `false` | RC trial F4: the root has no index, so applications went through `root()->resetToDefault()`. Giving the invalid index that meaning would change documented behaviour (§9.2) |
 | D49| Check boxes join the tree view's Tab chain only with `setTabStopsOnCheckBoxes(true)` | RC trial F5: keyboard users reach check boxes with the arrow keys only. Making it the default would change what the keyboard does in every consuming application after an upgrade (§9.2), so it is opt-in, as D44 |
+| D50| The tree view exposes the colours it paints itself as `Q_PROPERTY`s (`groupBackground`, `groupForeground`, `modifiedForeground`, `readOnlyForeground`), set from style sheets with `qproperty-`; fonts stay fixed | Items are not widgets, so no selector reaches group rows or modified names; `qproperty-` is Qt's way for a sheet to reach painted parts. It cannot set fonts, and bold is the structural cue |
+| D51| The form view and path editors mark their widgets with the dynamic properties `qpbPart` and `qpbModified`, which are API; internal class names are not | Stable selectors in the style applications already use (`Widget[prop="value"]`), independent of internal classes that may change |
+| D52| Bold titles and labels of the form view are set again after a style sheet resets their font | Probe for M10: any sheet rule for `QLabel` dropped the bold font of modified labels, so the "modified" cue disappeared under application themes |

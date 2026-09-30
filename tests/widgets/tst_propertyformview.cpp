@@ -171,6 +171,9 @@ private slots:
     void commitThatChangesTheTree();
     void typeWithoutEditorIsShownAsText();
     void modelDestroyedFirst();
+    void styleSheetSelectors();
+    void styleSheetRulesApply();
+    void boldSurvivesApplicationStyleSheet();
 
 private:
     std::unique_ptr<Fixture> f;
@@ -184,6 +187,7 @@ void tst_PropertyFormView::init()
 
 void tst_PropertyFormView::cleanup()
 {
+    qApp->setStyleSheet(QString());
     detail::PathEdit::setDialogProviderForTesting({});
     f.reset();
 }
@@ -565,6 +569,114 @@ void tst_PropertyFormView::modelDestroyedFirst()
     model.reset();
     QVERIFY(!view.model());
     QVERIFY(!view.editor(QStringLiteral("name")));
+}
+
+namespace {
+
+QString part(const QWidget* widget)
+{
+    return widget ? widget->property("qpbPart").toString() : QString();
+}
+
+// Whether widget or one of its ancestors has the style sheet part.
+bool inPart(const QWidget* widget, const QString& name)
+{
+    for (; widget; widget = widget->parentWidget()) {
+        if (part(widget) == name)
+            return true;
+    }
+    return false;
+}
+
+} // namespace
+
+// Since 1.6 (SPEC §5.8, D51): stable selectors on the form's widgets.
+void tst_PropertyFormView::styleSheetSelectors()
+{
+    QToolButton* title = f->title(QStringLiteral("Transform"));
+    QVERIFY(title);
+    QCOMPARE(part(title), QStringLiteral("groupTitle"));
+    QCOMPARE(part(title->parentWidget()), QStringLiteral("group"));
+    QVERIFY(inPart(f->view->editor(QStringLiteral("Transform/x")), QStringLiteral("groupBody")));
+    QVERIFY(!inPart(f->view->editor(QStringLiteral("name")), QStringLiteral("group")));
+
+    QLabel* label = f->label(QStringLiteral("Transform/x"));
+    QVERIFY(label);
+    QCOMPARE(part(label), QStringLiteral("label"));
+    QCOMPARE(label->property("qpbModified"), QVariant(false));
+    QVERIFY(f->model.setValue(QStringLiteral("Transform/x"), 5.0));
+    QCOMPARE(label->property("qpbModified"), QVariant(true));
+    QVERIFY(f->model.find(QStringLiteral("Transform/x"))->resetToDefault());
+    QCOMPARE(label->property("qpbModified"), QVariant(false));
+
+    auto* lut = f->editor<detail::PathEdit>(QStringLiteral("Camera/lut"));
+    QVERIFY(lut);
+    QCOMPARE(part(lut->findChild<QToolButton*>()), QStringLiteral("browse"));
+
+    const QString typeId = QStringLiteral("test.form.noeditor");
+    if (!TypeRegistry::global().contains(typeId)) {
+        TypeHandler type;
+        QVERIFY(TypeRegistry::global().registerType<int>(typeId, type));
+    }
+    f->model.root()->add(typeId, QStringLiteral("opaque"), 4);
+    QCOMPARE(part(f->view->editor(QStringLiteral("opaque"))), QStringLiteral("value"));
+}
+
+void tst_PropertyFormView::styleSheetRulesApply()
+{
+    // Any rule for QLabel used to drop the bold font of modified labels.
+    qApp->setStyleSheet(QStringLiteral("QLabel { color: #e0e4ea; }"
+                                       "QLabel[qpbModified=\"true\"] { color: #ff0000; }"
+                                       "QToolButton[qpbPart=\"groupTitle\"] { color: #00ff00; }"));
+    QLabel* label = f->label(QStringLiteral("Transform/x"));
+    QToolButton* title = f->title(QStringLiteral("Transform"));
+    QVERIFY(label);
+    QVERIFY(title);
+    QVERIFY(title->font().bold());
+    QCOMPARE(title->palette().color(QPalette::ButtonText), QColor(Qt::green));
+    QVERIFY(!label->font().bold());
+    QCOMPARE(label->palette().color(QPalette::WindowText), QColor(0xe0, 0xe4, 0xea));
+
+    QVERIFY(f->model.setValue(QStringLiteral("Transform/x"), 5.0));
+    QVERIFY(label->font().bold());
+    QCOMPARE(label->palette().color(QPalette::WindowText), QColor(Qt::red));
+
+    QVERIFY(f->model.find(QStringLiteral("Transform/x"))->resetToDefault());
+    QVERIFY(!label->font().bold());
+    QCOMPARE(label->palette().color(QPalette::WindowText), QColor(0xe0, 0xe4, 0xea));
+}
+
+// The case found by the M10 probe: the application sets its sheet first, and
+// the form is built for a model that already has modified properties.
+void tst_PropertyFormView::boldSurvivesApplicationStyleSheet()
+{
+    qApp->setStyleSheet(QStringLiteral("QWidget { color: #e0e4ea; } QLabel { color: #e0e4ea; }"));
+    PropertyModel model(createTree());
+    QVERIFY(model.setValue(QStringLiteral("name"), QStringLiteral("Other")));
+    QWidget window;
+    auto* layout = new QVBoxLayout(&window);
+    auto* view = new PropertyFormView;
+    layout->addWidget(view);
+    view->setModel(&model);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+    QLabel* name = nullptr;
+    QLabel* visible = nullptr;
+    for (QLabel* candidate : view->findChildren<QLabel*>()) {
+        if (candidate->buddy() == view->editor(QStringLiteral("name")))
+            name = candidate;
+        if (candidate->buddy() == view->editor(QStringLiteral("visible")))
+            visible = candidate;
+    }
+    QVERIFY(name);
+    QVERIFY(visible);
+    QTRY_VERIFY(name->font().bold());
+    QVERIFY(!visible->font().bold());
+    // A sheet set later polishes the widgets again.
+    qApp->setStyleSheet(QStringLiteral("QLabel { color: #c0c4ca; }"));
+    QTRY_VERIFY(name->font().bold());
+    QVERIFY(!visible->font().bold());
 }
 
 QTEST_MAIN(tst_PropertyFormView)

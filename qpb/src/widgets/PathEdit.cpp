@@ -7,6 +7,7 @@
 #include <QtWidgets/qtoolbutton.h>
 
 #include "PathEdit_p.h"
+#include "widgets_p.h"
 
 namespace qpb::detail {
 
@@ -41,6 +42,7 @@ PathEdit::PathEdit(Kind kind, QWidget* parent)
     m_button->setText(QString(QChar(0x2026))); // horizontal ellipsis
     m_button->setToolTip(kind == Kind::File ? tr("Choose a file") : tr("Choose a directory"));
     m_button->setFocusPolicy(Qt::NoFocus);
+    m_button->setProperty(StylePartProperty, QStringLiteral("browse")); // style sheet selector
     setFocusProxy(m_lineEdit);
     setFocusPolicy(Qt::StrongFocus);
 

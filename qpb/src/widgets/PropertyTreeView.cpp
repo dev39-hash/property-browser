@@ -120,6 +120,11 @@ public:
     bool nameWidthFixed = false; // set explicitly: stop fitting it to the contents
     bool resizing = false; // fitNameColumn() is resizing the section
     bool tabStopsOnCheckBoxes = false;
+    // Colours for style sheets (1.6); invalid / NoBrush: the default.
+    QBrush groupBackground;
+    QColor groupForeground;
+    QColor modifiedForeground;
+    QColor readOnlyForeground;
 };
 
 } // namespace detail
@@ -216,6 +221,50 @@ bool PropertyTreeView::tabStopsOnCheckBoxes() const
 void PropertyTreeView::setTabStopsOnCheckBoxes(bool on)
 {
     d->tabStopsOnCheckBoxes = on;
+}
+
+QBrush PropertyTreeView::groupBackground() const
+{
+    return d->groupBackground;
+}
+
+void PropertyTreeView::setGroupBackground(const QBrush& brush)
+{
+    d->groupBackground = brush;
+    viewport()->update();
+}
+
+QColor PropertyTreeView::groupForeground() const
+{
+    return d->groupForeground;
+}
+
+void PropertyTreeView::setGroupForeground(const QColor& color)
+{
+    d->groupForeground = color;
+    viewport()->update();
+}
+
+QColor PropertyTreeView::modifiedForeground() const
+{
+    return d->modifiedForeground;
+}
+
+void PropertyTreeView::setModifiedForeground(const QColor& color)
+{
+    d->modifiedForeground = color;
+    viewport()->update();
+}
+
+QColor PropertyTreeView::readOnlyForeground() const
+{
+    return d->readOnlyForeground;
+}
+
+void PropertyTreeView::setReadOnlyForeground(const QColor& color)
+{
+    d->readOnlyForeground = color;
+    viewport()->update();
 }
 
 void PropertyTreeView::contextMenuEvent(QContextMenuEvent* event)
