@@ -1,6 +1,7 @@
 // Reference scenario 2 (docs/use-cases.md): application settings backed by
-// QSettings, with string-valued enums, read-only entries and a property that
-// is enabled only while another one is on (enabledWhen, 1.4).
+// QSettings, with string-valued enums, read-only entries, a property that is
+// enabled only while another one is on (enabledWhen, 1.4), check boxes in the
+// Tab chain and "Restore Defaults" for the whole tree (1.5).
 
 #include <qpb/qpb.h>
 
@@ -9,6 +10,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <QPushButton>
 #include <QSettings>
 #include <QVBoxLayout>
 
@@ -61,9 +63,13 @@ int main(int argc, char* argv[])
     auto* layout = new QVBoxLayout(&dialog);
     auto* view = new qpb::PropertyTreeView;
     view->setModel(&model);
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    view->setTabStopsOnCheckBoxes(true); // 1.5: Tab also reaches "autosave"
+    auto* buttons = new QDialogButtonBox(
+        QDialogButtonBox::Ok | QDialogButtonBox::Cancel | QDialogButtonBox::RestoreDefaults);
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
     QObject::connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+    QObject::connect(buttons->button(QDialogButtonBox::RestoreDefaults), &QPushButton::clicked,
+        &model, &qpb::PropertyModel::resetAllToDefault); // 1.5
     layout->addWidget(view);
     layout->addWidget(buttons);
 

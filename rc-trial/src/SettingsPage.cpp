@@ -50,6 +50,7 @@ SettingsPage::SettingsPage(QSettings& settings, QWidget* parent)
     m_model.endBatch();
 
     m_view->setModel(&m_model);
+    m_view->setTabStopsOnCheckBoxes(true); // round 7 (1.5): F5
     m_form->setModel(&m_model);
     m_stack->addWidget(m_view);
     m_stack->addWidget(m_form);
@@ -78,7 +79,7 @@ void SettingsPage::save()
 
 void SettingsPage::resetAll()
 {
-    m_model.root()->resetToDefault();
+    m_model.resetAllToDefault(); // round 7 (1.5): F4, no detour through root()
 }
 
 void SettingsPage::setFormLayout(bool form)

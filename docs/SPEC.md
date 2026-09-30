@@ -293,6 +293,7 @@ public:
 
     bool setValue(const QString& path, const QVariant& v);
     bool resetToDefault(const QModelIndex& idx);          // group ⇒ recursive reset
+    bool resetAllToDefault();                             // 1.5: the whole tree
 
     void beginBatch();                                    // nestable
     void endBatch();
@@ -338,6 +339,12 @@ Groups are never editable.
 5. Value equals the old value → return `true`, **no** signal.
 6. Store the value; `dataChanged(nameIdx, valueIdx)`; `valueChanged(path, new, old)`.
    Inside a batch: `valueChanged` is still emitted per change; paths are collected and `batchValueChanged` is emitted when the batch ends.
+
+**Reset to default:** `resetToDefault(idx)` resets the property at `idx` (a group: its descendants, live ones excepted)
+in one batch; an invalid index, including the root's, returns `false`. `resetAllToDefault()` (1.5) does the same for
+the whole tree, like `root()->resetToDefault()`: application code, so read-only and disabled properties are reset too
+(D34) and live ones are not (D44); one `batchValueChanged`. It returns `false` if any reset was rejected and `true` for a
+model without a root. [D48]
 
 **Structural changes while the model is live:** each node holds an internal pointer to a `detail::TreeObserver`
 (an interface in core, implemented by `PropertyModel`). `PropertyGroup::add*` / `remove` call
@@ -515,6 +522,7 @@ public:
     int nameColumnWidth() const;
     void setNameColumnWidth(int px);
     PropertyDelegate* propertyDelegate() const;
+    void setTabStopsOnCheckBoxes(bool on);  bool tabStopsOnCheckBoxes() const;   // 1.5, Q_PROPERTY, default false
 };
 ```
 
@@ -529,6 +537,10 @@ public:
 - Switching mode does not recreate the model and loses neither values nor the current selection.
 - `moveCursor()` is overridden so `MoveNext`/`MovePrevious` (Tab / Shift+Tab while editing) land on the next editable value,
   skipping groups, read-only rows, check boxes and hidden rows.
+- `setTabStopsOnCheckBoxes(true)` (1.5, off by default) adds check boxes to that chain: Tab / Shift+Tab also stop on the
+  value cell of a Bool property the user can change (enabled, not read-only, visible). No editor opens there; Space
+  toggles it, and the next Tab / Shift+Tab goes on along the chain, leaving the view at either end as before. The form
+  view needs no such option: its check boxes are widgets in the normal focus chain. [D49]
 
 ### 5.6 `PropertyFormView : QScrollArea` (1.1)
 
@@ -717,6 +729,7 @@ After 1.0, new features arrive as **additions** (minor releases); existing API i
 | 1.2     | `QObjectPropertySource` (reads `Q_PROPERTY`, metadata via `Q_CLASSINFO("qpb:<prop>", "min=0;max=10")`, two-way sync); serialization `qpb::serialization::toJson/fromJson/save/load` (§4.8); `Types::Int64`; `QUndoStack` example | Additive |
 | 1.3     | `Property::Flag::Live` (§4.2); `QObjectPropertySource` titles and live values (§4.9)                    | Additive      |
 | 1.4     | Conditions `enabledWhen`/`visibleWhen` (§4.2); `PropertyModel::onValueChanged()` (§4.6)                 | Additive      |
+| 1.5     | `PropertyModel::resetAllToDefault()` (§4.6); `PropertyTreeView::setTabStopsOnCheckBoxes()` (§5.5)      | Additive      |
 | 2.0     | Only if breaking the API is truly necessary; removes everything deprecated                               | Breaking      |
 
 **The 1.0 design must leave room for 1.1/1.2** without API changes: the form view and filter are new classes on top of the
@@ -877,3 +890,5 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D45| `PropertyModel::onValueChanged(path, context, handler)`, by path            | RC trial F3: `if (path == ...)` chains; the model owns paths and change signals, `Property` is not a QObject; by path it survives `setRoot()` |
 | D46| Conditions (`enabledWhen`/`visibleWhen`) combined with the own flags, evaluated by the model | RC trial F10: dependencies wired by hand in every application; writing `Disabled`/`Hidden` would overwrite the application's own `setEnabled()` |
 | D47| Three ways to sync the component folder (release zip by default, `git subtree`, `git submodule` of `qpb-release`), all giving `components/qpb/` with the zip's content; every release also tags `qpb-vX.Y.Z` on `qpb-release` | Before, subtree could only follow the newest release, and the submodule pulled the development repository to another path (`components/property-browser/qpb`). One path keeps the consumer's CMake identical; the tags let git users pin and upgrade to an exact version |
+| D48| `PropertyModel::resetAllToDefault()` resets the whole tree; `resetToDefault(QModelIndex())` keeps returning `false` | RC trial F4: the root has no index, so applications went through `root()->resetToDefault()`. Giving the invalid index that meaning would change documented behaviour (§9.2) |
+| D49| Check boxes join the tree view's Tab chain only with `setTabStopsOnCheckBoxes(true)` | RC trial F5: keyboard users reach check boxes with the arrow keys only. Making it the default would change what the keyboard does in every consuming application after an upgrade (§9.2), so it is opt-in, as D44 |

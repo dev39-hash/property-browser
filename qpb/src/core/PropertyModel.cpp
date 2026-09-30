@@ -337,6 +337,11 @@ bool PropertyModel::resetToDefault(const QModelIndex& index)
     return ok;
 }
 
+bool PropertyModel::resetAllToDefault()
+{
+    return !d->root || d->root->resetToDefault(); // a group reset is one batch
+}
+
 void PropertyModel::beginBatch()
 {
     d->beginBatch();

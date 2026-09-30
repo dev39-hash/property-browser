@@ -290,6 +290,62 @@ form views unchanged (2 tests), `tests/api_compat/v1_4.cpp` and `api-1.4.txt` (s
 D45, D46. Found on the way: a literal `0` value was ambiguous with the predicate overload (`int` overloads added), and
 clearing an unmet condition did not notify views (fixed). RC round 6 closed F3 and F10. M8.7: released as `1.4.0`.
 
+### M9 — 1.5 (additive only): resetting everything and check boxes in the Tab chain (F4, F5)
+
+Planned after RC trial rounds 1 and 3 ([`rc-trial.md`](rc-trial.md)): the two findings that were kept for 1.0 because
+they could be solved later without breaking anything. Code written for 1.0–1.4 builds and behaves the same. 1.5 also
+ships the fix already listed under *Unreleased* in the CHANGELOG (MSVC warning C4458 when building `qpb/`).
+
+**F4 — reset the whole tree from the model.** `PropertyModel::resetToDefault()` takes an index and the root has none,
+so applications write `model.root()->resetToDefault()`. 1.5 adds the call one looks for on the model:
+
+```cpp
+bool PropertyModel::resetAllToDefault();
+
+connect(resetButton, &QPushButton::clicked, &model, &PropertyModel::resetAllToDefault);
+```
+
+- Same effect as `root()->resetToDefault()`: application code, so read-only and disabled properties are reset too
+  (D34) and live ones are left alone (D44); one `batchValueChanged` for the whole tree. Returns false if any reset was
+  rejected; true for a model without a root (nothing to reset).
+- `resetToDefault(QModelIndex())` keeps returning false: making it reset everything would change documented behaviour
+  (§9.2).
+
+**F5 — check boxes in the Tab chain.** In `PropertyTreeView`, Tab / Shift+Tab chain the editors and skip Bool
+properties (SPEC §5.5), which are check boxes without an editor; keyboard users reach them with the arrow keys.
+
+```cpp
+view.setTabStopsOnCheckBoxes(true);   // also a Q_PROPERTY
+```
+
+- Off by default: the 1.4 chain is unchanged.
+- On: Tab / Shift+Tab also stop on the value cell of a Bool property that the user can change (enabled, not read-only,
+  visible). No editor opens there; Space toggles it (as today), and the next Tab / Shift+Tab goes on along the chain,
+  leaving the view at either end as before.
+- Tree view only: in `PropertyFormView` check boxes are widgets and already take part in the Tab chain.
+- Open decision **D49:** opt-in (proposed) or the new default. The default would change what keyboard users of every
+  consuming application get after an upgrade, which §9.2 forbids; the opt-in follows D44.
+- Decision **D48** records the F4 choice: a new method instead of giving `resetToDefault(QModelIndex())` a meaning.
+
+| ID   | Task                                                                                              | Est. (h) | Done when |
+|------|---------------------------------------------------------------------------------------------------|----------|-----------|
+| M9.1 | SPEC: §4.6 (`resetAllToDefault`), §5.5 (`tabStopsOnCheckBoxes`), §8 (1.5), D48, D49; `-vi`           | 1 | Decisions recorded |
+| M9.2 | `PropertyModel::resetAllToDefault()`                                                              | 1 | Model tests: nested groups, read-only reset, live skipped, one `batchValueChanged`, rejected reset → false, no root → true |
+| M9.3 | `PropertyTreeView::setTabStopsOnCheckBoxes()`: `moveCursor()` and Tab / Shift+Tab from a check box row | 2.5 | Widget tests: off keeps the 1.4 chain; on stops on check boxes both ways, Space toggles, the next Tab opens the next editor, disabled / read-only / hidden check boxes are skipped, through a proxy, at the end of the view |
+| M9.4 | `tests/api_compat/v1_5.cpp` + `api-1.5.txt` (superset of 1.4); `examples/settings_dialog` uses both additions | 1 | Compat, snapshot and example builds pass |
+| M9.5 | RC trial round 7: the settings page uses `resetAllToDefault()` and `setTabStopsOnCheckBoxes(true)`; F4 and F5 closed | 1.5 | Trial tests pass, report updated |
+| M9.6 | Release 1.5.0 (PR, zip, tags `v1.5.0` and `qpb-v1.5.0`, `qpb-release`, GitHub Release)               | 0.5 | Release zip |
+
+Total ≈ 7.5 h. GitHub Actions is disabled for now (the account cannot start jobs), so "green CI" means the full
+`ctest` run locally (Windows, MSVC, Qt 6.11) until it is enabled again; Linux and macOS are not covered meanwhile.
+
+**Status:** M9.1–M9.5 done with D48 and D49 as proposed (a new method; opt-in). `resetAllToDefault()` (1 test
+function), `setTabStopsOnCheckBoxes()` with a `focusNextPrevChild()` override so Tab on a check box goes on along the
+chain (4 test functions: both directions, skipped check boxes, end of the view, proxy), `tests/api_compat/v1_5.cpp` and
+`api-1.5.txt` (superset of 1.4), `examples/settings_dialog` with "Restore Defaults" and check boxes in the Tab chain,
+SPEC §4.6, §5.5, §8, D48, D49. `ctest` passes 30/30 locally. RC round 7 closed F4 and F5. M9.6 (release 1.5.0) waits
+for the maintainer.
+
 ---
 
 ## 3. Task dependencies
@@ -300,7 +356,7 @@ M0.* ─► M1.1 ─► M1.2, M1.3 ─► M1.4 ─► M1.5
 M1.* ─► M2.1 ─► M2.2 ─► M2.3
         M2.4 ─► M2.5 ─► M2.6 ─► M2.7 ─► M2.8
 M2.4 ─► M3.1 ─► M3.2 ─► M3.3 ─► M3.4, M3.5 ─► M3.6 ─► M3.7 ─► M3.8
-M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7 ─► M8
+M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7 ─► M8 ─► M9
 ```
 
 ---

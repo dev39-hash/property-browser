@@ -291,6 +291,7 @@ public:
 
     bool setValue(const QString& path, const QVariant& v);
     bool resetToDefault(const QModelIndex& idx);          // group ⇒ reset đệ quy
+    bool resetAllToDefault();                             // 1.5: cả cây
 
     void beginBatch();                                    // lồng được
     void endBatch();
@@ -336,6 +337,11 @@ Group không có cờ edit.
 5. Giá trị bằng giá trị cũ → trả `true`, **không** signal.
 6. Ghi giá trị; `dataChanged(nameIdx, valueIdx)`; `valueChanged(path, new, old)`.
    Trong batch: `valueChanged` vẫn phát từng cái; đồng thời gom path để phát `batchValueChanged` khi batch kết thúc.
+
+**Reset về mặc định:** `resetToDefault(idx)` reset property tại `idx` (group: các con cháu, trừ property live) trong một
+batch; index không hợp lệ, kể cả của root, trả về `false`. `resetAllToDefault()` (1.5) làm việc đó cho cả cây, giống
+`root()->resetToDefault()`: là code ứng dụng nên property read-only và disabled cũng được reset (D34), property live thì
+không (D44); chỉ một `batchValueChanged`. Trả về `false` nếu có reset bị từ chối và `true` với model không có root. [D48]
 
 **Thay đổi cấu trúc khi model đang sống:** mỗi nút giữ con trỏ nội bộ tới một `detail::TreeObserver`
 (interface trong core, `PropertyModel` implement). `PropertyGroup::add*` / `remove` gọi
@@ -511,6 +517,7 @@ public:
     int nameColumnWidth() const;
     void setNameColumnWidth(int px);
     PropertyDelegate* propertyDelegate() const;
+    void setTabStopsOnCheckBoxes(bool on);  bool tabStopsOnCheckBoxes() const;   // 1.5, Q_PROPERTY, mặc định false
 };
 ```
 
@@ -524,6 +531,10 @@ public:
 - Chuyển mode không tạo lại model, không mất giá trị, không mất selection hiện tại.
 - Override `moveCursor()` để `MoveNext`/`MovePrevious` (Tab / Shift+Tab khi đang sửa) nhảy tới giá trị sửa được kế tiếp,
   bỏ qua group, hàng read-only, checkbox và hàng bị ẩn.
+- `setTabStopsOnCheckBoxes(true)` (1.5, mặc định tắt) đưa checkbox vào chuỗi đó: Tab / Shift+Tab dừng cả ở ô giá trị của
+  property Bool mà người dùng đổi được (enabled, không read-only, đang hiện). Ở đó không mở editor; Space bật tắt nó, và
+  Tab / Shift+Tab tiếp theo đi tiếp theo chuỗi, ra khỏi view ở hai đầu như trước. Form view không cần tùy chọn này:
+  checkbox của nó là widget nằm trong chuỗi focus thông thường. [D49]
 
 ### 5.6 `PropertyFormView : QScrollArea` (1.1)
 
@@ -713,6 +724,7 @@ Sau 1.0, tính năng mới đến dưới dạng **bổ sung** (minor), không s
 | 1.2   | `QObjectPropertySource` (đọc `Q_PROPERTY`, metadata qua `Q_CLASSINFO("qpb:<prop>", "min=0;max=10")`, đồng bộ hai chiều); serialize `qpb::serialization::toJson/fromJson/save/load` (§4.8); `Types::Int64`; example `QUndoStack` | Bổ sung |
 | 1.3   | `Property::Flag::Live` (§4.2); tiêu đề và giá trị live của `QObjectPropertySource` (§4.9)                   | Bổ sung       |
 | 1.4   | Điều kiện `enabledWhen`/`visibleWhen` (§4.2); `PropertyModel::onValueChanged()` (§4.6)                      | Bổ sung       |
+| 1.5   | `PropertyModel::resetAllToDefault()` (§4.6); `PropertyTreeView::setTabStopsOnCheckBoxes()` (§5.5)           | Bổ sung       |
 | 2.0   | Chỉ khi thật sự cần phá vỡ API; gom mọi thứ đã deprecate                                                    | Breaking      |
 
 **Thiết kế 1.0 phải "chừa chỗ" cho 1.1/1.2** mà không đổi API: Form view và filter là class mới dùng
@@ -871,3 +883,5 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D45| `PropertyModel::onValueChanged(path, context, handler)`, theo path           | RC F3: chuỗi `if (path == ...)`; model quản lý path và signal thay đổi, `Property` không phải QObject; theo path nên còn sau `setRoot()` |
 | D46| Điều kiện (`enabledWhen`/`visibleWhen`) kết hợp với cờ riêng, model đánh giá | RC F10: mọi ứng dụng tự nối quan hệ phụ thuộc; ghi `Disabled`/`Hidden` sẽ ghi đè `setEnabled()` của ứng dụng |
 | D47| Ba cách đồng bộ component folder (mặc định zip phát hành, `git subtree`, `git submodule` trỏ tới `qpb-release`), đều cho ra `components/qpb/` với nội dung của zip; mỗi bản phát hành gắn thêm tag `qpb-vX.Y.Z` trên `qpb-release` | Trước đây subtree chỉ theo được bản mới nhất, còn submodule kéo cả repo phát triển về một đường dẫn khác (`components/property-browser/qpb`). Một đường dẫn chung giữ CMake của consumer không đổi; tag cho người dùng git cố định và nâng cấp đúng một version |
+| D48| `PropertyModel::resetAllToDefault()` reset cả cây; `resetToDefault(QModelIndex())` vẫn trả về `false` | RC F4: root không có index nên ứng dụng phải đi qua `root()->resetToDefault()`. Gán ý nghĩa đó cho index không hợp lệ sẽ đổi hành vi đã ghi trong tài liệu (§9.2) |
+| D49| Checkbox chỉ vào chuỗi Tab của tree view khi gọi `setTabStopsOnCheckBoxes(true)` | RC F5: người dùng bàn phím chỉ tới được checkbox bằng phím mũi tên. Đặt làm mặc định sẽ đổi hành vi bàn phím của mọi ứng dụng sau khi nâng cấp (§9.2), nên phải bật, giống D44 |
