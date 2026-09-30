@@ -139,6 +139,10 @@ private slots:
     void focusOutCommits();
     void tabSkipsGroupsReadOnlyAndCheckBoxes();
     void backtabMovesBackwards();
+    void tabStopsOnCheckBoxes();
+    void tabStopsOnCheckBoxesSkipsUnchangeable();
+    void tabStopsOnCheckBoxesAtTheEnd();
+    void tabStopsOnCheckBoxesThroughProxy();
     void enumCommitsOnSelection();
     void pathDialogKeepsEditorOpen();
     void customEditorWithDialogScope();
@@ -244,6 +248,111 @@ void tst_PropertyTreeView::backtabMovesBackwards()
     QVERIFY(spinBox);
     QTest::keyClick(spinBox, Qt::Key_Backtab, Qt::ShiftModifier);
     QTRY_COMPARE(f->view->currentIndex(), f->value(QStringLiteral("Transform/y")));
+}
+
+// Since 1.5 (SPEC §5.5, D49): check boxes join the Tab chain on request.
+void tst_PropertyTreeView::tabStopsOnCheckBoxes()
+{
+    PropertyTreeView* view = f->view;
+    QVERIFY(!view->tabStopsOnCheckBoxes());
+    QVERIFY(view->setProperty("tabStopsOnCheckBoxes", true)); // also a Q_PROPERTY
+    QVERIFY(view->tabStopsOnCheckBoxes());
+
+    // name → visible: the check box is current, no editor opens.
+    auto* lineEdit = f->edit<QLineEdit>(QStringLiteral("name"));
+    QVERIFY(lineEdit);
+    QTest::keyClick(lineEdit, Qt::Key_Tab);
+    QTRY_COMPARE(view->currentIndex(), f->value(QStringLiteral("visible")));
+    QTRY_VERIFY(!editorOpen(view));
+    QTRY_VERIFY(view->hasFocus());
+
+    // Space toggles it.
+    QTest::keyClick(view, Qt::Key_Space);
+    QCOMPARE(f->stored(QStringLiteral("visible")), QVariant(false));
+
+    // Tab goes on to the next editor: visible → (Transform: group) → x.
+    QTest::keyClick(view, Qt::Key_Tab);
+    QTRY_COMPARE(view->currentIndex(), f->value(QStringLiteral("Transform/x")));
+    QTRY_VERIFY(f->editor<QDoubleSpinBox>());
+
+    // Shift+Tab stops on the check box again, then reaches name's editor.
+    QTest::keyClick(f->editor<QDoubleSpinBox>(), Qt::Key_Backtab, Qt::ShiftModifier);
+    QTRY_COMPARE(view->currentIndex(), f->value(QStringLiteral("visible")));
+    QTRY_VERIFY(!editorOpen(view));
+    QTRY_VERIFY(view->hasFocus());
+    QTest::keyClick(view, Qt::Key_Backtab, Qt::ShiftModifier);
+    QTRY_COMPARE(view->currentIndex(), f->value(QStringLiteral("name")));
+    QTRY_VERIFY(f->editor<QLineEdit>());
+
+    // Switched off again: the 1.4 chain.
+    view->setTabStopsOnCheckBoxes(false);
+    QTest::keyClick(f->editor<QLineEdit>(), Qt::Key_Tab);
+    QTRY_COMPARE(view->currentIndex(), f->value(QStringLiteral("Transform/x")));
+}
+
+void tst_PropertyTreeView::tabStopsOnCheckBoxesSkipsUnchangeable()
+{
+    f->view->setTabStopsOnCheckBoxes(true);
+    Property* visible = f->model.find(QStringLiteral("visible"));
+    const auto tabFromName = [this] {
+        auto* lineEdit = f->edit<QLineEdit>(QStringLiteral("name"));
+        QVERIFY(lineEdit);
+        QTest::keyClick(lineEdit, Qt::Key_Tab);
+        QTRY_COMPARE(f->view->currentIndex(), f->value(QStringLiteral("Transform/x")));
+        QTRY_VERIFY(f->editor<QDoubleSpinBox>());
+        QTest::keyClick(f->editor<QDoubleSpinBox>(), Qt::Key_Escape);
+        QTRY_VERIFY(!editorOpen(f->view));
+    };
+
+    visible->setEnabled(false);
+    tabFromName();
+    if (QTest::currentTestFailed())
+        return;
+    visible->setEnabled(true);
+
+    visible->setReadOnly(true);
+    tabFromName();
+    if (QTest::currentTestFailed())
+        return;
+    visible->setReadOnly(false);
+
+    visible->setVisible(false);
+    tabFromName();
+}
+
+void tst_PropertyTreeView::tabStopsOnCheckBoxesAtTheEnd()
+{
+    // The last stop is a check box: Tab leaves the view, as after the last editor.
+    f->model.root()->addInt(QStringLiteral("count"), 0);
+    f->model.root()->addBool(QStringLiteral("last"), false);
+    f->view->setTabStopsOnCheckBoxes(true);
+    auto* spinBox = f->edit<QSpinBox>(QStringLiteral("count"));
+    QVERIFY(spinBox);
+    QTest::keyClick(spinBox, Qt::Key_Tab);
+    QTRY_COMPARE(f->view->currentIndex(), f->value(QStringLiteral("last")));
+    QTRY_VERIFY(f->view->hasFocus());
+    QTest::keyClick(f->view, Qt::Key_Tab);
+    QTRY_VERIFY(f->other->hasFocus());
+    QCOMPARE(f->view->currentIndex(), f->value(QStringLiteral("last")));
+}
+
+void tst_PropertyTreeView::tabStopsOnCheckBoxesThroughProxy()
+{
+    QSortFilterProxyModel proxy;
+    proxy.setSourceModel(&f->model);
+    PropertyTreeView* view = f->view;
+    view->setModel(&proxy);
+    view->setTabStopsOnCheckBoxes(true);
+    view->setFocus();
+    view->setCurrentIndex(proxy.mapFromSource(f->value(QStringLiteral("name"))));
+    QTRY_VERIFY(f->editor<QLineEdit>());
+    QTest::keyClick(f->editor<QLineEdit>(), Qt::Key_Tab);
+    QTRY_COMPARE(view->currentIndex(), proxy.mapFromSource(f->value(QStringLiteral("visible"))));
+    QTest::keyClick(view, Qt::Key_Space);
+    QCOMPARE(f->stored(QStringLiteral("visible")), QVariant(false));
+    QTest::keyClick(view, Qt::Key_Tab);
+    QTRY_COMPARE(view->currentIndex(), proxy.mapFromSource(f->value(QStringLiteral("Transform/x"))));
+    view->setModel(&f->model); // before the proxy goes away
 }
 
 void tst_PropertyTreeView::enumCommitsOnSelection()

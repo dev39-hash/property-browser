@@ -72,6 +72,7 @@ private slots:
 
     void batches();
     void resetToDefault();
+    void resetAllToDefault();
     void liveIsNeverModified();
     void onValueChangedByPath();
     void onValueChangedForGroups();
@@ -508,6 +509,62 @@ void tst_PropertyModel::resetToDefault()
     QVERIFY(model.resetToDefault(valueIndex(model, QStringLiteral("fov"))));
     QCOMPARE(model.find(QStringLiteral("fov"))->value(), QVariant(60));
     QCOMPARE(batch.count(), 2);
+}
+
+// Since 1.5: the whole tree, as application code (SPEC §4.6, D48).
+void tst_PropertyModel::resetAllToDefault()
+{
+    PropertyModel model(createTree());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    Property* name = model.find(QStringLiteral("name"));
+    Property* x = model.find(QStringLiteral("Transform/x"));
+    Property* z = model.find(QStringLiteral("Transform/Pivot/z"));
+    Property* fov = model.find(QStringLiteral("fov"));
+    Property& used = model.root()->addInt(QStringLiteral("used"), 0);
+    QVERIFY(name->setValue(QStringLiteral("Other")));
+    QVERIFY(x->setValue(1.0));
+    QVERIFY(z->setValue(2.0));
+    QVERIFY(fov->setValue(90));
+    QVERIFY(used.setValue(5));
+    used.setLive(true);
+    x->setReadOnly(true);
+    model.find(QStringLiteral("Transform/Pivot"))->setEnabled(false);
+
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    QSignalSpy batch(&model, &PropertyModel::batchValueChanged);
+    QVERIFY(model.resetAllToDefault());
+    QCOMPARE(name->value(), QVariant(QStringLiteral("Main")));
+    QCOMPARE(x->value(), QVariant(0.0)); // read-only: reset by application code (D34)
+    QCOMPARE(z->value(), QVariant(0.0)); // disabled ancestor: the same
+    QCOMPARE(fov->value(), QVariant(60));
+    QCOMPARE(used.value(), QVariant(5)); // live: left alone (D44)
+    QCOMPARE(values.count(), 4);
+    QCOMPARE(batch.count(), 1);
+    QCOMPARE(batch.at(0).at(0).toStringList().size(), 4);
+
+    // Nothing modified: no signal at all.
+    QVERIFY(model.resetAllToDefault());
+    QCOMPARE(batch.count(), 1);
+
+    // A rejected reset makes it false; the other properties are still reset.
+    QVERIFY(name->setValue(QStringLiteral("Other")));
+    QVERIFY(fov->setValue(90));
+    name->setValidator([](const QVariant& value, const Property&) {
+        return value.toString() == QStringLiteral("Main")
+            ? ValidationResult::error(QStringLiteral("Main is taken"))
+            : ValidationResult::valid();
+    });
+    QSignalSpy failed(&model, &PropertyModel::validationFailed);
+    QVERIFY(!model.resetAllToDefault());
+    QCOMPARE(failed.count(), 1);
+    QCOMPARE(name->value(), QVariant(QStringLiteral("Other")));
+    QCOMPARE(fov->value(), QVariant(60));
+
+    // The invalid index keeps its 1.0 meaning.
+    QVERIFY(!model.resetToDefault(QModelIndex()));
+
+    PropertyModel empty;
+    QVERIFY(empty.resetAllToDefault());
 }
 
 void tst_PropertyModel::modelTesterWholeLifecycle()

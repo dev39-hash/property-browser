@@ -2,7 +2,7 @@
 # version; files of released versions are never edited. Built with the
 # consumer-side strictness, deprecation warnings excepted.
 
-foreach(version IN ITEMS v1_0 v1_1 v1_2 v1_3 v1_4)
+foreach(version IN ITEMS v1_0 v1_1 v1_2 v1_3 v1_4 v1_5)
     qpb_add_test(tst_api_compat_${version}
         SOURCES ${version}.cpp
         LIBRARIES qpb::widgets
@@ -22,7 +22,7 @@ endforeach()
 #   python3 tools/api_snapshot.py --include qpb/include --write tests/api_compat/api-1.<minor>.txt
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
-    foreach(version IN ITEMS 1.0 1.1 1.2 1.3 1.4)
+    foreach(version IN ITEMS 1.0 1.1 1.2 1.3 1.4 1.5)
         add_test(NAME api_snapshot_${version}
             COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/api_snapshot.py"
                 --include "${PROJECT_SOURCE_DIR}/qpb/include"

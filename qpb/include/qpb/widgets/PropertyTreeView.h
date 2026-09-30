@@ -26,6 +26,7 @@ class QPB_WIDGETS_EXPORT PropertyTreeView : public QTreeView
 {
     Q_OBJECT
     Q_PROPERTY(Mode mode READ mode WRITE setMode)
+    Q_PROPERTY(bool tabStopsOnCheckBoxes READ tabStopsOnCheckBoxes WRITE setTabStopsOnCheckBoxes)
 
 public:
     enum class Mode {
@@ -50,11 +51,21 @@ public:
     // The delegate installed by this view.
     PropertyDelegate* propertyDelegate() const;
 
+    // Since 1.5. Whether Tab / Shift+Tab also stop on check boxes (Bool
+    // properties the user can change). No editor opens there: Space toggles
+    // the value and the next Tab / Shift+Tab goes on. Off by default, as in
+    // 1.0-1.4: check boxes are reached with the arrow keys.
+    bool tabStopsOnCheckBoxes() const;
+    void setTabStopsOnCheckBoxes(bool on);
+
 protected:
     void contextMenuEvent(QContextMenuEvent* event) override;
     // MoveNext / MovePrevious (Tab / Shift+Tab while editing) skip to the next
-    // editable value, passing over groups, read-only and check box rows.
+    // editable value, passing over groups, read-only and hidden rows and, unless
+    // tabStopsOnCheckBoxes() is set, check boxes.
     QModelIndex moveCursor(CursorAction cursorAction, Qt::KeyboardModifiers modifiers) override;
+    // Tab / Shift+Tab on a check box stop go on along the chain (since 1.5).
+    bool focusNextPrevChild(bool next) override;
 
 private:
     std::unique_ptr<detail::PropertyTreeViewPrivate> d;
