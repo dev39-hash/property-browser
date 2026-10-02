@@ -22,7 +22,7 @@ namespace detail {
 class TypeRegistryPrivate;
 }
 
-// UI-independent behaviour of one property type (docs/SPEC.md section 4.5).
+// UI-independent behaviour of one property type (README.md, "Your own type").
 //
 // Aggregate that may gain fields at the end in later versions; a field left
 // empty always means "default behaviour". Configure it by assigning fields:
@@ -50,7 +50,7 @@ struct TypeHandler
     std::function<QVariant(const QJsonValue& json, const Property& property)> fromJson;
 };
 
-// Registry of property types, keyed by TypeId (docs/SPEC.md section 4.5).
+// Registry of property types, keyed by TypeId (README.md, "Your own type").
 //
 // The built-in types (see Types) are registered the first time global() is
 // called. The registry is not thread-safe: register types on the main thread

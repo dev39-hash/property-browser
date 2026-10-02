@@ -13,7 +13,7 @@ namespace detail {
 class PropertyDelegatePrivate;
 }
 
-// Item delegate that edits and paints PropertyModel values (docs/SPEC.md section 5.4).
+// Item delegate that edits and paints PropertyModel values (README.md, "Widgets").
 //
 // Editors come from EditorFactory::global(). Enter commits, Escape cancels,
 // Tab / Shift+Tab commit and move to the next / previous editable value, and

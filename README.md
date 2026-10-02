@@ -33,8 +33,9 @@ the run target selector. The qmake project only serves the examples; projects in
 
 ## Using qpb in a project
 
-qpb is distributed as a self-contained component folder. Copy `qpb/` into your project (for example to
-`components/qpb/`) and add:
+qpb is distributed as a self-contained component folder. Its own [`qpb/README.md`](qpb/README.md) travels with it
+and documents features, API, a developer guide and the version history for projects that only have the folder.
+Copy `qpb/` into your project (for example to `components/qpb/`) and add:
 
 ```cmake
 find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets)
