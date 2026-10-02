@@ -340,6 +340,8 @@ Within 1.x, updating the folder never requires changes to your code or CMake:
 
 Details and upgrade notes for every version: `CHANGELOG.md`.
 
+- **1.6.1** - Documentation only: this README; the changelog and header comments refer to it instead of documents
+  outside the folder.
 - **1.6.0** - Theming with style sheets: tree view colour properties (`groupBackground`, `groupForeground`,
   `modifiedForeground`, `readOnlyForeground`) and form view selectors (`qpbPart`, `qpbModified`). Fixed: modified
   labels of the form view lost their bold font under application style sheets.
