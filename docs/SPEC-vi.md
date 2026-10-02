@@ -647,6 +647,7 @@ property-browser/                  (repo phát triển)
 │   ├── VERSION                    # "1.0.0" — nguồn duy nhất của version
 │   ├── LICENSE
 │   ├── CHANGELOG.md               # kèm hướng dẫn nâng cấp mỗi bản
+│   ├── README.md                  # tài liệu cho người dùng đi kèm folder: tính năng, API, hướng dẫn, các phiên bản
 │   ├── cmake/                     # helper và template CMake nội bộ
 │   ├── include/qpb/               # header public (duy nhất) — §9
 │   │   ├── qpb.h                  # umbrella header: tất cả (cần qpb::widgets)

@@ -13,7 +13,7 @@ namespace qpb {
 
 class PropertyGroup;
 
-// Saving and restoring property values (docs/SPEC.md section 4.8). Since 1.2.
+// Saving and restoring property values (README.md, "Saving and loading"). Since 1.2.
 //
 // The functions live in their own namespace: argument-dependent lookup does not
 // search it, so they can never make an unqualified call to an application's own
