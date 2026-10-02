@@ -13,7 +13,7 @@
 namespace qpb {
 
 // Fluent configuration of a property right after it was added to a group
-// (docs/SPEC.md section 4.3):
+// (README.md, "Properties"):
 //
 //   group.addInt("fov", 60).range(10, 170).suffix(QStringLiteral(" deg"));
 //

@@ -6,7 +6,7 @@
 #   add_subdirectory(components/qpb)
 #   target_link_libraries(my_app PRIVATE qpb::widgets)
 #
-# Rules for this file (docs/SPEC.md section 6.3): never touch global variables or flags,
+# Rules for this file: never touch global variables or flags,
 # configure only qpb's own targets, and never refer to CMAKE_SOURCE_DIR.
 
 cmake_minimum_required(VERSION 3.21)
