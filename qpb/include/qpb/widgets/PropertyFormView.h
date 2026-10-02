@@ -18,7 +18,7 @@ namespace detail {
 class PropertyFormViewPrivate;
 }
 
-// Form view for a PropertyModel or a proxy of one (docs/SPEC.md section 5.6).
+// Form view for a PropertyModel or a proxy of one (README.md, "Views and keyboard").
 // Since 1.1.
 //
 // Every property is a row with a label and an editor that stays open; every

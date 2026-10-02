@@ -25,7 +25,7 @@ namespace detail {
 class EditorFactoryPrivate;
 }
 
-// Editor widget behaviour of one type or editor ID (docs/SPEC.md section 5.1).
+// Editor widget behaviour of one type or editor ID (README.md, "Custom editors").
 //
 // Aggregate that may gain fields at the end in later versions; a field left
 // empty means "default behaviour". createEditor, setEditorData and editorData
@@ -49,7 +49,7 @@ struct EditorHandler
     std::function<void(QWidget* editor, const Property& property)> applyAttributes;
 };
 
-// Registry of editors, keyed by type or editor ID (docs/SPEC.md section 5.1-5.3).
+// Registry of editors, keyed by type or editor ID (README.md, "Custom editors").
 //
 // Editors for the built-in types are registered the first time global() is
 // called. Registering under a new ID and setting Attr::EditorId on a property

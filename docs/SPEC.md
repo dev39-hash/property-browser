@@ -653,6 +653,7 @@ property-browser/                  (development repo)
 │   ├── VERSION                    # "1.0.0" — single source of the version
 │   ├── LICENSE
 │   ├── CHANGELOG.md               # includes upgrade notes for every release
+│   ├── README.md                  # user documentation shipped with the folder: features, API, guide, versions
 │   ├── cmake/                     # internal CMake helpers and templates
 │   ├── include/qpb/               # public headers (only these) — §9
 │   │   ├── qpb.h                  # umbrella header: everything (needs qpb::widgets)

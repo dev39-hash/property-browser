@@ -18,7 +18,7 @@ class PropertyTreeViewPrivate;
 }
 
 // Two-column view (name | value) for a PropertyModel or a proxy of one
-// (docs/SPEC.md section 5.5).
+// (README.md, "Views and keyboard").
 //
 // Tree mode shows collapsible groups; List mode shows the same model flat,
 // with groups as section headers. Switching modes keeps the model, the values
@@ -66,7 +66,7 @@ public:
 
     // Since 1.6. Colours of what the view paints itself, for style sheets
     // (qpb--PropertyTreeView { qproperty-groupBackground: #2c3038; }) or code
-    // (docs/SPEC.md section 5.8). An invalid colour or Qt::NoBrush selects the
+    // (README.md, "Style sheets"). An invalid colour or Qt::NoBrush selects the
     // default: the palette's Button behind group rows, the item text colour for
     // group names and names of modified properties (both stay bold), and
     // PlaceholderText for read-only values. A matching style sheet ::item rule
