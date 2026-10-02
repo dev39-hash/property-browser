@@ -1,7 +1,7 @@
 # Changelog
 
 All notable changes to qpb are documented here. Each release has the sections
-*Added*, *Changed*, *Deprecated*, *Fixed* and *Upgrade notes* (see `docs/SPEC.md` section 9.4).
+*Added*, *Changed*, *Deprecated*, *Fixed* and *Upgrade notes* (see `README.md`, "Compatibility").
 
 From 1.0.0 on, releases within a major version never require changes to consuming code or CMake.
 Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC trial shows a problem.
@@ -11,7 +11,7 @@ Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC tria
 Sixth feature release of 1.x: additions only; code written for 1.0-1.5 builds and behaves the same.
 
 ### Added
-- Theming with style sheets (`docs/SPEC.md` section 5.8, `examples/custom_theme`):
+- Theming with style sheets (`README.md`, "Style sheets"):
   - `PropertyTreeView` colour properties `groupBackground`, `groupForeground`, `modifiedForeground` and
     `readOnlyForeground`, settable from a sheet with `qproperty-` (invalid values keep the defaults);
   - style sheet selectors on the widgets of `PropertyFormView` and of the file / directory editors: the dynamic
@@ -104,8 +104,8 @@ First feature release of 1.x: additions only; code written for 1.0 builds and be
 
 ## 1.0.0 - 2026-09-27
 
-First stable release: the same content as `1.0.0-rc2`, which passed the RC trial without API or behaviour
-changes (docs/rc-trial.md). The public API is frozen for 1.x.
+First stable release: the same content as `1.0.0-rc2`, which passed a trial in an application without API or
+behaviour changes. The public API is frozen for 1.x.
 
 ### Upgrade notes
 - From `1.0.0-rc2`: nothing to do.
@@ -113,7 +113,7 @@ changes (docs/rc-trial.md). The public API is frozen for 1.x.
 
 ## 1.0.0-rc2 - 2026-09-27
 
-Second release candidate, after the first RC trial round (docs/rc-trial.md).
+Second release candidate, after its first trial in an application.
 
 ### Changed
 - Read-only and disabled now only block edits by the user through views (`PropertyModel::setData`).
