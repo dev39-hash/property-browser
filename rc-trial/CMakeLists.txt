@@ -12,7 +12,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets Test)
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Test)
 
 if(NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/components/qpb/CMakeLists.txt")
     message(FATAL_ERROR "Extract a qpb release to components/qpb/ first (see run_trial.sh)")
@@ -36,6 +37,6 @@ target_link_libraries(qpb_trial PRIVATE trial_app)
 
 enable_testing()
 add_executable(tst_trial tests/tst_trial.cpp)
-target_link_libraries(tst_trial PRIVATE trial_app Qt6::Test)
+target_link_libraries(tst_trial PRIVATE trial_app Qt${QT_VERSION_MAJOR}::Test)
 add_test(NAME tst_trial COMMAND tst_trial)
 set_tests_properties(tst_trial PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
