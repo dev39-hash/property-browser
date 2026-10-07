@@ -452,7 +452,7 @@ lỗi bằng `ninja -k 0`):
    `qpb::widgets`, test và example chưa được tới.
 
 **Hệ quả.** Bản build với Qt 5 không thể có cùng API public: ít nhất kiểu của `TypeHandler::storageType` và dạng của
-các hằng `Attr` / `Types` phải khác. Các phương án (quyết định **D53**, còn mở):
+các hằng `Attr` / `Types` phải khác. Các phương án (quyết định **D53**: **(b)**, maintainer chọn ngày 2026-10-07):
 
 - **(a) Không hỗ trợ Qt 5.** Giữ tối thiểu Qt 6.5 và ghi rõ trong README (Qt 5.15 bản mã nguồn mở đã hết hỗ trợ từ
   2023). Chỉ sửa tài liệu.
@@ -473,7 +473,7 @@ các hằng `Attr` / `Types` phải khác. Các phương án (quyết định **
 | M11.7 | (b) Test, example, RC trial với Qt 5.15                                                         | 7 | Tất cả đạt với Qt 5.15 và Qt 6 |
 | M11.8 | (b) Phát hành 1.7.0                                                                              | 1 | Có zip phát hành |
 
-**Trạng thái:** M11.1 xong; chờ D53.
+**Trạng thái:** M11.1 xong; M11.2 xong với D53 = (b). Tiếp theo: M11.3.
 
 ---
 
@@ -537,7 +537,7 @@ submodule) → build lại → đọc *Upgrade notes*. Với 1.x mong đợi là
 | Câu hỏi                                   | Trạng thái                                     |
 |-------------------------------------------|------------------------------------------------|
 | C++17 hay C++20?                          | **Chốt: C++17**                                |
-| Qt tối thiểu?                             | **Chốt: 6.5**                                  |
+| Qt tối thiểu?                             | **Chốt: 6.5**; Qt 5.15 là cấu hình thứ hai từ 1.7 (M11, D53) |
 | Namespace / tên target / prefix include   | **Chốt: `qpb`, `qpb::core`, `qpb::widgets`, `<qpb/...>`** |
 | Build system của các project dùng qpb     | **Chốt: chỉ CMake**                            |
 | Ngôn ngữ code và tài liệu                  | **Chốt: tiếng Anh** (bản `-vi` để tham khảo)   |

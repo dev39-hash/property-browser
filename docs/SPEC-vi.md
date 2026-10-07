@@ -781,6 +781,7 @@ Sau 1.0, tính năng mới đến dưới dạng **bổ sung** (minor), không s
 | 1.4   | Điều kiện `enabledWhen`/`visibleWhen` (§4.2); `PropertyModel::onValueChanged()` (§4.6)                      | Bổ sung       |
 | 1.5   | `PropertyModel::resetAllToDefault()` (§4.6); `PropertyTreeView::setTabStopsOnCheckBoxes()` (§5.5)           | Bổ sung       |
 | 1.6   | Móc style sheet (§5.8): property màu của tree view, selector `qpbPart` / `qpbModified` của form view         | Bổ sung       |
+| 1.7   | Dự kiến (PLAN M11): Qt 5.15 là cấu hình thứ hai; bản build Qt 6 không đổi                                   | Bổ sung       |
 | 2.0   | Chỉ khi thật sự cần phá vỡ API; gom mọi thứ đã deprecate                                                    | Breaking      |
 
 **Thiết kế 1.0 phải "chừa chỗ" cho 1.1/1.2** mà không đổi API: Form view và filter là class mới dùng
@@ -944,3 +945,4 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D50| Tree view đưa các màu nó tự vẽ ra thành `Q_PROPERTY` (`groupBackground`, `groupForeground`, `modifiedForeground`, `readOnlyForeground`), đặt từ style sheet bằng `qproperty-`; font giữ cố định | Item không phải widget, nên không selector nào tới được hàng group hay tên đã sửa; `qproperty-` là cách của Qt để sheet chạm tới phần được vẽ. Nó không đặt được font, và chữ đậm là dấu hiệu cấu trúc |
 | D51| Form view và editor đường dẫn gắn dynamic property `qpbPart` và `qpbModified` lên widget, là API; tên class nội bộ thì không | Selector ổn định theo kiểu ứng dụng vốn dùng (`Widget[prop="value"]`), không phụ thuộc class nội bộ có thể đổi |
 | D52| Tiêu đề và nhãn đậm của form view được đặt lại sau khi style sheet reset font | Chương trình thử của M10: mọi rule sheet cho `QLabel` làm mất chữ đậm của nhãn đã sửa, nên dấu hiệu "đã sửa" biến mất dưới theme của ứng dụng |
+| D53| Qt 5.15 trở thành cấu hình thứ hai (dự kiến cho 1.7): CMake tìm Qt 6 hoặc Qt 5, header public có biến thể `QT_VERSION` ở chỗ Qt 5 không có tương đương (hằng `Attr` / `Types`, `TypeHandler::storageType`), và cam kết tương thích của §9 áp dụng theo từng major của Qt, mỗi major một snapshot API | Maintainer yêu cầu. Chương trình dò M11 cho thấy API 1.x dùng kiểu của Qt 6, nên không thể có một API cho cả hai major; một nhánh riêng sẽ nhân đôi mọi thay đổi sau này. Bản build Qt 6 giữ nguyên API và hành vi. Qt 5.15.0 build được với MSVC 2019 / 2022, không với MSVC 2026 |

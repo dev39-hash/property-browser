@@ -461,7 +461,8 @@ error collected with `ninja -k 0`):
    (overloaded, so ambiguous, in Qt 5). `qpb::widgets`, the tests and the examples were not reached.
 
 **Consequence.** A Qt 5 build cannot offer the same public API: at least the type of `TypeHandler::storageType` and
-the form of the `Attr` / `Types` constants have to differ. Options (decision **D53**, open):
+the form of the `Attr` / `Types` constants have to differ. Options (decision **D53**: **(b)**, chosen by the
+maintainer on 2026-10-07):
 
 - **(a) No Qt 5 support.** Keep the Qt 6.5 minimum and say so in the README (Qt 5.15's open-source support ended in
   2023). Documentation only.
@@ -483,7 +484,7 @@ the form of the `Attr` / `Types` constants have to differ. Options (decision **D
 | M11.7 | (b) Tests, examples, RC trial with Qt 5.15                                                     | 7 | All pass with Qt 5.15 and Qt 6 |
 | M11.8 | (b) Release 1.7.0                                                                              | 1 | Release zip |
 
-**Status:** M11.1 done; waiting for D53.
+**Status:** M11.1 done; M11.2 done with D53 = (b). Next: M11.3.
 
 ---
 
@@ -548,7 +549,7 @@ Step-by-step guide and tooling: [`RELEASING.md`](RELEASING.md), `tools/make_rele
 | Question                                  | Status                                          |
 |-------------------------------------------|-------------------------------------------------|
 | C++17 or C++20?                           | **Settled: C++17**                              |
-| Minimum Qt?                               | **Settled: 6.5**                                |
+| Minimum Qt?                               | **Settled: 6.5**; Qt 5.15 as a second configuration from 1.7 (M11, D53) |
 | Namespace / target names / include prefix | **Settled: `qpb`, `qpb::core`, `qpb::widgets`, `<qpb/...>`** |
 | Build system of consuming projects        | **Settled: CMake only**                         |
 | Language of code and docs                 | **Settled: English** (`-vi` files for reference)|

@@ -787,6 +787,7 @@ After 1.0, new features arrive as **additions** (minor releases); existing API i
 | 1.4     | Conditions `enabledWhen`/`visibleWhen` (§4.2); `PropertyModel::onValueChanged()` (§4.6)                 | Additive      |
 | 1.5     | `PropertyModel::resetAllToDefault()` (§4.6); `PropertyTreeView::setTabStopsOnCheckBoxes()` (§5.5)      | Additive      |
 | 1.6     | Style sheet hooks (§5.8): tree view colour properties, form view selectors `qpbPart` / `qpbModified`     | Additive      |
+| 1.7     | Planned (PLAN M11): Qt 5.15 as a second configuration; Qt 6 builds unchanged                          | Additive      |
 | 2.0     | Only if breaking the API is truly necessary; removes everything deprecated                               | Breaking      |
 
 **The 1.0 design must leave room for 1.1/1.2** without API changes: the form view and filter are new classes on top of the
@@ -952,3 +953,4 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D50| The tree view exposes the colours it paints itself as `Q_PROPERTY`s (`groupBackground`, `groupForeground`, `modifiedForeground`, `readOnlyForeground`), set from style sheets with `qproperty-`; fonts stay fixed | Items are not widgets, so no selector reaches group rows or modified names; `qproperty-` is Qt's way for a sheet to reach painted parts. It cannot set fonts, and bold is the structural cue |
 | D51| The form view and path editors mark their widgets with the dynamic properties `qpbPart` and `qpbModified`, which are API; internal class names are not | Stable selectors in the style applications already use (`Widget[prop="value"]`), independent of internal classes that may change |
 | D52| Bold titles and labels of the form view are set again after a style sheet resets their font | Probe for M10: any sheet rule for `QLabel` dropped the bold font of modified labels, so the "modified" cue disappeared under application themes |
+| D53| Qt 5.15 becomes a second configuration (planned for 1.7): CMake finds Qt 6 or Qt 5, the public headers get `QT_VERSION` variants where Qt 5 has no equivalent (`Attr` / `Types` constants, `TypeHandler::storageType`), and the compatibility promise of §9 holds per Qt major, with an API snapshot for each | Requested by the maintainer. The M11 probe showed that the 1.x API uses Qt 6 types, so one API for both majors is impossible; a separate branch would double every later change. Qt 6 builds keep the same API and behaviour. Qt 5.15.0 builds with MSVC 2019 / 2022, not MSVC 2026 |
