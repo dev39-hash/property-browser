@@ -11,7 +11,7 @@
 
 namespace example {
 
-inline constexpr QLatin1StringView ColorTypeId {"example.color"};
+inline const qpb::TypeId ColorTypeId = QStringLiteral("example.color");
 
 // Registers ColorTypeId with qpb::TypeRegistry and qpb::EditorFactory.
 // Call once at startup, before creating properties of that type.

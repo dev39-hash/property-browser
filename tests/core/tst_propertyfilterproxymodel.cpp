@@ -67,7 +67,9 @@ void tst_PropertyFilterProxyModel::defaults()
     QCOMPARE(proxy.filterKeyColumn(), int(PropertyModel::NameColumn));
     QCOMPARE(proxy.filterCaseSensitivity(), Qt::CaseInsensitive);
     QVERIFY(proxy.isRecursiveFilteringEnabled());
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0) // the property is new in Qt 6
     QVERIFY(!proxy.autoAcceptChildRows()); // subclasses see every row
+#endif
 }
 
 void tst_PropertyFilterProxyModel::emptyFilterShowsEverything()

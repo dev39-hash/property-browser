@@ -18,7 +18,8 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin/$<0:>")
 
 if(CONSUMER_FIND_QT_FIRST)
-    find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets)
+    find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
+    find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
 endif()
 
 # Snapshot of the host's settings that qpb must not change (docs/SPEC.md §6.3).
@@ -43,7 +44,7 @@ foreach(variable IN LISTS _watched_variables)
         message(FATAL_ERROR "qpb changed the host's ${variable}")
     endif()
 endforeach()
-# New cache entries must belong to qpb (or to find_package(Qt6) when the host
+# New cache entries must belong to qpb (or to finding Qt when the host
 # left finding Qt to qpb).
 get_cmake_property(_cache_after CACHE_VARIABLES)
 list(REMOVE_ITEM _cache_after ${_cache_before})

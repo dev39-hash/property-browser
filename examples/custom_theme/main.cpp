@@ -59,7 +59,8 @@ QString styleSheet(const Tokens& tokens)
     static const QRegularExpression placeholder(QStringLiteral(R"(@\{([\w.-]+)\})"));
     QString result;
     qsizetype done = 0;
-    for (const QRegularExpressionMatch& match : placeholder.globalMatch(sheet)) {
+    for (auto matches = placeholder.globalMatch(sheet); matches.hasNext();) {
+        const QRegularExpressionMatch match = matches.next();
         result += sheet.mid(done, match.capturedStart() - done);
         result += tokens.value(match.captured(1), match.captured(0));
         done = match.capturedEnd();
@@ -122,7 +123,7 @@ int main(int argc, char* argv[])
     layout->addLayout(bar);
     layout->addWidget(splitter);
 
-    QObject::connect(theme, &QComboBox::currentIndexChanged, &app, [&app, tree](int index) {
+    QObject::connect(theme, qOverload<int>(&QComboBox::currentIndexChanged), &app, [&app, tree](int index) {
         app.setStyleSheet(index == 0 ? styleSheet(darkTokens())
                 : index == 1         ? styleSheet(lightTokens())
                                      : QString());

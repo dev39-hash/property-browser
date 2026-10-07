@@ -47,7 +47,7 @@ target_link_libraries(my_app PRIVATE qpb::widgets)   # or qpb::core without widg
 #include <qpb/qpb.h>       // everything; <qpb/qpbcore.h> for qpb::core only
 ```
 
-Requirements: C++17 or newer, Qt 6.5 or newer, CMake 3.21 or newer. The component changes none of your project's
+Requirements: C++17 or newer, Qt 6.5 or newer or (since 1.7) Qt 5.15, CMake 3.21 or newer. The component changes none of your project's
 CMake settings. Static libraries are built by default; with `-DQPB_BUILD_SHARED=ON` you must deploy the qpb libraries
 next to your executable.
 
