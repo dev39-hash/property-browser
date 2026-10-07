@@ -19,7 +19,12 @@ function(qpb_add_test name)
         target_compile_options(${name} PRIVATE -Wno-gnu-zero-variadic-macro-arguments)
     endif()
     add_test(NAME ${name} COMMAND ${name})
-    set_tests_properties(${name} PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    set(environment "QT_QPA_PLATFORM=offscreen")
+    if(WIN32 AND QT_VERSION_MAJOR EQUAL 5)
+        # Qt 5's offscreen platform finds no fonts on Windows and draws no text.
+        list(APPEND environment "QT_QPA_FONTDIR=$ENV{WINDIR}/Fonts")
+    endif()
+    set_tests_properties(${name} PROPERTIES ENVIRONMENT "${environment}")
 endfunction()
 
 add_subdirectory(api)

@@ -430,7 +430,8 @@ void tst_PropertyFormView::customEditorWithDialog()
     QLineEdit* dialogField = f->other;
     handler.createEditor = [dialogField](QWidget* parent, const Property&) {
         auto* button = new QPushButton(parent);
-        QObject::connect(button, &QPushButton::clicked, button, [button, dialogField] {
+        // Called through the button: MSVC 2019 warns (C4573) on QObject::connect here.
+        button->connect(button, &QPushButton::clicked, button, [button, dialogField] {
             {
                 EditorDialogScope scope(button);
                 dialogField->setFocus(); // the "dialog" steals the focus
