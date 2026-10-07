@@ -359,6 +359,8 @@ Within 1.x, updating the folder never requires changes to your code or CMake (wi
 
 Details and upgrade notes for every version: `CHANGELOG.md`.
 
+- **1.7.0** - Qt 5.15 support (see [Qt 5](#qt-5)); Qt 6 builds unchanged. Fixed: MSVC 2019 warning C4267 when
+  building the library.
 - **1.6.1** - Documentation only: this README; the changelog and header comments refer to it instead of documents
   outside the folder.
 - **1.6.0** - Theming with style sheets: tree view colour properties (`groupBackground`, `groupForeground`,
