@@ -431,6 +431,60 @@ functions; the regression test fails without the fix), `tests/api_compat/v1_6.cp
 passes 33/33 locally. RC round 8 ran the trial under an application sheet with the hooks; F11 and F12 are Qt behaviour,
 documented. M10.6: released as `1.6.0`.
 
+### M11 — Qt 5.15: can qpb be built and used with it?
+
+Requested by the maintainer: check and build the project with Qt 5.15. qpb requires Qt 6.5 today (§7, SPEC §1), and
+its public API was designed on Qt 6 types.
+
+**Probe (M11.1, 2026-10-07).** Qt 5.15.0 (`msvc2019_64`), the three MSVC toolsets of Visual Studio 2026, a minimal
+Qt 5 application (toolchain only) and `qpb/` as it is (the `Qt6::` targets pointed at Qt 5 in a scratch project, every
+error collected with `ninja -k 0`):
+
+| Compiler | Minimal Qt 5.15 application | `qpb/` |
+|---|---|---|
+| MSVC 2019 (14.29) | builds and runs | fails: 26 error locations in qpb's public headers |
+| MSVC 2022 (14.44) | builds, 28 warnings C4996 (STL4043: `stdext::checked_array_iterator` deprecated) | not tried (same headers) |
+| MSVC 2026 (14.51) | fails: Qt's own headers call `stdext::make_checked_array_iterator`, removed from the standard library | fails: Qt's headers and qpb's |
+
+1. **Toolchain:** Qt 5.15.0 works with MSVC 2019 and 2022, not with MSVC 2026 (a Qt 5.15 build whose headers no
+   longer use `stdext` would be needed). A Qt 5 configuration of qpb would be built and tested with MSVC 2019 / 2022
+   (or GCC on Linux).
+2. **Public headers use Qt 6 API**, so not even including them works:
+   - `Attr::*` and `Types::*` are `inline constexpr QLatin1StringView` (Qt 6.4); Qt 5's `QLatin1String` cannot be
+     `constexpr` from a string literal (25 uses);
+   - `TypeHandler::storageType` is a `QMetaType` value and `registerType<T>()` uses `QMetaType::fromType<T>()`; in
+     Qt 5 `QMetaType` cannot be copied or assigned and types are `int` ids;
+   - `<QtCore/qvariantmap.h>` does not exist in Qt 5.
+3. **Sources use Qt 6 API** (seen with shims for the headers, 43 error locations in `qpb::core`):
+   `QVariant::metaType()` / `typeId()`, `QVariant::convert(QMetaType)`, `QMetaProperty::metaType()`,
+   `QJsonValue::toInteger()`; and, found by search, `QFormLayout::setRowVisible()` (6.4) and `&QComboBox::activated`
+   (overloaded, so ambiguous, in Qt 5). `qpb::widgets`, the tests and the examples were not reached.
+
+**Consequence.** A Qt 5 build cannot offer the same public API: at least the type of `TypeHandler::storageType` and
+the form of the `Attr` / `Types` constants have to differ. Options (decision **D53**, open):
+
+- **(a) No Qt 5 support.** Keep the Qt 6.5 minimum and say so in the README (Qt 5.15's open-source support ended in
+  2023). Documentation only.
+- **(b) Qt 5.15 as a second configuration.** CMake finds Qt 6 or Qt 5; a private compatibility header for the
+  sources; `#if QT_VERSION` variants in the public headers for the constants and `storageType` (an `int` type id with
+  Qt 5); the compatibility promise (SPEC §9) holds per Qt major, with an API snapshot for each; tests, examples and
+  consumer tests also built with Qt 5.15 and MSVC 2019 / 2022. Qt 6 builds see no change. Released as 1.7.0.
+  Estimate ≈ 30 h.
+- **(c) A separate `qt5` branch** of qpb: every later change has to be ported twice.
+
+| ID    | Task                                                                                         | Est. (h) | Done when |
+|-------|----------------------------------------------------------------------------------------------|----------|-----------|
+| M11.1 | Probe build with Qt 5.15 and MSVC 2019 / 2022 / 2026, list what breaks                        | 2 | Done (above) |
+| M11.2 | Decide D53 (a / b / c); record it in SPEC (+ `-vi`)                                            | 0.5 | Decision recorded |
+| M11.3 | (b) Local build script for Qt 5.15 with MSVC 2019 (14.29); CI job when CI is back              | 1.5 | `qpb/` configures with Qt 5.15 |
+| M11.4 | (b) CMake: Qt 6 or Qt 5 (`find_package(QT NAMES Qt6 Qt5)`), minimum checks, no global settings changed | 2 | Consumer tests pass with both |
+| M11.5 | (b) Public headers: Qt 5 variants of the constants and `storageType`, snapshot per Qt major; SPEC §9 per Qt major | 6 | Headers self-contained with both; Qt 6 snapshot unchanged |
+| M11.6 | (b) Sources: compatibility header; `qpb::core` and `qpb::widgets` build with Qt 5.15 without warnings | 10 | Both libraries build |
+| M11.7 | (b) Tests, examples, RC trial with Qt 5.15                                                     | 7 | All pass with Qt 5.15 and Qt 6 |
+| M11.8 | (b) Release 1.7.0                                                                              | 1 | Release zip |
+
+**Status:** M11.1 done; waiting for D53.
+
 ---
 
 ## 3. Task dependencies
@@ -441,7 +495,7 @@ M0.* ─► M1.1 ─► M1.2, M1.3 ─► M1.4 ─► M1.5
 M1.* ─► M2.1 ─► M2.2 ─► M2.3
         M2.4 ─► M2.5 ─► M2.6 ─► M2.7 ─► M2.8
 M2.4 ─► M3.1 ─► M3.2 ─► M3.3 ─► M3.4, M3.5 ─► M3.6 ─► M3.7 ─► M3.8
-M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7 ─► M8 ─► M9 ─► M10
+M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7 ─► M8 ─► M9 ─► M10 ─► M11
 ```
 
 ---
