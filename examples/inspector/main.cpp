@@ -68,7 +68,7 @@ int main(int argc, char* argv[])
     auto* view = new qpb::PropertyTreeView;
     view->setModel(&model);
     view->setNameColumnWidth(160);
-    QObject::connect(modeBox, &QComboBox::currentIndexChanged, view, [view](int index) {
+    QObject::connect(modeBox, qOverload<int>(&QComboBox::currentIndexChanged), view, [view](int index) {
         view->setMode(
             index == 0 ? qpb::PropertyTreeView::Mode::Tree : qpb::PropertyTreeView::Mode::List);
     });

@@ -104,10 +104,20 @@ void useFilter(qpb::PropertyModel& model, qpb::PropertyTreeView& view)
 // Maps Q_PROPERTYs to properties. Type lookup uses TypeRegistry::types() and
 // TypeHandler::storageType; two-way sync uses PropertyModel::valueChanged and
 // Property::setValue.
-qpb::TypeId typeFor(QMetaType metaType)
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+using MetaType = QMetaType; // the type of TypeHandler::storageType
+MetaType metaTypeOf(const QMetaProperty& property) { return property.metaType(); }
+MetaType stringMetaType() { return QMetaType::fromType<QString>(); }
+#else
+using MetaType = int; // Qt 5 configuration (1.7)
+MetaType metaTypeOf(const QMetaProperty& property) { return property.userType(); }
+MetaType stringMetaType() { return qMetaTypeId<QString>(); }
+#endif
+
+qpb::TypeId typeFor(MetaType metaType)
 {
     qpb::TypeRegistry& registry = qpb::TypeRegistry::global();
-    if (metaType == QMetaType::fromType<QString>())
+    if (metaType == stringMetaType())
         return qpb::Types::String; // String/FilePath/DirPath ambiguity: default to String
     for (const qpb::TypeId& id : registry.types()) {
         if (registry.handler(id)->storageType == metaType)
@@ -122,7 +132,7 @@ void addObject(qpb::PropertyModel& model, QObject* object)
     qpb::PropertyGroup& group = model.root()->addGroup(object->objectName());
     for (int i = meta->propertyOffset(); i < meta->propertyCount(); ++i) {
         const QMetaProperty metaProperty = meta->property(i);
-        const qpb::TypeId type = typeFor(metaProperty.metaType());
+        const qpb::TypeId type = typeFor(metaTypeOf(metaProperty));
         if (type.isEmpty())
             continue;
         qpb::Property& property

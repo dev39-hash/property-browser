@@ -478,7 +478,8 @@ void tst_PropertyTreeView::customEditorWithDialogScope()
     EditorHandler handler;
     handler.createEditor = [](QWidget* parent, const Property&) {
         auto* button = new QPushButton(parent);
-        QObject::connect(button, &QPushButton::clicked, button, [button] {
+        // Called through the button: MSVC 2019 warns (C4573) on QObject::connect here.
+        button->connect(button, &QPushButton::clicked, button, [button] {
             {
                 EditorDialogScope scope(button);
                 button->window()->findChild<QLineEdit*>()->setFocus(); // "dialog" steals focus
