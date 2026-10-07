@@ -37,6 +37,39 @@ def looks_like_function(head):
     return "(" in head and not re.match(r"^(class|struct|namespace|enum|union)\b", head)
 
 
+QT_CONDITION = re.compile(
+    r"#\s*if\s+QT_VERSION\s*(>=|<)\s*QT_VERSION_CHECK\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)\s*$")
+
+
+def select_qt_branches(header_text, qt_major):
+    """Keeps the lines of `#if QT_VERSION >= / < QT_VERSION_CHECK(...)` blocks
+    that apply to the given Qt major version (as its newest minor version).
+    Other preprocessor blocks are left alone."""
+    qt_version = (qt_major, 99, 99)
+    stack = []  # per open #if: None (not a Qt version test) or whether active
+    kept = []
+    for line in header_text.splitlines():
+        stripped = line.strip()
+        match = QT_CONDITION.match(stripped)
+        if match:
+            operator, *numbers = match.groups()
+            at_least = qt_version >= tuple(int(n) for n in numbers)
+            stack.append(at_least if operator == ">=" else not at_least)
+            continue
+        if re.match(r"#\s*if", stripped):
+            stack.append(None)
+        elif re.match(r"#\s*else", stripped) and stack:
+            if stack[-1] is not None:
+                stack[-1] = not stack[-1]
+                continue
+        elif re.match(r"#\s*endif", stripped) and stack:
+            if stack.pop() is not None:
+                continue
+        if all(state is not False for state in stack):
+            kept.append(line)
+    return "\n".join(kept)
+
+
 def declarations(header_text):
     """Yields (scope, declaration) pairs for the public parts of a header."""
     lines = []
@@ -141,12 +174,13 @@ def scope_name(scopes):
     return "::".join(parts) or "::"
 
 
-def snapshot(include_dir):
+def snapshot(include_dir, qt_major):
     root = pathlib.Path(include_dir)
     result = set()
     for header in sorted(root.rglob("*.h")):
         relative = header.relative_to(root).as_posix()
-        for scope, declaration in declarations(header.read_text(encoding="utf-8")):
+        text = select_qt_branches(header.read_text(encoding="utf-8"), qt_major)
+        for scope, declaration in declarations(text):
             if declaration.startswith(("Q_OBJECT", "Q_ENUM", "Q_DECLARE", "Q_PROPERTY", "QT_")):
                 continue
             result.add(f"{relative} | {scope} | {declaration}")
@@ -156,12 +190,14 @@ def snapshot(include_dir):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--include", required=True, help="the qpb/include directory")
+    parser.add_argument("--qt-major", type=int, choices=(5, 6), default=6,
+                        help="Qt major version whose #if QT_VERSION branches count (default 6)")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--write", metavar="FILE")
     group.add_argument("--check", metavar="FILE")
     args = parser.parse_args()
 
-    current = snapshot(args.include)
+    current = snapshot(args.include, args.qt_major)
     if args.write:
         pathlib.Path(args.write).write_text("\n".join(current) + "\n", encoding="utf-8")
         print(f"Wrote {len(current)} declarations to {args.write}")
