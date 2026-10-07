@@ -487,7 +487,7 @@ và `ctest` đạt 34/34; RC trial đạt mà không phải sửa gì; dự án 
 - test và example: lời gọi dùng được cho cả hai bản (`userType()`, `qOverload<int>`, `QRegularExpressionMatchIterator`);
   test widget trên Windows được đặt `QT_QPA_FONTDIR`, vì nền tảng offscreen của Qt 5 không vẽ chữ khi thiếu font;
 - CI: job Qt 5.15.2 trên Ubuntu 22.04 và Windows 2022 (chạy khi bật lại CI); SPEC mục 9.6, D53; `qpb/README.md` mục
-  "Qt 5". Tiếp theo: M11.8 (phát hành 1.7.0).
+  "Qt 5". M11.8: đã phát hành `1.7.0`.
 
 ---
 

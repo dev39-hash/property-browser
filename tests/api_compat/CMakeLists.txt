@@ -34,7 +34,7 @@ endforeach()
 # api-1.x for the Qt 6 API, api-qt5-1.x (since 1.7, --qt-major 5) for the Qt 5 one.
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
-    foreach(version IN ITEMS 1.0 1.1 1.2 1.3 1.4 1.5 1.6)
+    foreach(version IN ITEMS 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7)
         add_test(NAME api_snapshot_${version}
             COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/api_snapshot.py"
                 --include "${PROJECT_SOURCE_DIR}/qpb/include"
