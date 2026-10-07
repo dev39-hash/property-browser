@@ -423,6 +423,58 @@ sửa), `tests/api_compat/v1_6.cpp` và `api-1.6.txt` (chứa trọn 1.5), `exam
 không sheet), SPEC §5.5, §5.6, §5.8, §8, D50–D52. `ctest` đạt 33/33 ở local. Vòng thử RC 8 chạy ứng dụng thử dưới sheet
 của ứng dụng dùng các móc; F11 và F12 là hành vi của Qt, đã ghi tài liệu. M10.6: đã phát hành `1.6.0`.
 
+### M11 — Qt 5.15: có build và dùng qpb với nó được không?
+
+Theo yêu cầu của maintainer: kiểm tra và build project với Qt 5.15. Hiện qpb yêu cầu Qt 6.5 (§7, SPEC §1), và API public
+được thiết kế trên các kiểu của Qt 6.
+
+**Chương trình dò (M11.1, 2026-10-07).** Qt 5.15.0 (`msvc2019_64`), ba toolset MSVC của Visual Studio 2026, một ứng dụng
+Qt 5 tối giản (chỉ kiểm bộ công cụ) và `qpb/` nguyên bản (các target `Qt6::` trỏ sang Qt 5 trong một dự án tạm, gom mọi
+lỗi bằng `ninja -k 0`):
+
+| Trình biên dịch | Ứng dụng Qt 5.15 tối giản | `qpb/` |
+|---|---|---|
+| MSVC 2019 (14.29) | build và chạy được | lỗi: 26 vị trí trong header public của qpb |
+| MSVC 2022 (14.44) | build được, 28 cảnh báo C4996 (STL4043: `stdext::checked_array_iterator` deprecated) | chưa thử (cùng header) |
+| MSVC 2026 (14.51) | lỗi: chính header của Qt gọi `stdext::make_checked_array_iterator`, đã bị bỏ khỏi thư viện chuẩn | lỗi: header của Qt và của qpb |
+
+1. **Bộ công cụ:** Qt 5.15.0 chạy với MSVC 2019 và 2022, không chạy với MSVC 2026 (cần một bản Qt 5.15 có header không
+   còn dùng `stdext`). Cấu hình Qt 5 của qpb sẽ được build và kiểm tra với MSVC 2019 / 2022 (hoặc GCC trên Linux).
+2. **Header public dùng API Qt 6**, nên ngay cả include cũng lỗi:
+   - `Attr::*` và `Types::*` là `inline constexpr QLatin1StringView` (Qt 6.4); `QLatin1String` của Qt 5 không thể
+     `constexpr` từ một chuỗi literal (25 chỗ dùng);
+   - `TypeHandler::storageType` là giá trị `QMetaType` và `registerType<T>()` dùng `QMetaType::fromType<T>()`; trong
+     Qt 5 `QMetaType` không copy hay gán được và kiểu là id `int`;
+   - `<QtCore/qvariantmap.h>` không có trong Qt 5.
+3. **Mã nguồn dùng API Qt 6** (thấy khi có shim cho header, 43 vị trí lỗi trong `qpb::core`): `QVariant::metaType()` /
+   `typeId()`, `QVariant::convert(QMetaType)`, `QMetaProperty::metaType()`, `QJsonValue::toInteger()`; và, tìm bằng
+   search, `QFormLayout::setRowVisible()` (6.4) và `&QComboBox::activated` (có overload, nên mơ hồ, trong Qt 5).
+   `qpb::widgets`, test và example chưa được tới.
+
+**Hệ quả.** Bản build với Qt 5 không thể có cùng API public: ít nhất kiểu của `TypeHandler::storageType` và dạng của
+các hằng `Attr` / `Types` phải khác. Các phương án (quyết định **D53**, còn mở):
+
+- **(a) Không hỗ trợ Qt 5.** Giữ tối thiểu Qt 6.5 và ghi rõ trong README (Qt 5.15 bản mã nguồn mở đã hết hỗ trợ từ
+  2023). Chỉ sửa tài liệu.
+- **(b) Qt 5.15 là cấu hình thứ hai.** CMake tìm Qt 6 hoặc Qt 5; một header tương thích nội bộ cho mã nguồn; biến thể
+  `#if QT_VERSION` trong header public cho các hằng và `storageType` (id kiểu `int` với Qt 5); cam kết tương thích
+  (SPEC §9) áp dụng theo từng major của Qt, mỗi major một snapshot API; test, example và test consumer cũng build với
+  Qt 5.15 và MSVC 2019 / 2022. Bản build Qt 6 không thay đổi gì. Phát hành 1.7.0. Ước tính ≈ 30 h.
+- **(c) Một nhánh `qt5` riêng** của qpb: mọi thay đổi sau này phải port hai lần.
+
+| ID    | Việc                                                                                           | Ước tính (h) | Xong khi |
+|-------|------------------------------------------------------------------------------------------------|----------|-----------|
+| M11.1 | Build dò với Qt 5.15 và MSVC 2019 / 2022 / 2026, liệt kê những gì hỏng                          | 2 | Xong (ở trên) |
+| M11.2 | Chốt D53 (a / b / c); ghi vào SPEC (+ `-vi`)                                                     | 0.5 | Đã ghi quyết định |
+| M11.3 | (b) Script build local cho Qt 5.15 với MSVC 2019 (14.29); job CI khi bật lại CI                 | 1.5 | `qpb/` configure được với Qt 5.15 |
+| M11.4 | (b) CMake: Qt 6 hoặc Qt 5 (`find_package(QT NAMES Qt6 Qt5)`), kiểm tra bản tối thiểu, không đổi thiết lập global | 2 | Test consumer đạt với cả hai |
+| M11.5 | (b) Header public: biến thể Qt 5 của các hằng và `storageType`, snapshot theo major Qt; SPEC §9 theo major Qt | 6 | Header tự đủ với cả hai; snapshot Qt 6 không đổi |
+| M11.6 | (b) Mã nguồn: header tương thích; `qpb::core` và `qpb::widgets` build với Qt 5.15 không cảnh báo | 10 | Cả hai thư viện build được |
+| M11.7 | (b) Test, example, RC trial với Qt 5.15                                                         | 7 | Tất cả đạt với Qt 5.15 và Qt 6 |
+| M11.8 | (b) Phát hành 1.7.0                                                                              | 1 | Có zip phát hành |
+
+**Trạng thái:** M11.1 xong; chờ D53.
+
 ---
 
 ## 3. Phụ thuộc giữa các task
@@ -433,7 +485,7 @@ M0.* ─► M1.1 ─► M1.2, M1.3 ─► M1.4 ─► M1.5
 M1.* ─► M2.1 ─► M2.2 ─► M2.3
         M2.4 ─► M2.5 ─► M2.6 ─► M2.7 ─► M2.8
 M2.4 ─► M3.1 ─► M3.2 ─► M3.3 ─► M3.4, M3.5 ─► M3.6 ─► M3.7 ─► M3.8
-M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7 ─► M8 ─► M9 ─► M10
+M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7 ─► M8 ─► M9 ─► M10 ─► M11
 ```
 
 ---
