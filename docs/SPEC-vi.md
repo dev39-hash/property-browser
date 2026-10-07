@@ -49,7 +49,7 @@ Lý do chi tiết: brainstorm mục 11. Thiết kế **không được cấm** m
 | Hạng mục        | Quyết định                                                                                   |
 |-----------------|----------------------------------------------------------------------------------------------|
 | Ngôn ngữ        | **C++17** (đã xác nhận). API public **không** dùng designated initializer (là C++20)          |
-| Qt              | Tối thiểu **6.5**; môi trường phát triển/CI chính **6.8 LTS**. Chỉ dùng Core, Gui, Widgets, Test. (đã xác nhận) |
+| Qt              | Tối thiểu **6.5**; môi trường phát triển/CI chính **6.8 LTS**; từ 1.7 cả **5.15** (§9.6). Chỉ dùng Core, Gui, Widgets, Test. (đã xác nhận) |
 | Build           | **Chỉ CMake** (không hỗ trợ qmake), CMake ≥ 3.21; target `qpb::core`, `qpb::widgets`. Cách tích hợp **chính**: `add_subdirectory(components/qpb)` (§6) |
 | Namespace       | `qpb` (đã xác nhận)                                                                           |
 | Thư viện        | **Static mặc định** (`QPB_BUILD_SHARED=OFF`), không theo `BUILD_SHARED_LIBS` của consumer; export macro `QPB_CORE_EXPORT`, `QPB_WIDGETS_EXPORT` vẫn có cho trường hợp shared |
@@ -113,6 +113,8 @@ inline constexpr QLatin1StringView Group{"group"};
 }
 }
 ```
+
+Với Qt 5 (từ 1.7) các hằng này là `QLatin1String` (§9.6).
 
 Kiểu do người dùng đăng ký dùng ID tự chọn; khuyến nghị có tiền tố (`"myapp.color"`) để tránh va chạm.
 ID bắt đầu bằng `qpb.` hoặc trùng 8 ID ở trên là dành riêng.
@@ -238,7 +240,7 @@ Overload `addEnum(id, QStringList labels, int index)` tạo option với `value 
 
 ```cpp
 struct TypeHandler {
-    QMetaType storageType;                                                // invalid → stored unconverted
+    QMetaType storageType;                                                // invalid → stored unconverted; Qt 5: int (§9.6)
     std::function<QString(const QVariant&, const Property&)> displayText; // empty → QVariant::toString()
     std::function<QVariant(const QVariant&, const Property&)> normalize;  // empty → unchanged (e.g. clamp)
     std::function<ValidationResult(const QVariant&, const Property&)> validate; // empty → always valid
@@ -736,7 +738,8 @@ upstream.
 - `target_compile_features(qpb_core PUBLIC cxx_std_17)` — chỉ yêu cầu *tối thiểu*, consumer dùng C++20 vẫn được.
 - Cờ cảnh báo và `QT_NO_CAST_FROM_ASCII` là **PRIVATE**; header public phải sạch cảnh báo dưới
   `-Wall -Wextra -Wpedantic` / `/W4` của consumer.
-- Chỉ gọi `find_package(Qt6 6.5 ... Core Widgets)` nếu target `Qt6::Widgets` chưa tồn tại; nếu đã có thì kiểm tra version Qt.
+- Dùng Qt của project chủ khi target `Qt6::Widgets` (hoặc, từ 1.7, `Qt5::Widgets`) đã tồn tại; nếu chưa thì tìm Qt 6, hoặc Qt 5
+  khi không có Qt 6 (`find_package(QT NAMES Qt6 Qt5)`). Kiểm tra version tối thiểu: 6.5, hoặc 5.15 (§9.6).
 - Tên target có tiền tố `qpb_`; alias `qpb::core`, `qpb::widgets`. Option có tiền tố `QPB_`.
 - Không có tests/examples trong folder `qpb/`; không `install()` mặc định (option `QPB_INSTALL`, OFF).
 - **Không dùng Qt resource (`.qrc`)** trong 1.x: static lib cần `Q_INIT_RESOURCE` ở phía consumer → vi phạm "2 dòng CMake".
@@ -761,7 +764,8 @@ upstream.
 
 `PathEdit` nội bộ có hook cho test (trong `src/`, không public) để test thay `QFileDialog` bằng hàm trả giá trị cố định.
 
-CI: GitHub Actions, ma trận Ubuntu/Windows/macOS × Qt 6.5 / 6.8, qua `jurplel/install-qt-action`.
+CI: GitHub Actions, ma trận Ubuntu/Windows/macOS × Qt 6.5 / 6.8, thêm Qt 5.15 trên Ubuntu và Windows (§9.6), qua
+`jurplel/install-qt-action`.
 
 ---
 
@@ -781,7 +785,7 @@ Sau 1.0, tính năng mới đến dưới dạng **bổ sung** (minor), không s
 | 1.4   | Điều kiện `enabledWhen`/`visibleWhen` (§4.2); `PropertyModel::onValueChanged()` (§4.6)                      | Bổ sung       |
 | 1.5   | `PropertyModel::resetAllToDefault()` (§4.6); `PropertyTreeView::setTabStopsOnCheckBoxes()` (§5.5)           | Bổ sung       |
 | 1.6   | Móc style sheet (§5.8): property màu của tree view, selector `qpbPart` / `qpbModified` của form view         | Bổ sung       |
-| 1.7   | Dự kiến (PLAN M11): Qt 5.15 là cấu hình thứ hai; bản build Qt 6 không đổi                                   | Bổ sung       |
+| 1.7   | Qt 5.15 là cấu hình thứ hai (§9.6); bản build Qt 6 không đổi                                                | Bổ sung       |
 | 2.0   | Chỉ khi thật sự cần phá vỡ API; gom mọi thứ đã deprecate                                                    | Breaking      |
 
 **Thiết kế 1.0 phải "chừa chỗ" cho 1.1/1.2** mà không đổi API: Form view và filter là class mới dùng
@@ -843,6 +847,30 @@ Dù vậy d-pointer vẫn được dùng (§9.3) để giữ header ổn định
 - Test "header tự đủ": mỗi header public được include một mình trong một `.cpp` riêng.
 - `tools/api_snapshot`: xuất danh sách symbol public (bằng cách parse header hoặc `abi-dumper` nếu có) và diff với snapshot của bản trước
   → CI báo nếu có xóa/đổi. (Có thể dùng từ 1.1; ở 1.0 chỉ tạo snapshot gốc.)
+
+### 9.6 Cấu hình Qt 5.15 (1.7)
+
+Từ 1.7 qpb cũng build với Qt 5.15 (D53). CMake dùng Qt của project chủ (`Qt6::Widgets`, nếu không thì `Qt5::Widgets`),
+nếu chưa có thì tìm Qt 6, hoặc Qt 5.15 khi không có Qt 6 (§6.3). Cấu hình Qt 6 không đổi: cùng API, cùng hành vi, cùng
+snapshot.
+
+- **Khác biệt API**, chỉ ở chỗ Qt 5 không có tương đương, dưới dạng nhánh `#if QT_VERSION` trong header public:
+  - `Types::*` và `Attr::*` là `inline constexpr QLatin1String` (Qt 6: `QLatin1StringView`); cả hai đều chuyển sang
+    `QString`, nên code dùng chúng làm type ID hay key thuộc tính không đổi;
+  - `TypeHandler::storageType` là id kiểu `int`, mặc định `QMetaType::UnknownType` (Qt 6: một `QMetaType`). Hãy viết
+    `registerType<T>()`, hàm đặt nó ở cả hai bản, hoặc `qMetaTypeId<T>()` với Qt 5.
+- **Hành vi:** như nhau. Trong mã nguồn, các khác biệt chỉ nằm ở `src/core/compat_p.h` và `src/widgets/compat_p.h` (ví dụ
+  `PropertyFilterProxyModel` nhận cả bộ lọc `QRegExp` mà `setFilterFixedString()` của Qt 5 đặt; hàng của form được ẩn
+  qua widget của chúng trước Qt 6.4).
+- **Cam kết tương thích (§9.1) theo từng major của Qt:** ứng dụng build với Qt 5 vẫn build với Qt 5 qua các bản 1.x, và
+  tương tự với Qt 6. Chuyển một ứng dụng từ Qt 5 sang Qt 6 là việc migration của chính Qt và có thể cần hai thay đổi
+  ở trên.
+- **Kiểm chứng (§9.5):** snapshot `api-qt5-1.x.txt` (`tools/api_snapshot.py --qt-major 5`) bên cạnh snapshot Qt 6, tất
+  cả được kiểm ở cả hai cấu hình; `tests/api_compat/qt5_v1_7.cpp` đóng băng dạng Qt 5. Các file tương thích của các bản
+  trước cũng build với Qt 5, trừ `v1_0.cpp` vì nó dùng giá trị `QMetaType`. CI build và test cấu hình Qt 5.15 trên Linux
+  (GCC) và Windows (MSVC 2022).
+- **Bộ công cụ:** chính header của Qt 5.15.0 không biên dịch được với MSVC 2026 (chúng dùng
+  `stdext::checked_array_iterator`, đã bị bỏ khỏi thư viện chuẩn của nó); hãy dùng MSVC 2019 hoặc 2022, GCC hoặc Clang.
 
 ---
 
