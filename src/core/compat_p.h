@@ -10,6 +10,8 @@
 #include <QtCore/qmetaobject.h>
 #include <QtCore/qmetatype.h>
 #include <QtCore/qnumeric.h>
+#include <QtCore/qregularexpression.h>
+#include <QtCore/qsortfilterproxymodel.h>
 #include <QtCore/qvariant.h>
 
 #include <limits>
@@ -71,6 +73,12 @@ inline bool addOverflow(qint64 a, qint64 b, qint64* result)
 inline bool mulOverflow(qint64 a, qint64 b, qint64* result)
 {
     return qMulOverflow(a, b, result);
+}
+
+// The filter of proxy, whichever setFilter...() function set it.
+inline QRegularExpression filterExpression(const QSortFilterProxyModel& proxy)
+{
+    return proxy.filterRegularExpression();
 }
 
 #else
@@ -139,6 +147,37 @@ inline bool mulOverflow(qint64 a, qint64 b, qint64* result)
         return true;
     *result = a * b;
     return false;
+}
+
+// Qt 5's setFilterFixedString() and setFilterWildcard() set the QRegExp
+// filter, not filterRegularExpression(): convert it, for partial matches as
+// QSortFilterProxyModel does.
+inline QRegularExpression filterExpression(const QSortFilterProxyModel& proxy)
+{
+    const QRegularExpression expression = proxy.filterRegularExpression();
+    if (!expression.pattern().isEmpty())
+        return expression;
+    const QRegExp regExp = proxy.filterRegExp();
+    QString pattern = regExp.pattern();
+    if (pattern.isEmpty())
+        return expression;
+    switch (regExp.patternSyntax()) {
+    case QRegExp::FixedString:
+        pattern = QRegularExpression::escape(pattern);
+        break;
+    case QRegExp::Wildcard:
+    case QRegExp::WildcardUnix:
+        pattern = QRegularExpression::wildcardToRegularExpression(pattern);
+        // \A(?:...)\z: a whole-string match; QRegExp found it anywhere.
+        if (pattern.startsWith(QLatin1String("\\A(?:")) && pattern.endsWith(QLatin1String(")\\z")))
+            pattern = pattern.mid(5, pattern.size() - 8);
+        break;
+    default:
+        break;
+    }
+    return QRegularExpression(pattern,
+        regExp.caseSensitivity() == Qt::CaseInsensitive ? QRegularExpression::CaseInsensitiveOption
+                                                        : QRegularExpression::NoPatternOption);
 }
 
 #endif
