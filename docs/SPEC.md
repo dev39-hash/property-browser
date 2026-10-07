@@ -48,7 +48,7 @@ Rationale: brainstorm section 11. The design **must not preclude** multi-object 
 | Area            | Decision                                                                                     |
 |-----------------|----------------------------------------------------------------------------------------------|
 | Language        | **C++17** (confirmed). The public API does **not** rely on designated initializers (C++20)   |
-| Qt              | Minimum **6.5** (confirmed); primary development/CI version **6.8 LTS**. Only Core, Gui, Widgets, Test |
+| Qt              | Minimum **6.5** (confirmed); primary development/CI version **6.8 LTS**; since 1.7 also **5.15** (§9.6). Only Core, Gui, Widgets, Test |
 | Build           | **CMake only** (confirmed; no qmake), CMake ≥ 3.21; targets `qpb::core`, `qpb::widgets`. **Primary** integration: `add_subdirectory(components/qpb)` (§6) |
 | Namespace       | `qpb` (confirmed)                                                                             |
 | Library type    | **Static by default** (`QPB_BUILD_SHARED=OFF`), independent of the consumer's `BUILD_SHARED_LIBS`; export macros `QPB_CORE_EXPORT`, `QPB_WIDGETS_EXPORT` still exist for the shared case |
@@ -113,6 +113,8 @@ inline constexpr QLatin1StringView Group{"group"};
 }
 }
 ```
+
+With Qt 5 (since 1.7) the same constants are `QLatin1String` (§9.6).
 
 User-registered types use IDs of their choosing; a prefix is recommended (`"myapp.color"`) to avoid collisions.
 IDs starting with `qpb.` or equal to one of the 8 IDs above are reserved.
@@ -240,7 +242,7 @@ and uses the built-in one (called out in the CHANGELOG).
 
 ```cpp
 struct TypeHandler {
-    QMetaType storageType;                                                // invalid → stored unconverted
+    QMetaType storageType;                                                // invalid → stored unconverted; Qt 5: int (§9.6)
     std::function<QString(const QVariant&, const Property&)> displayText; // empty → QVariant::toString()
     std::function<QVariant(const QVariant&, const Property&)> normalize;  // empty → unchanged (e.g. clamp)
     std::function<ValidationResult(const QVariant&, const Property&)> validate; // empty → always valid
@@ -742,7 +744,8 @@ submodule; changes belong upstream instead.
 - `target_compile_features(qpb_core PUBLIC cxx_std_17)` — a *minimum* only; consumers on C++20 still work.
 - Warning flags and `QT_NO_CAST_FROM_ASCII` are **PRIVATE**; public headers must be warning-free under the consumer's
   `-Wall -Wextra -Wpedantic` / `/W4`.
-- Call `find_package(Qt6 6.5 ... Core Widgets)` only if the `Qt6::Widgets` target does not exist yet; otherwise verify the Qt version.
+- Use the host's Qt when its `Qt6::Widgets` (or, since 1.7, `Qt5::Widgets`) target exists; otherwise find Qt 6, or Qt 5
+  when there is no Qt 6 (`find_package(QT NAMES Qt6 Qt5)`). Verify the minimum version: 6.5, or 5.15 (§9.6).
 - Target names use the `qpb_` prefix; aliases `qpb::core`, `qpb::widgets`. Options use the `QPB_` prefix.
 - No tests/examples inside `qpb/`; no `install()` by default (option `QPB_INSTALL`, OFF).
 - **No Qt resources (`.qrc`)** in 1.x: a static library would need `Q_INIT_RESOURCE` on the consumer side → breaks "two lines of CMake".
@@ -767,7 +770,8 @@ submodule; changes belong upstream instead.
 
 The internal `PathEdit` has a test hook (under `src/`, not public) so tests can replace `QFileDialog` with a function returning a fixed value.
 
-CI: GitHub Actions, matrix Ubuntu/Windows/macOS × Qt 6.5 / 6.8, via `jurplel/install-qt-action`.
+CI: GitHub Actions, matrix Ubuntu/Windows/macOS × Qt 6.5 / 6.8, plus Qt 5.15 on Ubuntu and Windows (§9.6), via
+`jurplel/install-qt-action`.
 
 ---
 
@@ -787,7 +791,7 @@ After 1.0, new features arrive as **additions** (minor releases); existing API i
 | 1.4     | Conditions `enabledWhen`/`visibleWhen` (§4.2); `PropertyModel::onValueChanged()` (§4.6)                 | Additive      |
 | 1.5     | `PropertyModel::resetAllToDefault()` (§4.6); `PropertyTreeView::setTabStopsOnCheckBoxes()` (§5.5)      | Additive      |
 | 1.6     | Style sheet hooks (§5.8): tree view colour properties, form view selectors `qpbPart` / `qpbModified`     | Additive      |
-| 1.7     | Planned (PLAN M11): Qt 5.15 as a second configuration; Qt 6 builds unchanged                          | Additive      |
+| 1.7     | Qt 5.15 as a second configuration (§9.6); Qt 6 builds unchanged                                       | Additive      |
 | 2.0     | Only if breaking the API is truly necessary; removes everything deprecated                               | Breaking      |
 
 **The 1.0 design must leave room for 1.1/1.2** without API changes: the form view and filter are new classes on top of the
@@ -851,6 +855,30 @@ D-pointers are still used (§9.3) to keep headers stable and internals free to c
 - "Self-contained header" test: every public header is included alone in its own `.cpp`.
 - `tools/api_snapshot`: exports the list of public symbols (by parsing headers, or with `abi-dumper` when available) and diffs it
   against the previous release's snapshot → CI flags removals/changes. (Used from 1.1; 1.0 only creates the baseline.)
+
+### 9.6 The Qt 5.15 configuration (1.7)
+
+Since 1.7 qpb also builds with Qt 5.15 (D53). CMake uses the host project's Qt (`Qt6::Widgets`, else `Qt5::Widgets`),
+otherwise finds Qt 6, or Qt 5.15 when there is no Qt 6 (§6.3). The Qt 6 configuration is unchanged: same API, same
+behaviour, same snapshots.
+
+- **API differences**, only where Qt 5 has no equivalent, as `#if QT_VERSION` branches of the public headers:
+  - `Types::*` and `Attr::*` are `inline constexpr QLatin1String` (Qt 6: `QLatin1StringView`); both convert to
+    `QString`, so code using them as type IDs or attribute keys is the same;
+  - `TypeHandler::storageType` is an `int` type id, default `QMetaType::UnknownType` (Qt 6: a `QMetaType`). Write
+    `registerType<T>()`, which sets it in both, or `qMetaTypeId<T>()` with Qt 5.
+- **Behaviour:** the same. Inside the sources the differences are confined to `src/core/compat_p.h` and
+  `src/widgets/compat_p.h` (e.g. `PropertyFilterProxyModel` also honours the `QRegExp` filter that Qt 5's
+  `setFilterFixedString()` sets; form rows are hidden through their widgets before Qt 6.4).
+- **Compatibility promise (§9.1) per Qt major:** an application built with Qt 5 keeps building with Qt 5 across 1.x
+  releases, and likewise with Qt 6. Moving an application from Qt 5 to Qt 6 is Qt's own migration and may need the
+  two changes above.
+- **Verification (§9.5):** `api-qt5-1.x.txt` snapshots (`tools/api_snapshot.py --qt-major 5`) next to the Qt 6 ones,
+  all checked in both configurations; `tests/api_compat/qt5_v1_7.cpp` freezes the Qt 5 forms. Compatibility files of
+  earlier releases are built with Qt 5 too, except `v1_0.cpp`, which uses `QMetaType` values. CI builds and tests the
+  Qt 5.15 configuration on Linux (GCC) and Windows (MSVC 2022).
+- **Toolchains:** Qt 5.15.0's own headers do not compile with MSVC 2026 (they use `stdext::checked_array_iterator`,
+  removed from its standard library); use MSVC 2019 or 2022, GCC or Clang.
 
 ---
 

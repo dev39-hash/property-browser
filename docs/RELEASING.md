@@ -14,8 +14,12 @@ everything locally.
    - add the API snapshot of the new version:
      `python3 tools/api_snapshot.py --include qpb/include --write tests/api_compat/api-<major>.<minor>.txt` and list it in
      `tests/api_compat/CMakeLists.txt`. Earlier snapshots are never edited; each is still checked, and the new one must be
-     a superset of the previous one.
-4. Commit through a pull request and wait for green CI on all platforms.
+     a superset of the previous one;
+   - since 1.7, the same for the Qt 5 configuration (docs/SPEC.md section 9.6): `--qt-major 5 --write
+     tests/api_compat/api-qt5-<major>.<minor>.txt`, listed with the Qt 5 snapshots, and a `qt5_v<major>_<minor>.cpp`
+     when the Qt 5 API gains something of its own.
+4. Commit through a pull request and wait for green CI on all platforms, with Qt 6 and with Qt 5.15 (MSVC 2019 / 2022,
+   GCC or Clang; Qt 5.15 headers do not compile with MSVC 2026).
 
 ## 2. Build the artifacts
 

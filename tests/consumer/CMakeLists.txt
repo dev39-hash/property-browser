@@ -19,6 +19,9 @@ set(_qpb_consumer_scenarios
     "upgrade  | 17  | ON            | OFF    | ON"
 )
 
+# Installation prefix of the Qt in use (QT_DIR is <prefix>/lib/cmake/Qt6 or Qt5).
+get_filename_component(_qpb_qt_prefix "${QT_DIR}/../../.." ABSOLUTE)
+
 foreach(scenario IN LISTS _qpb_consumer_scenarios)
     string(REPLACE " " "" scenario "${scenario}")
     string(REPLACE "|" ";" scenario "${scenario}")
@@ -35,7 +38,7 @@ foreach(scenario IN LISTS _qpb_consumer_scenarios)
             "-DWORK_DIR=${CMAKE_CURRENT_BINARY_DIR}/${name}"
             "-DGENERATOR=${CMAKE_GENERATOR}"
             "-DCXX_COMPILER=${CMAKE_CXX_COMPILER}"
-            "-DQT_PREFIX=${QT6_INSTALL_PREFIX}"
+            "-DQT_PREFIX=${_qpb_qt_prefix}"
             "-DCXX_STANDARD=${std}"
             "-DFIND_QT_FIRST=${find_qt_first}"
             "-DSHARED=${shared}"

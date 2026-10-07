@@ -15,7 +15,9 @@
 
 TEMPLATE = subdirs
 
-!versionAtLeast(QT_VERSION, 6.5.0): error("qpb requires Qt 6.5 or newer, found $$QT_VERSION")
+# Qt 6.5 or newer, or Qt 5.15 (since 1.7).
+!versionAtLeast(QT_VERSION, 5.15.0)|equals(QT_MAJOR_VERSION, 6):!versionAtLeast(QT_VERSION, 6.5.0): \
+    error("qpb requires Qt 6.5 or newer, or Qt 5.15; found $$QT_VERSION")
 
 QPB_EXAMPLES = quickstart custom_type inspector settings_dialog plugin_config form_view object_editor custom_theme
 

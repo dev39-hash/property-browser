@@ -19,6 +19,10 @@ jobs:
           # Other platforms (docs/PLAN.md M4.7).
           - { os: windows-2022, qt: '6.8.3' }
           - { os: macos-14, qt: '6.8.3' }
+          # The Qt 5.15 configuration (docs/PLAN.md M11, D53). Qt 5.15 headers do
+          # not compile with MSVC 2026; MSVC 2022 of this runner works.
+          - { os: ubuntu-22.04, qt: '5.15.2' }
+          - { os: windows-2022, qt: '5.15.2' }
     steps:
       - uses: actions/checkout@v4
 

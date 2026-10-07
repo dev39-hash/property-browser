@@ -16,6 +16,20 @@ using namespace qpb;
 
 namespace {
 
+// TypeHandler::storageType: a QMetaType with Qt 6, a type id with Qt 5.
+template <class T> auto storageTypeFor()
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    return QMetaType::fromType<T>();
+#else
+    return qMetaTypeId<T>();
+#endif
+}
+
+} // namespace
+
+namespace {
+
 QString display(const Property& property)
 {
     const TypeHandler* handler = TypeRegistry::global().handler(property.typeId());
@@ -80,7 +94,7 @@ void tst_TypeRegistry::boolType()
     Property& b = root->addBool(QStringLiteral("b"), false);
     QVERIFY(b.setValue(1));
     QCOMPARE(b.value(), QVariant(true));
-    QCOMPARE(b.value().metaType(), QMetaType::fromType<bool>());
+    QCOMPARE(b.value().userType(), qMetaTypeId<bool>());
 }
 
 void tst_TypeRegistry::intClampsAndDisplays()
@@ -108,7 +122,7 @@ void tst_TypeRegistry::int64ClampsDisplaysAndConverts()
     QVERIFY(TypeRegistry::global().contains(Types::Int64));
     QCOMPARE(TypeRegistry::global().types().indexOf(TypeId(Types::Int64)), 7); // after 1.0's
     QCOMPARE(
-        TypeRegistry::global().handler(Types::Int64)->storageType, QMetaType::fromType<qint64>());
+        TypeRegistry::global().handler(Types::Int64)->storageType, storageTypeFor<qint64>());
 
     auto root = PropertyGroup::create(QStringLiteral("r"));
     const qint64 big = qint64(1) << 40;
@@ -231,7 +245,7 @@ void tst_TypeRegistry::enumByIndex()
     QCOMPARE(display(e), QStringLiteral("Orthographic"));
     QVERIFY(e.setValue(QStringLiteral("0"))); // normalized onto the int option
     QCOMPARE(e.value(), QVariant(0));
-    QCOMPARE(e.value().metaType(), QMetaType::fromType<int>());
+    QCOMPARE(e.value().userType(), qMetaTypeId<int>());
     QVERIFY(!e.setValue(2));
     QCOMPARE(e.value(), QVariant(0));
 }
@@ -307,7 +321,7 @@ void tst_TypeRegistry::registerCustomType()
     };
     QVERIFY(TypeRegistry::global().registerType<QPoint>(id, handler));
     QVERIFY(TypeRegistry::global().contains(id));
-    QCOMPARE(TypeRegistry::global().handler(id)->storageType, QMetaType::fromType<QPoint>());
+    QCOMPARE(TypeRegistry::global().handler(id)->storageType, storageTypeFor<QPoint>());
     QCOMPARE(TypeRegistry::global().types().last(), id);
     QVERIFY(!TypeRegistry::global().registerType(id, handler)); // already registered
 

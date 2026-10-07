@@ -197,7 +197,7 @@ void tst_Property::initialValueIsConverted()
 {
     auto root = PropertyGroup::create(QStringLiteral("root"));
     Property& n = root->add(Types::Int, QStringLiteral("n"), QStringLiteral("5"));
-    QCOMPARE(n.value().metaType(), QMetaType::fromType<int>());
+    QCOMPARE(n.value().userType(), qMetaTypeId<int>());
     QCOMPARE(n.value(), QVariant(5));
 
     // Unconvertible or unregistered: stored as given.

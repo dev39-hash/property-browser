@@ -18,7 +18,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Widgets)
+# Qt 6, or Qt 5.15 when there is no Qt 6 (the minimum versions are checked by qpb).
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Widgets)
 
 # Both directories are outside this one, so each needs a binary directory.
 add_subdirectory(../../qpb qpb)

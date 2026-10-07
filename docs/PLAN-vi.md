@@ -473,7 +473,21 @@ các hằng `Attr` / `Types` phải khác. Các phương án (quyết định **
 | M11.7 | (b) Test, example, RC trial với Qt 5.15                                                         | 7 | Tất cả đạt với Qt 5.15 và Qt 6 |
 | M11.8 | (b) Phát hành 1.7.0                                                                              | 1 | Có zip phát hành |
 
-**Trạng thái:** M11.1 xong; M11.2 xong với D53 = (b). Tiếp theo: M11.3.
+**Trạng thái:** M11.1-M11.7 xong. Qt 5.15.0 với MSVC 2019 (14.29): thư viện, test và example build không cảnh báo
+và `ctest` đạt 34/34; RC trial đạt mà không phải sửa gì; dự án qmake cho Qt Creator build được và cả tám example khởi
+động. Qt 6.11 với MSVC 2026: vẫn 34/34, snapshot không đổi. Những việc đã làm:
+- CMake tìm Qt 6 hoặc Qt 5 (component, cây phát triển, test, dự án consumer, trial, dự án Qt Creator);
+  `QT_DISABLE_DEPRECATED_BEFORE=0x050F00` với Qt 5;
+- header public: nhánh Qt 5 cho các hằng `Types` / `Attr` (`QLatin1String`), `TypeHandler::storageType` (`int`) và một
+  include; `tools/api_snapshot.py --qt-major`, snapshot `api-qt5-1.7.txt`, file tương thích `qt5_v1_7.cpp` (v1_0 chỉ
+  build với Qt 6 vì dùng giá trị `QMetaType`);
+- mã nguồn: `src/core/compat_p.h` và `src/widgets/compat_p.h` (meta type, số nguyên JSON, kiểm tra tràn số, vị trí chuột,
+  hàng của form) và một khác biệt thật: `PropertyFilterProxyModel` bỏ qua bộ lọc `QRegExp` mà `setFilterFixedString()`
+  của Qt 5 đặt, nên không lọc gì;
+- test và example: lời gọi dùng được cho cả hai bản (`userType()`, `qOverload<int>`, `QRegularExpressionMatchIterator`);
+  test widget trên Windows được đặt `QT_QPA_FONTDIR`, vì nền tảng offscreen của Qt 5 không vẽ chữ khi thiếu font;
+- CI: job Qt 5.15.2 trên Ubuntu 22.04 và Windows 2022 (chạy khi bật lại CI); SPEC mục 9.6, D53; `qpb/README.md` mục
+  "Qt 5". Tiếp theo: M11.8 (phát hành 1.7.0).
 
 ---
 
