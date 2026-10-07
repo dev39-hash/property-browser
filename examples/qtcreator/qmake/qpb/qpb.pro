@@ -22,8 +22,10 @@ INCLUDEPATH += $$QPB_ROOT/src
 DEFINES += \
     QT_NO_CAST_FROM_ASCII \
     QT_NO_CAST_TO_ASCII \
-    QT_NO_URL_CAST_FROM_STRING \
-    QT_DISABLE_DEPRECATED_UP_TO=0x060500
+    QT_NO_URL_CAST_FROM_STRING
+# API deprecated before the minimum Qt version must not be used.
+equals(QT_MAJOR_VERSION, 5): DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x050F00
+else: DEFINES += QT_DISABLE_DEPRECATED_UP_TO=0x060500
 
 # include/qpb/qpbversion.h from qpb/VERSION, as configure_file() does in CMake.
 # Written only when it changes, so running qmake again rebuilds nothing.

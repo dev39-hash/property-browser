@@ -484,7 +484,21 @@ maintainer on 2026-10-07):
 | M11.7 | (b) Tests, examples, RC trial with Qt 5.15                                                     | 7 | All pass with Qt 5.15 and Qt 6 |
 | M11.8 | (b) Release 1.7.0                                                                              | 1 | Release zip |
 
-**Status:** M11.1 done; M11.2 done with D53 = (b). Next: M11.3.
+**Status:** M11.1-M11.7 done. Qt 5.15.0 with MSVC 2019 (14.29): the libraries, tests and examples build without
+warnings and `ctest` passes 34/34; the RC trial passes unchanged; the qmake project for Qt Creator builds and all eight
+examples start. Qt 6.11 with MSVC 2026: still 34/34, snapshots unchanged. What it took:
+- CMake finds Qt 6 or Qt 5 (component, development tree, tests, consumer project, trial, Qt Creator projects);
+  `QT_DISABLE_DEPRECATED_BEFORE=0x050F00` with Qt 5;
+- public headers: Qt 5 branches for the `Types` / `Attr` constants (`QLatin1String`), `TypeHandler::storageType`
+  (`int`) and one include; `tools/api_snapshot.py --qt-major`, snapshot `api-qt5-1.7.txt`, compatibility file
+  `qt5_v1_7.cpp` (v1_0 is built with Qt 6 only, it uses `QMetaType` values);
+- sources: `src/core/compat_p.h` and `src/widgets/compat_p.h` (meta types, JSON integers, overflow checks, mouse
+  positions, form rows) and one real difference: `PropertyFilterProxyModel` ignored the `QRegExp` filter that Qt 5's
+  `setFilterFixedString()` sets, so nothing was filtered;
+- tests and examples: version-neutral calls (`userType()`, `qOverload<int>`, `QRegularExpressionMatchIterator`);
+  widget tests on Windows get `QT_QPA_FONTDIR`, because Qt 5's offscreen platform draws no text without fonts;
+- CI: Qt 5.15.2 jobs on Ubuntu 22.04 and Windows 2022 (run when CI is enabled again); SPEC section 9.6, D53;
+  `qpb/README.md` "Qt 5". Next: M11.8 (release 1.7.0).
 
 ---
 
