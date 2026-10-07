@@ -498,7 +498,7 @@ examples start. Qt 6.11 with MSVC 2026: still 34/34, snapshots unchanged. What i
 - tests and examples: version-neutral calls (`userType()`, `qOverload<int>`, `QRegularExpressionMatchIterator`);
   widget tests on Windows get `QT_QPA_FONTDIR`, because Qt 5's offscreen platform draws no text without fonts;
 - CI: Qt 5.15.2 jobs on Ubuntu 22.04 and Windows 2022 (run when CI is enabled again); SPEC section 9.6, D53;
-  `qpb/README.md` "Qt 5". Next: M11.8 (release 1.7.0).
+  `qpb/README.md` "Qt 5". M11.8: released as `1.7.0`.
 
 ---
 
