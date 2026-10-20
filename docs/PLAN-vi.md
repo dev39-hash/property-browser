@@ -569,6 +569,28 @@ dẫn bắt buộc tồn tại hiện thông báo đã dịch. File `.qm` của 
 Tổng ≈ 16.5 h. Code viết cho 1.0–1.7 build và chạy như cũ: khi chưa nạp bản dịch của qpb, mọi chuỗi vẫn là tiếng Anh
 như 1.7.
 
+**Trạng thái:** M12.1–M12.7 xong với D54–D57 theo đề xuất, trừ việc người bản ngữ duyệt cách diễn đạt tiếng Nhật và
+tiếng Việt (M12.3), phần này do maintainer làm. lupdate tìm thấy đúng 15 chuỗi của bảng trên, trong đúng các context dự
+kiến. Những việc đã làm:
+- `<qpb/Translations.h>` với `loadTranslation()`; `qpb/translations/qpb_en.ts` (dạng số nhiều), `qpb_ja.ts`, `qpb_vi.ts`
+  và các file `.qm`, nhúng qua `qpb_translations.qrc` (AUTORCC chỉ trên `qpb_core`; dự án qmake cũng liệt kê nó) và đăng
+  ký bằng `Q_INIT_RESOURCE` cho bản build static; `tools/update_translations.py` chạy lupdate và lrelease cho qpb và
+  example, `--check` không thay đổi gì;
+- bảy thông báo đi qua `QCoreApplication::translate()` trong context `qpb::TypeRegistry` và `qpb::Property`; "At most %n
+  characters" cho cùng chuỗi tiếng Anh như 1.7 khi chưa nạp bản dịch;
+- đổi ngôn ngữ khi đang chạy: một event filter toàn ứng dụng (`src/core/LanguageChange_p.h`) dùng chung cho mọi model,
+  phát `headerDataChanged()`; editor đường dẫn đặt lại tool tip khi có `LanguageChange`;
+- test: `tst_translations` (16 hàm: chuỗi 1.7 khi chưa có bản dịch, fallback locale, mọi thông báo bằng tiếng Nhật và
+  tiếng Việt, số nhiều tiếng Anh, tiêu đề cột theo việc cài / gỡ translator, mỗi `.qm` so với `.ts` của nó),
+  `tst_widgettranslations` (menu, tool tip, editor được form view giữ mở), `translations_up_to_date` (khi tìm thấy
+  lupdate), dự án consumer nạp một bản dịch trong bản build static, shared và nâng cấp; `tests/api_compat/v1_8.cpp`,
+  `api-1.8.txt` và `api-qt5-1.8.txt` (thêm hai khai báo, không bỏ gì);
+- `examples/translations` (+ dự án Qt Creator), đã xem ảnh chụp ở cả ba ngôn ngữ và với bản build qmake trên Qt 5;
+  `qpb/README.md` mục "Translations"; SPEC §4.10, §4.7, §8, §9.2, D54–D57;
+- `ctest` đạt 41/41 với Qt 6.11 (MSVC 2026) và với Qt 5.15 (MSVC 2019), build sạch; dự án qmake build được cả chín
+  example với cả hai. RC vòng 9: thiết lập ngôn ngữ của trial đổi qpb ngay lập tức; F13 (chuỗi lấy từ class info giữ
+  nguyên như đã viết) để lại cho phiên bản sau và đã ghi vào tài liệu.
+
 ---
 
 ## 3. Phụ thuộc giữa các task

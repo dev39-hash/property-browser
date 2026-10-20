@@ -134,3 +134,23 @@ Found while writing `examples/custom_theme` (not in the trial; Qt behaviour, doc
 |---|---------|---------|
 | F11 | Colours set with `qproperty-` stay when the style sheet is removed (switching to "no style sheet" kept the light theme's group colours). | Documented; the example sets the four colours back to invalid values when it removes its sheet. |
 | F12 | A `::branch` rule of the tree view (to colour the column left of group rows) removes the native expand arrows. | Documented: such a rule needs `image:` for `:closed` / `:open`; the example leaves the branch column to the style. |
+
+## Round 9 — 1.8 (M12) before release
+
+The round-8 application, unchanged, was first built against the component folder of the M12 branch: all its tests pass
+with Qt 6.11.1 (MSVC 19.51) and Qt 5.15.0 (MSVC 19.29). Then the settings page made its existing "language" setting
+(English, Vietnamese, now also Japanese) switch qpb's translation: `qpb::loadTranslation()` into a translator the page
+owns, installed at start and again from an `onValueChanged()` callback, so a change applies at once. A new test sets the
+language to Japanese and Vietnamese: the column titles, the "Reset group" context menu, the message of a directory that
+must exist and the tool tip of a path editor kept open by the form view follow, and "Reset all" brings English back.
+All 27 trial tests pass with both Qt majors. The trial's own texts have no translation of their own and stay English.
+
+| # | Finding | Outcome |
+|---|---------|---------|
+| F13 | Texts from `Q_CLASSINFO` metadata of `QObjectPropertySource` objects (`displayName=Input gain`, `toolTip=...`) and enum labels taken from `Q_ENUM` keys stay as written: `lupdate` does not see them, and they are not passed through a translator. | Kept for a later version (an additive way to translate class info texts); for 1.8 the application sets them again with `setDisplayName()` / `setToolTip()` after `addObject()` and on `LanguageChange`, as for any text it gives qpb (README, "Translations"). |
+
+Found while writing the round-9 test (not qpb; Qt and MSVC behaviour):
+
+| # | Finding | Outcome |
+|---|---------|---------|
+| F14 | With Qt 5 and MSVC, a `QStringLiteral` with non-ASCII text, even written as `\u` escapes, came out as `?`; Qt 6 compiles its users with `/utf-8`, Qt 5 does not. | Not qpb: the test builds such strings with `QString::fromUtf16(u"...")`. qpb's own sources stay ASCII (rule R6), and its tests and examples compile with `/utf-8`. |

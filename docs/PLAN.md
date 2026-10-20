@@ -580,6 +580,28 @@ Qt's (where it exists) and the example's own, whose display names are set again 
 Total ≈ 16.5 h. Code written for 1.0–1.7 builds and behaves the same: without a qpb translation loaded every text is
 the English one of 1.7.
 
+**Status:** M12.1–M12.7 done with D54–D57 as proposed, except the review of the Japanese and Vietnamese wording by a
+native speaker (M12.3), which is the maintainer's. lupdate found exactly the 15 texts of the table above, in the
+expected contexts. What it took:
+- `<qpb/Translations.h>` with `loadTranslation()`; `qpb/translations/qpb_en.ts` (the plural form), `qpb_ja.ts`,
+  `qpb_vi.ts` and their `.qm` files, embedded through `qpb_translations.qrc` (AUTORCC on `qpb_core` only; the qmake
+  project lists it too) and registered with `Q_INIT_RESOURCE` for static builds;
+  `tools/update_translations.py` runs lupdate and lrelease for qpb and the example, `--check` changes nothing;
+- the seven messages go through `QCoreApplication::translate()` in the contexts `qpb::TypeRegistry` and
+  `qpb::Property`; "At most %n characters" gives the same English text as 1.7 without a translation;
+- run-time language changes: one application-wide event filter (`src/core/LanguageChange_p.h`) for all models emits
+  `headerDataChanged()`; path editors set their tool tip again on `LanguageChange`;
+- tests: `tst_translations` (16 functions: 1.7 texts without a translation, locale fallback, every message in Japanese
+  and Vietnamese, English plurals, column titles following install / removal, each `.qm` against its `.ts`),
+  `tst_widgettranslations` (menus, tool tips, editors kept open by the form view), `translations_up_to_date` (when
+  lupdate is found), the consumer project loads a translation in static, shared and upgraded builds;
+  `tests/api_compat/v1_8.cpp`, `api-1.8.txt` and `api-qt5-1.8.txt` (two declarations added, nothing removed);
+- `examples/translations` (+ Qt Creator projects), screenshots checked in the three languages and with the qmake build
+  on Qt 5; `qpb/README.md` "Translations"; SPEC §4.10, §4.7, §8, §9.2, D54–D57;
+- `ctest` passes 41/41 with Qt 6.11 (MSVC 2026) and with Qt 5.15 (MSVC 2019), clean builds; the qmake project builds
+  all nine examples with both. RC round 9: the trial's language setting switches qpb at once; F13 (texts from class
+  info stay as written) is kept for a later version and documented.
+
 ---
 
 ## 3. Task dependencies

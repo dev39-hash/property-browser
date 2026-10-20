@@ -3,6 +3,7 @@
 #include <qpb/qpb.h>
 
 #include <QJsonObject>
+#include <QTranslator>
 #include <QWidget>
 
 class QSettings;
@@ -40,7 +41,11 @@ public:
     bool importJson(const QJsonObject& json);
 
 private:
+    // Round 9 (1.8): the "language" setting switches qpb's translation at once.
+    void applyLanguage(const QString& language);
+
     QSettings& m_settings;
+    QTranslator m_qpbTranslator;
     qpb::PropertyModel m_model;
     qpb::PropertyTreeView* m_view;
     qpb::PropertyFormView* m_form;

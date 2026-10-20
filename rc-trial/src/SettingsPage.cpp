@@ -19,8 +19,8 @@ SettingsPage::SettingsPage(QSettings& settings, QWidget* parent)
 {
     auto root = qpb::PropertyGroup::create("Settings");
     auto& general = root->addGroup("General");
-    general.addEnum(
-        "language", QList<qpb::EnumOption> {{"English", "en"}, {"Vietnamese", "vi"}}, "en");
+    general.addEnum("language",
+        QList<qpb::EnumOption> {{"English", "en"}, {"Vietnamese", "vi"}, {"Japanese", "ja"}}, "en");
     general.addBool("autosave", true);
     general.addInt("autosaveMinutes", 5)
         .range(1, 60)
@@ -48,6 +48,9 @@ SettingsPage::SettingsPage(QSettings& settings, QWidget* parent)
     m_model.beginBatch();
     qpb::serialization::load(*m_model.root(), m_settings);
     m_model.endBatch();
+    applyLanguage(m_model.find("General/language")->value().toString());
+    m_model.onValueChanged("General/language", this,
+        [this](const QVariant& language) { applyLanguage(language.toString()); });
 
     m_view->setModel(&m_model);
     m_view->setTabStopsOnCheckBoxes(true); // round 7 (1.5): F5
@@ -75,6 +78,13 @@ void SettingsPage::save()
     qpb::serialization::save(*m_model.root(), m_settings);
     m_settings.sync();
     m_model.find("About/lastSaved")->setValue(QDateTime::currentDateTime().toString(Qt::ISODate));
+}
+
+void SettingsPage::applyLanguage(const QString& language)
+{
+    QCoreApplication::removeTranslator(&m_qpbTranslator);
+    if (qpb::loadTranslation(m_qpbTranslator, QLocale(language)))
+        QCoreApplication::installTranslator(&m_qpbTranslator);
 }
 
 void SettingsPage::resetAll()
