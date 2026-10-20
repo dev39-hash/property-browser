@@ -554,12 +554,12 @@ README and the example show how. A way to give qpb untranslated texts it transla
 Qt's (where it exists) and the example's own, whose display names are set again on `LanguageChange`; a property with a
 `maxLength` and a path that must exist show translated messages. The example's `.qm` files are committed like qpb's.
 
-**Open decisions:**
+**Decisions** (D54–D57 as proposed, accepted by the maintainer on 2026-10-20):
 - **D54** the API: `bool loadTranslation(QTranslator&, const QLocale&)`, the application owns and installs the
-  translator (proposed: Qt's pattern; the application controls the order and removal, qpb keeps no global state), or
+  translator (chosen: Qt's pattern; the application controls the order and removal, qpb keeps no global state), not
   `installTranslation(const QLocale&)` with a translator inside qpb.
 - **D55** delivery: `.qm` files built by the maintainer (`tools/update_translations`), committed and embedded
-  (proposed), or built at configure time with Qt LinguistTools, a new build dependency that a consumer may not have;
+  (chosen), not built at configure time with Qt LinguistTools, a new build dependency that a consumer may not have;
   an upgrade that stops building breaks G6 and §9.2.
 - **D56** contexts and source texts are stable within 1.x; the existing contexts are kept, new texts use the
   context of the class they belong to.
