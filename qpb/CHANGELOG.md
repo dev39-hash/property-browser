@@ -6,6 +6,25 @@ All notable changes to qpb are documented here. Each release has the sections
 From 1.0.0 on, releases within a major version never require changes to consuming code or CMake.
 Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC trial shows a problem.
 
+## Unreleased (1.8.0)
+
+Eighth feature release of 1.x: additions only; code written for 1.0-1.7 builds and behaves the same. Without a qpb
+translation installed, every text is the English one of 1.7.
+
+### Added
+- Translations of qpb's own texts for English, Japanese and Vietnamese (`README.md`, "Translations"):
+  `qpb::loadTranslation(translator, locale)` in `<qpb/Translations.h>` loads them from `qpb::core`, where they are
+  embedded; nothing to deploy, no Qt Linguist tools needed to build.
+- The messages of the built-in validation and of failed conversions are translatable (context `qpb::TypeRegistry`
+  and `qpb::Property`); "At most %n characters are allowed" has plural forms.
+- Language changes at run time: `PropertyModel` emits `headerDataChanged()` for its column titles, and the file and
+  directory editors kept open by `PropertyFormView` update their tool tips.
+- The contexts and source texts of qpb's translatable texts are stable within 1.x, so applications can add languages
+  or change a wording with a translator of their own.
+
+### Upgrade notes
+- Nothing to do. To show qpb in Japanese or Vietnamese, install the translator `qpb::loadTranslation()` fills.
+
 ## 1.7.0 - 2026-10-07
 
 Seventh feature release of 1.x: additions only; code written for 1.0-1.6 builds and behaves the same with Qt 6.

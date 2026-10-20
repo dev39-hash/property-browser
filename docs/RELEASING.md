@@ -18,7 +18,11 @@ everything locally.
    - since 1.7, the same for the Qt 5 configuration (docs/SPEC.md section 9.6): `--qt-major 5 --write
      tests/api_compat/api-qt5-<major>.<minor>.txt`, listed with the Qt 5 snapshots, and a `qt5_v<major>_<minor>.cpp`
      when the Qt 5 API gains something of its own.
-4. Commit through a pull request and wait for green CI on all platforms, with Qt 6 and with Qt 5.15 (MSVC 2019 / 2022,
+4. Since 1.8, when translatable texts changed: `python3 tools/update_translations.py --qt-bin <Qt>/bin`, translate
+   the unfinished texts in `qpb/translations/*.ts`, run it again and commit the `.ts` and `.qm` files (docs/SPEC.md
+   section 4.10). Existing contexts and source texts are never changed within 1.x. The test `translations_up_to_date`
+   (when `lupdate` is found) and `tst_translations` check this.
+5. Commit through a pull request and wait for green CI on all platforms, with Qt 6 and with Qt 5.15 (MSVC 2019 / 2022,
    GCC or Clang; Qt 5.15 headers do not compile with MSVC 2026).
 
 ## 2. Build the artifacts
