@@ -24,7 +24,7 @@
 ### 1.2 Non-goals (not in 1.x)
 
 Qt Quick/QML views · Python bindings · multi-object editing · built-in undo/redo ·
-compound types in core (color, font, vector, array) · Qt 5 · DSL/code generator ·
+compound types in core (color, font, vector, array) · Qt 5 before 5.15 (5.15 since 1.7, §9.6) · DSL/code generator ·
 custom theming system (QSS is enough) · declarative conditional visibility expressions · qmake support.
 
 Rationale: brainstorm section 11. The design **must not preclude** multi-object editing or QML later
@@ -377,6 +377,9 @@ Default validation of the basic types:
 | FilePath   | `mustExist` + `FileMode::Open` → `QFileInfo::isFile()`; empty string is always valid |
 | DirPath    | `mustExist` → `QFileInfo::isDir()`; empty string is always valid          |
 
+The messages of the default validation, and of a value that cannot be converted to the storage type, are translated
+(1.8, §4.10). Their wording is not API: code checks `ok`, not `message`.
+
 ### 4.8 Serialization (1.2)
 
 Free functions in the namespace **`qpb::serialization`** (header `qpb/Serialization.h`, `qpb::core`):
@@ -438,6 +441,46 @@ public:
   behaviour of 1.2 is kept. [D44]
 - **Conditions (1.4):** metadata keys `enabledWhen=<name>` and `visibleWhen=<name>`: the property is enabled / visible
   while the Q_PROPERTY `<name>` of the same object is "true" (§4.2).
+
+### 4.10 Translations (1.8)
+
+```cpp
+// <qpb/Translations.h>, qpb::core
+namespace qpb {
+bool loadTranslation(QTranslator& translator, const QLocale& locale = QLocale());
+}
+
+QTranslator qpbTranslator;                          // owned by the application
+if (qpb::loadTranslation(qpbTranslator, QLocale()))
+    app.installTranslator(&qpbTranslator);
+```
+
+- `loadTranslation()` loads qpb's translation for `locale` into `translator`, trying the locale's UI languages in order
+  (`QTranslator::load(locale, "qpb", "_", ":/qpb/translations")`, so `ja-JP` finds `qpb_ja`). It returns `false` when
+  qpb has no translation for them; qpb's texts then stay English, the source language. The application installs the
+  translator, and may remove it or load another locale into it; qpb keeps no translator of its own. [D54]
+- 1.8 ships English (plural forms only), Japanese and Vietnamese. The maintainers generate the `.qm` files from
+  `qpb/translations/qpb_<lang>.ts` and commit them; they are embedded in `qpb::core` as resources, and
+  `loadTranslation()` registers them in static builds too. Building qpb needs no Qt Linguist tools. [D55]
+- The translatable texts are stable within 1.x: an application can add a language, or change a wording, with a
+  translator of its own installed after qpb's (the translator installed last wins). Texts may be added; existing
+  contexts and source texts are not changed. [D56]
+
+| Context | Source texts |
+|---|---|
+| `qpb::PropertyModel` | `Property`, `Value` (column titles) |
+| `qpb::PropertyTreeView`, `qpb::PropertyFormView` | `Reset to default`, `Reset group` (context menu) |
+| `qpb::detail::PathEdit` | `Choose a file`, `Choose a directory` (browse button tool tip, dialog title) |
+| `qpb::TypeRegistry` | `The value is not a number`, `At most %n characters are allowed` (plural), `The value does not match the pattern %1`, `"%1" is not one of the options`, `The file %1 does not exist`, `The directory %1 does not exist` |
+| `qpb::Property` | `Cannot convert the value to %1` |
+
+- Language changes at run time (`QEvent::LanguageChange`, sent when a translator is installed or removed):
+  `PropertyModel` emits `headerDataChanged()` for its column titles, path editors set their tool tip again, and context
+  menus are built when they open. qpb does not update texts given by the application (display names, tool tips, enum
+  labels, ...) or messages already shown; the application sets its own texts again on `LanguageChange`. [D57]
+- Texts of Qt's own widgets inside qpb's editors (the context menus of line edits and spin boxes, a non-native file
+  dialog) come from Qt's translations (`qtbase_<lang>.qm`), which the application loads. `qWarning()` messages are for
+  developers and stay English.
 
 ---
 
@@ -657,6 +700,7 @@ property-browser/                  (development repo)
 │   ├── CHANGELOG.md               # includes upgrade notes for every release
 │   ├── README.md                  # user documentation shipped with the folder: features, API, guide, versions
 │   ├── cmake/                     # internal CMake helpers and templates
+│   ├── translations/              # qpb_<lang>.ts and the embedded .qm files (1.8, §4.10)
 │   ├── include/qpb/               # public headers (only these) — §9
 │   │   ├── qpb.h                  # umbrella header: everything (needs qpb::widgets)
 │   │   ├── qpbcore.h              # umbrella header for qpb::core only
@@ -792,6 +836,7 @@ After 1.0, new features arrive as **additions** (minor releases); existing API i
 | 1.5     | `PropertyModel::resetAllToDefault()` (§4.6); `PropertyTreeView::setTabStopsOnCheckBoxes()` (§5.5)      | Additive      |
 | 1.6     | Style sheet hooks (§5.8): tree view colour properties, form view selectors `qpbPart` / `qpbModified`     | Additive      |
 | 1.7     | Qt 5.15 as a second configuration (§9.6); Qt 6 builds unchanged                                       | Additive      |
+| 1.8     | Translations (§4.10): `loadTranslation()`, English, Japanese and Vietnamese; default messages translatable | Additive  |
 | 2.0     | Only if breaking the API is truly necessary; removes everything deprecated                               | Breaking      |
 
 **The 1.0 design must leave room for 1.1/1.2** without API changes: the form view and filter are new classes on top of the
@@ -824,6 +869,7 @@ D-pointers are still used (§9.3) to keep headers stable and internals free to c
 | Add attributes, `TypeId`s, new signals                                   | Change the signature of an existing signal/slot                   |
 | Add CMake options (defaults keep the old behaviour)                      | Rename targets, options, include paths; raise the C++/Qt/CMake minimum |
 | Deprecate (with a replacement)                                           | Remove deprecated items                                           |
+| Add translatable texts and translations (§4.10)                          | Change the context or source text of a translatable text          |
 
 ### 9.3 Public header design rules
 
@@ -982,3 +1028,7 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D51| The form view and path editors mark their widgets with the dynamic properties `qpbPart` and `qpbModified`, which are API; internal class names are not | Stable selectors in the style applications already use (`Widget[prop="value"]`), independent of internal classes that may change |
 | D52| Bold titles and labels of the form view are set again after a style sheet resets their font | Probe for M10: any sheet rule for `QLabel` dropped the bold font of modified labels, so the "modified" cue disappeared under application themes |
 | D53| Qt 5.15 becomes a second configuration (planned for 1.7): CMake finds Qt 6 or Qt 5, the public headers get `QT_VERSION` variants where Qt 5 has no equivalent (`Attr` / `Types` constants, `TypeHandler::storageType`), and the compatibility promise of §9 holds per Qt major, with an API snapshot for each | Requested by the maintainer. The M11 probe showed that the 1.x API uses Qt 6 types, so one API for both majors is impossible; a separate branch would double every later change. Qt 6 builds keep the same API and behaviour. Qt 5.15.0 builds with MSVC 2019 / 2022, not MSVC 2026 |
+| D54| `qpb::loadTranslation(QTranslator&, const QLocale&)`: the application owns and installs the translator | Qt's own pattern for library translations; the application controls the order of translators and their removal, and qpb keeps no global state |
+| D55| The `.qm` files are generated by the maintainers, committed and embedded in `qpb::core` | Building them at configure time needs Qt LinguistTools, which a consumer may not have installed; an upgrade that stops building breaks G6 and §9.2. Embedded, there is nothing to deploy |
+| D56| Contexts and source texts of qpb's translatable texts are stable within 1.x; the contexts of 1.0–1.7 are kept | Applications translate qpb into further languages, or override a wording, through these keys; changing one silently drops their translation |
+| D57| On `LanguageChange` qpb updates only what it shows by itself (column titles, path editor tool tips) | Texts given by the application are plain `QString`s, already translated; only the application can translate them again, as in any Qt UI |
