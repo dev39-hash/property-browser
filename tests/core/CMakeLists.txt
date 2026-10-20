@@ -40,3 +40,11 @@ qpb_add_test(tst_conditions
     SOURCES tst_conditions.cpp
     LIBRARIES qpb::core
 )
+
+qpb_add_test(tst_translations
+    SOURCES tst_translations.cpp
+    LIBRARIES qpb::core
+)
+target_compile_definitions(tst_translations PRIVATE
+    QPB_TRANSLATIONS_DIR="${PROJECT_SOURCE_DIR}/qpb/translations"
+)

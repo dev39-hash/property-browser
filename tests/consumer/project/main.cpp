@@ -1,5 +1,7 @@
 #include <qpb/qpb.h>
 
+#include <QTranslator>
+
 #include <cstdio>
 #include <cstring>
 
@@ -40,6 +42,11 @@ int main()
         || model.find(QStringLiteral("fov"))->value().toInt() != 170) {
         return fail("the value pipeline does not work");
     }
+
+    // Since 1.8: the embedded translations survive static and shared linking.
+    QTranslator translator;
+    if (!qpb::loadTranslation(translator, QLocale(QLocale::Japanese)) || translator.isEmpty())
+        return fail("qpb's translations are missing");
 
     std::printf("qpb %s (C++%d consumer)\n", qpb::version(), CONSUMER_CXX_STANDARD);
     return 0;

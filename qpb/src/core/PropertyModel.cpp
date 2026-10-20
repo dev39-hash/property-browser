@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "LanguageChange_p.h"
 #include "Property_p.h"
 
 namespace qpb {
@@ -266,7 +267,14 @@ public:
 PropertyModel::PropertyModel(QObject* parent)
     : QAbstractItemModel(parent)
     , d(std::make_unique<detail::PropertyModelPrivate>(this))
-{ }
+{
+    // The column titles are translated: views read them again when the
+    // application's language changes (README.md, "Translations"; D57).
+    if (detail::LanguageChangeNotifier* notifier = detail::LanguageChangeNotifier::instance()) {
+        connect(notifier, &detail::LanguageChangeNotifier::languageChanged, this,
+            [this] { emit headerDataChanged(Qt::Horizontal, 0, columnCount() - 1); });
+    }
+}
 
 PropertyModel::PropertyModel(std::unique_ptr<PropertyGroup> root, QObject* parent)
     : PropertyModel(parent)

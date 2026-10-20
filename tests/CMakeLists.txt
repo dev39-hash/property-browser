@@ -43,6 +43,18 @@ add_test(NAME qtcreator_examples_listed
     COMMAND "${CMAKE_COMMAND}" "-DEXAMPLES_DIR=${PROJECT_SOURCE_DIR}/examples"
         -P "${PROJECT_SOURCE_DIR}/tools/check_qtcreator_examples.cmake"
 )
+# qpb/translations/*.ts are complete and up to date with the sources (docs/PLAN.md
+# M12.5). Needs Qt Linguist's lupdate, which building qpb itself never does (D55).
+find_package(Qt${QT_VERSION_MAJOR} QUIET COMPONENTS LinguistTools)
+find_package(Python3 COMPONENTS Interpreter)
+if(TARGET Qt${QT_VERSION_MAJOR}::lupdate AND Python3_Interpreter_FOUND)
+    add_test(NAME translations_up_to_date
+        COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/update_translations.py"
+            --qt-bin "$<TARGET_FILE_DIR:Qt${QT_VERSION_MAJOR}::lupdate>" --check
+    )
+else()
+    message(STATUS "lupdate or Python 3 not found: the translations_up_to_date test is not available")
+endif()
 add_test(NAME size_quickstart_s1
     COMMAND "${CMAKE_COMMAND}" -DLIMIT=30
         "-DFILES=${PROJECT_SOURCE_DIR}/examples/quickstart/main.cpp"
