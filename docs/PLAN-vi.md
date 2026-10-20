@@ -543,12 +543,12 @@ dịch để qpb tự dịch không thuộc 1.8.
 và của chính example, với tên hiển thị được đặt lại khi có `LanguageChange`; một thuộc tính có `maxLength` và một đường
 dẫn bắt buộc tồn tại hiện thông báo đã dịch. File `.qm` của example được commit giống của qpb.
 
-**Quyết định còn mở:**
-- **D54** API: `bool loadTranslation(QTranslator&, const QLocale&)`, ứng dụng sở hữu và cài translator (đề xuất: theo
-  mẫu của Qt; ứng dụng quyết định thứ tự và gỡ bỏ, qpb không giữ trạng thái global), hay `installTranslation(const
-  QLocale&)` với translator nằm trong qpb.
-- **D55** cách phân phối: file `.qm` do maintainer build (`tools/update_translations`), commit và nhúng vào (đề xuất),
-  hay build lúc configure bằng Qt LinguistTools, một phụ thuộc build mới mà consumer có thể không có; bản nâng cấp mà
+**Quyết định** (D54–D57 theo đề xuất, maintainer chấp thuận ngày 2026-10-20):
+- **D54** API: `bool loadTranslation(QTranslator&, const QLocale&)`, ứng dụng sở hữu và cài translator (đã chọn: theo
+  mẫu của Qt; ứng dụng quyết định thứ tự và gỡ bỏ, qpb không giữ trạng thái global), không dùng
+  `installTranslation(const QLocale&)` với translator nằm trong qpb.
+- **D55** cách phân phối: file `.qm` do maintainer build (`tools/update_translations`), commit và nhúng vào (đã chọn),
+  không build lúc configure bằng Qt LinguistTools, một phụ thuộc build mới mà consumer có thể không có; bản nâng cấp mà
   không build được nữa là vi phạm G6 và §9.2.
 - **D56** context và chuỗi nguồn ổn định trong 1.x; context hiện có giữ nguyên, chuỗi mới dùng context của class mà nó
   thuộc về.
