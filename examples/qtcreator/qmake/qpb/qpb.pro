@@ -18,6 +18,8 @@ SOURCES += \
     $$files($$QPB_ROOT/src/core/*.cpp) \
     $$files($$QPB_ROOT/src/widgets/*.cpp)
 INCLUDEPATH += $$QPB_ROOT/src
+# qpb's translations (since 1.8), registered by qpb::loadTranslation().
+RESOURCES += $$QPB_ROOT/translations/qpb_translations.qrc
 
 DEFINES += \
     QT_NO_CAST_FROM_ASCII \

@@ -18,3 +18,9 @@ qpb_add_test(tst_propertyformview
     LIBRARIES qpb::widgets
 )
 target_include_directories(tst_propertyformview PRIVATE "${PROJECT_SOURCE_DIR}/qpb/src")
+
+qpb_add_test(tst_widgettranslations
+    SOURCES tst_widgettranslations.cpp
+    LIBRARIES qpb::widgets
+)
+target_include_directories(tst_widgettranslations PRIVATE "${PROJECT_SOURCE_DIR}/qpb/src")
