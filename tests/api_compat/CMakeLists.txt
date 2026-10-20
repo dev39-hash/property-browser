@@ -6,7 +6,7 @@
 # different API where Qt 5 has no equivalent. v1_0 uses those parts in their
 # Qt 6 form, so it is built with Qt 6 only; qt5_v1_7 freezes their Qt 5 form.
 
-set(_qpb_compat_files v1_0 v1_1 v1_2 v1_3 v1_4 v1_5 v1_6)
+set(_qpb_compat_files v1_0 v1_1 v1_2 v1_3 v1_4 v1_5 v1_6 v1_8)
 if(QT_VERSION_MAJOR EQUAL 5)
     list(REMOVE_ITEM _qpb_compat_files v1_0)
     list(APPEND _qpb_compat_files qt5_v1_7)
@@ -34,14 +34,14 @@ endforeach()
 # api-1.x for the Qt 6 API, api-qt5-1.x (since 1.7, --qt-major 5) for the Qt 5 one.
 find_package(Python3 COMPONENTS Interpreter)
 if(Python3_Interpreter_FOUND)
-    foreach(version IN ITEMS 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7)
+    foreach(version IN ITEMS 1.0 1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8)
         add_test(NAME api_snapshot_${version}
             COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/api_snapshot.py"
                 --include "${PROJECT_SOURCE_DIR}/qpb/include"
                 --check "${CMAKE_CURRENT_SOURCE_DIR}/api-${version}.txt"
         )
     endforeach()
-    foreach(version IN ITEMS 1.7)
+    foreach(version IN ITEMS 1.7 1.8)
         add_test(NAME api_snapshot_qt5_${version}
             COMMAND Python3::Interpreter "${PROJECT_SOURCE_DIR}/tools/api_snapshot.py"
                 --include "${PROJECT_SOURCE_DIR}/qpb/include" --qt-major 5

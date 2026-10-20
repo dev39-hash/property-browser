@@ -1,0 +1,9 @@
+<!DOCTYPE RCC>
+<!-- The example's own translations, generated from translations_<lang>.ts by
+     tools/update_translations.py. qpb's are embedded in qpb itself. -->
+<RCC version="1.0">
+    <qresource prefix="/translations">
+        <file>translations_ja.qm</file>
+        <file>translations_vi.qm</file>
+    </qresource>
+</RCC>
