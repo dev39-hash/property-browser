@@ -344,7 +344,9 @@ qpb translation installed, every text is the English one of earlier versions.
 qpb translates what it shows by itself: the column titles, the context menus, the tool tips of the file and directory
 editors, and the messages of the built-in validation. Everything else is text you give qpb (display names, tool tips,
 enum labels, placeholders, messages of your validators): pass it translated, e.g. with `tr()`. Compare
-`ValidationResult::ok`, never the wording of a message.
+`ValidationResult::ok`, never the wording of a message. Texts that `QObjectPropertySource` takes from class info
+(`displayName=`, `toolTip=`) and from `Q_ENUM` keys are used as written; to translate them, set them again with
+`setDisplayName()` / `setToolTip()` / the `options` attribute after `addObject()`.
 
 **Changing the language at run time**: install and remove translators as usual. qpb updates the column titles and the
 editors it keeps open; context menus are built when they open; messages already shown keep their language. Set your

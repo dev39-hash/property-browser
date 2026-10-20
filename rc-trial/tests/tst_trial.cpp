@@ -85,6 +85,23 @@ bool triggerContextAction(qpb::PropertyTreeView* view, const QModelIndex& index)
     return enabled;
 }
 
+// The text of the first action of the view's context menu on index.
+QString contextActionText(qpb::PropertyTreeView* view, const QModelIndex& index)
+{
+    QString text;
+    QTimer::singleShot(0, view, [&text] {
+        auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+        if (!menu)
+            return;
+        text = menu->actions().value(0) ? menu->actions().value(0)->text() : QString();
+        menu->close();
+    });
+    const QPoint pos = view->visualRect(index).center();
+    QContextMenuEvent event(QContextMenuEvent::Mouse, pos, view->viewport()->mapToGlobal(pos));
+    QApplication::sendEvent(view->viewport(), &event);
+    return text;
+}
+
 } // namespace
 
 class tst_Trial : public QObject
@@ -125,6 +142,8 @@ private slots:
     void settingsResetAllButton();
     // Round 8 (1.6.0).
     void settingsUnderApplicationStyleSheet();
+    // Round 9 (1.8.0).
+    void settingsLanguageTranslatesQpb();
     void screenshots();
 
 private:
@@ -697,6 +716,53 @@ void tst_Trial::settingsUnderApplicationStyleSheet()
     m_window->settingsPage()->resetAll();
     QTRY_VERIFY(!language->font().bold());
     QCOMPARE(language->palette().color(QPalette::WindowText), QColor("#e0e4ea"));
+}
+
+// Round 9 (1.8): the language setting installs qpb's translation at once. The
+// column titles, context menus, validation messages and the tool tips of the
+// form's path editors follow it; the application's own texts stay its own.
+void tst_Trial::settingsLanguageTranslatesQpb()
+{
+    SettingsPage* page = m_window->settingsPage();
+    m_window->tabs()->setCurrentWidget(page);
+    qpb::PropertyModel& model = page->model();
+    const auto title = [page] {
+        return page->view()->model()->headerData(0, Qt::Horizontal).toString();
+    };
+    page->setFormLayout(true);
+    QToolButton* browse = nullptr; // public selector of the path editors (1.6)
+    for (QToolButton* button : page->form()->editor("Paths/cacheDir")->findChildren<QToolButton*>()) {
+        if (button->property("qpbPart").toString() == "browse")
+            browse = button;
+    }
+    QVERIFY(browse);
+    QCOMPARE(title(), QString("Property"));
+    QCOMPARE(browse->toolTip(), QString("Choose a directory"));
+
+    QVERIFY(model.setValue("General/language", "ja"));
+    QCOMPARE(title(), QString::fromUtf16(u"\u30d7\u30ed\u30d1\u30c6\u30a3"));
+    page->setFormLayout(false);
+    QCOMPARE(contextActionText(page->view(), model.indexOf(model.find("General"))),
+        QString::fromUtf16(u"\u30b0\u30eb\u30fc\u30d7\u3092\u30ea\u30bb\u30c3\u30c8"));
+    QSignalSpy failed(&model, &qpb::PropertyModel::validationFailed);
+    QVERIFY(!model.setValue("Paths/projectDir", m_dir.filePath("does-not-exist")));
+    QCOMPARE(failed.count(), 1);
+    QVERIFY(failed.at(0).at(2).toString().startsWith(QString::fromUtf16(u"\u30c7\u30a3\u30ec\u30af\u30c8\u30ea")));
+    QTRY_COMPARE(browse->toolTip(), QString::fromUtf16(u"\u30c7\u30a3\u30ec\u30af\u30c8\u30ea\u3092\u9078\u629e"));
+
+    QVERIFY(model.setValue("General/language", "vi"));
+    QCOMPARE(title(), QString::fromUtf16(u"Thu\u1ed9c t\u00ednh"));
+    QTRY_COMPARE(browse->toolTip(), QString::fromUtf16(u"Ch\u1ecdn th\u01b0 m\u1ee5c"));
+
+    // F13: texts from the objects' class info are fixed English strings.
+    QCOMPARE(m_window->devices()->model().find("studio_mic/gain")->displayName(),
+        QString("Input gain"));
+
+    // "Reset all" also resets the language: back to English.
+    page->resetAll();
+    QCOMPARE(model.find("General/language")->value().toString(), QString("en"));
+    QCOMPARE(title(), QString("Property"));
+    QTRY_COMPARE(browse->toolTip(), QString("Choose a directory"));
 }
 
 void tst_Trial::screenshots()
