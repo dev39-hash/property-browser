@@ -1,5 +1,6 @@
 #include <qpb/widgets/EditorFactory.h>
 
+#include <QtCore/qcoreevent.h>
 #include <QtCore/qdir.h>
 #include <QtWidgets/qboxlayout.h>
 #include <QtWidgets/qfiledialog.h>
@@ -40,13 +41,25 @@ PathEdit::PathEdit(Kind kind, QWidget* parent)
 
     m_lineEdit->setFrame(false);
     m_button->setText(QString(QChar(0x2026))); // horizontal ellipsis
-    m_button->setToolTip(kind == Kind::File ? tr("Choose a file") : tr("Choose a directory"));
+    retranslate();
     m_button->setFocusPolicy(Qt::NoFocus);
     m_button->setProperty(StylePartProperty, QStringLiteral("browse")); // style sheet selector
     setFocusProxy(m_lineEdit);
     setFocusPolicy(Qt::StrongFocus);
 
     connect(m_button, &QToolButton::clicked, this, &PathEdit::browse);
+}
+
+void PathEdit::changeEvent(QEvent* event)
+{
+    if (event->type() == QEvent::LanguageChange)
+        retranslate(); // the form view keeps its editors (D57)
+    QWidget::changeEvent(event);
+}
+
+void PathEdit::retranslate()
+{
+    m_button->setToolTip(m_kind == Kind::File ? tr("Choose a file") : tr("Choose a directory"));
 }
 
 QString PathEdit::path() const

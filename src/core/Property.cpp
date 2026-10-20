@@ -1,6 +1,8 @@
 #include <qpb/PropertyGroup.h>
 #include <qpb/TypeRegistry.h>
 
+#include <QtCore/qcoreapplication.h>
+
 #include "Property_p.h"
 #include "core/compat_p.h"
 
@@ -76,8 +78,10 @@ bool PropertyPrivate::assign(const QVariant& input, Origin origin)
     if (detail::isValidStorageType(handler->storageType)
         && detail::storageTypeOf(candidate) != handler->storageType) {
         if (!detail::convertTo(candidate, handler->storageType)) {
-            return reject(QStringLiteral("Cannot convert the value to %1")
-                              .arg(QLatin1String(detail::typeNameOf(handler->storageType))));
+            // Translated (README.md, "Translations"; D56).
+            return reject(
+                QCoreApplication::translate("qpb::Property", "Cannot convert the value to %1")
+                    .arg(QLatin1String(detail::typeNameOf(handler->storageType))));
         }
     }
     if (handler->normalize)

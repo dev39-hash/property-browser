@@ -72,6 +72,7 @@ qpb_add_library(qpb_core
         include/qpb/PropertyModel.h
         include/qpb/QObjectPropertySource.h
         include/qpb/Serialization.h
+        include/qpb/Translations.h
         include/qpb/TypeRegistry.h
         include/qpb/Types.h
         include/qpb/ValidationResult.h
@@ -81,6 +82,7 @@ qpb_add_library(qpb_core
         src/core/Property.cpp
         src/core/PropertyBuilders.cpp
         src/core/compat_p.h
+        src/core/LanguageChange_p.h
         src/core/PropertyFilterProxyModel.cpp
         src/core/PropertyGroup.cpp
         src/core/PropertyModel.cpp
@@ -88,10 +90,14 @@ qpb_add_library(qpb_core
         src/core/QObjectPropertySource_p.h
         src/core/Serialization.cpp
         src/core/Property_p.h
+        src/core/Translations.cpp
         src/core/TypeRegistry.cpp
         src/core/qpbglobal.cpp
+        # Generated from qpb_<lang>.ts by tools/update_translations (since 1.8).
+        translations/qpb_translations.qrc
 )
 target_link_libraries(qpb_core PUBLIC Qt${QPB_QT_MAJOR}::Core)
+set_target_properties(qpb_core PROPERTIES AUTORCC ON)
 add_library(qpb::core ALIAS qpb_core)
 
 # --- qpb::widgets (QtWidgets) -----------------------------------------------
