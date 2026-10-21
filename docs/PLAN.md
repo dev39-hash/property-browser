@@ -580,9 +580,8 @@ Qt's (where it exists) and the example's own, whose display names are set again 
 Total ≈ 16.5 h. Code written for 1.0–1.7 builds and behaves the same: without a qpb translation loaded every text is
 the English one of 1.7.
 
-**Status:** M12.1–M12.7 done with D54–D57 as proposed, except the review of the Japanese and Vietnamese wording by a
-native speaker (M12.3), which is the maintainer's. lupdate found exactly the 15 texts of the table above, in the
-expected contexts. What it took:
+**Status:** M12.1–M12.7 done with D54–D57 as proposed; the maintainer reviewed the Japanese and Vietnamese wording
+(M12.3) on 2026-10-21. lupdate found exactly the 15 texts of the table above, in the expected contexts. What it took:
 - `<qpb/Translations.h>` with `loadTranslation()`; `qpb/translations/qpb_en.ts` (the plural form), `qpb_ja.ts`,
   `qpb_vi.ts` and their `.qm` files, embedded through `qpb_translations.qrc` (AUTORCC on `qpb_core` only; the qmake
   project lists it too) and registered with `Q_INIT_RESOURCE` for static builds;

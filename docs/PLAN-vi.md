@@ -569,9 +569,9 @@ dẫn bắt buộc tồn tại hiện thông báo đã dịch. File `.qm` của 
 Tổng ≈ 16.5 h. Code viết cho 1.0–1.7 build và chạy như cũ: khi chưa nạp bản dịch của qpb, mọi chuỗi vẫn là tiếng Anh
 như 1.7.
 
-**Trạng thái:** M12.1–M12.7 xong với D54–D57 theo đề xuất, trừ việc người bản ngữ duyệt cách diễn đạt tiếng Nhật và
-tiếng Việt (M12.3), phần này do maintainer làm. lupdate tìm thấy đúng 15 chuỗi của bảng trên, trong đúng các context dự
-kiến. Những việc đã làm:
+**Trạng thái:** M12.1–M12.7 xong với D54–D57 theo đề xuất; maintainer đã duyệt cách diễn đạt tiếng Nhật và tiếng Việt
+(M12.3) ngày 2026-10-21. lupdate tìm thấy đúng 15 chuỗi của bảng trên, trong đúng các context dự kiến. Những việc đã
+làm:
 - `<qpb/Translations.h>` với `loadTranslation()`; `qpb/translations/qpb_en.ts` (dạng số nhiều), `qpb_ja.ts`, `qpb_vi.ts`
   và các file `.qm`, nhúng qua `qpb_translations.qrc` (AUTORCC chỉ trên `qpb_core`; dự án qmake cũng liệt kê nó) và đăng
   ký bằng `Q_INIT_RESOURCE` cho bản build static; `tools/update_translations.py` chạy lupdate và lrelease cho qpb và
