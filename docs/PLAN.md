@@ -599,7 +599,7 @@ the English one of 1.7.
   on Qt 5; `qpb/README.md` "Translations"; SPEC §4.10, §4.7, §8, §9.2, D54–D57;
 - `ctest` passes 41/41 with Qt 6.11 (MSVC 2026) and with Qt 5.15 (MSVC 2019), clean builds; the qmake project builds
   all nine examples with both. RC round 9: the trial's language setting switches qpb at once; F13 (texts from class
-  info stay as written) is kept for a later version and documented.
+  info stay as written) is kept for a later version and documented. M12.8: released as `1.8.0`.
 
 ---
 

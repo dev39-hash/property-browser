@@ -589,7 +589,7 @@ làm:
   `qpb/README.md` mục "Translations"; SPEC §4.10, §4.7, §8, §9.2, D54–D57;
 - `ctest` đạt 41/41 với Qt 6.11 (MSVC 2026) và với Qt 5.15 (MSVC 2019), build sạch; dự án qmake build được cả chín
   example với cả hai. RC vòng 9: thiết lập ngôn ngữ của trial đổi qpb ngay lập tức; F13 (chuỗi lấy từ class info giữ
-  nguyên như đã viết) để lại cho phiên bản sau và đã ghi vào tài liệu.
+  nguyên như đã viết) để lại cho phiên bản sau và đã ghi vào tài liệu. M12.8: đã phát hành `1.8.0`.
 
 ---
 
