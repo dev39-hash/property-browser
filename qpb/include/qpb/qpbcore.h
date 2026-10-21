@@ -11,6 +11,7 @@
 #include <qpb/PropertyModel.h>
 #include <qpb/QObjectPropertySource.h>
 #include <qpb/Serialization.h>
+#include <qpb/Translations.h>
 #include <qpb/TypeRegistry.h>
 #include <qpb/Types.h>
 #include <qpb/ValidationResult.h>

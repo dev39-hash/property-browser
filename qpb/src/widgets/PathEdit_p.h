@@ -82,8 +82,12 @@ public:
     // Opens the dialog; on acceptance stores the path and requests a commit.
     void browse();
 
+protected:
+    void changeEvent(QEvent* event) override;
+
 private:
     QString runDialog();
+    void retranslate();
 
     Kind m_kind;
     FileMode m_fileMode = FileMode::Open;

@@ -25,7 +25,7 @@
 ### 1.2 Phi mục tiêu (không làm trong 1.x)
 
 Qt Quick/QML view · Python binding · multi-object editing · undo/redo tích hợp sẵn ·
-kiểu phức hợp trong core (color, font, vector, array) · Qt 5 · DSL/code generator ·
+kiểu phức hợp trong core (color, font, vector, array) · Qt 5 trước 5.15 (5.15 từ 1.7, §9.6) · DSL/code generator ·
 theme riêng (dùng QSS) · conditional visibility khai báo bằng biểu thức · hỗ trợ qmake.
 
 Lý do chi tiết: brainstorm mục 11. Thiết kế **không được cấm** multi-object editing và QML về sau
@@ -374,6 +374,9 @@ Validation mặc định của kiểu cơ bản:
 | FilePath   | `mustExist` + `FileMode::Open` → `QFileInfo::isFile()`; chuỗi rỗng luôn hợp lệ |
 | DirPath    | `mustExist` → `QFileInfo::isDir()`; chuỗi rỗng luôn hợp lệ                |
 
+Thông báo của phần kiểm tra mặc định, và của giá trị không chuyển được sang kiểu lưu trữ, được dịch (1.8, §4.10). Câu
+chữ của chúng không phải API: code kiểm tra `ok`, không kiểm tra `message`.
+
 ### 4.8 Serialization (1.2)
 
 Các hàm tự do trong namespace **`qpb::serialization`** (header `qpb/Serialization.h`, `qpb::core`):
@@ -433,6 +436,46 @@ public:
   hành vi của 1.2. [D44]
 - **Điều kiện (1.4):** khóa metadata `enabledWhen=<tên>` và `visibleWhen=<tên>`: property được bật / hiện khi Q_PROPERTY
   `<tên>` của cùng object có giá trị "đúng" (§4.2).
+
+### 4.10 Bản dịch (1.8)
+
+```cpp
+// <qpb/Translations.h>, qpb::core
+namespace qpb {
+bool loadTranslation(QTranslator& translator, const QLocale& locale = QLocale());
+}
+
+QTranslator qpbTranslator;                          // ứng dụng sở hữu
+if (qpb::loadTranslation(qpbTranslator, QLocale()))
+    app.installTranslator(&qpbTranslator);
+```
+
+- `loadTranslation()` nạp bản dịch của qpb cho `locale` vào `translator`, thử lần lượt các ngôn ngữ UI của locale
+  (`QTranslator::load(locale, "qpb", "_", ":/qpb/translations")`, nên `ja-JP` tìm được `qpb_ja`). Hàm trả về `false` khi
+  qpb không có bản dịch cho các ngôn ngữ đó; chuỗi của qpb khi ấy giữ tiếng Anh, ngôn ngữ nguồn. Ứng dụng cài translator,
+  và có thể gỡ nó hoặc nạp locale khác vào nó; qpb không giữ translator riêng. [D54]
+- 1.8 đi kèm tiếng Anh (chỉ dạng số nhiều), tiếng Nhật và tiếng Việt. Maintainer tạo file `.qm` từ
+  `qpb/translations/qpb_<lang>.ts` và commit chúng; chúng được nhúng vào `qpb::core` dưới dạng resource, và
+  `loadTranslation()` đăng ký chúng cả trong bản build static. Build qpb không cần công cụ Qt Linguist. [D55]
+- Các chuỗi cần dịch ổn định trong 1.x: ứng dụng có thể thêm ngôn ngữ, hoặc đổi một cách diễn đạt, bằng translator riêng
+  cài sau translator của qpb (translator cài sau cùng thắng). Có thể thêm chuỗi; context và chuỗi nguồn hiện có không
+  đổi. [D56]
+
+| Context | Chuỗi nguồn |
+|---|---|
+| `qpb::PropertyModel` | `Property`, `Value` (tiêu đề cột) |
+| `qpb::PropertyTreeView`, `qpb::PropertyFormView` | `Reset to default`, `Reset group` (menu ngữ cảnh) |
+| `qpb::detail::PathEdit` | `Choose a file`, `Choose a directory` (tool tip nút chọn, tiêu đề hộp thoại) |
+| `qpb::TypeRegistry` | `The value is not a number`, `At most %n characters are allowed` (số nhiều), `The value does not match the pattern %1`, `"%1" is not one of the options`, `The file %1 does not exist`, `The directory %1 does not exist` |
+| `qpb::Property` | `Cannot convert the value to %1` |
+
+- Đổi ngôn ngữ khi đang chạy (`QEvent::LanguageChange`, gửi khi cài hoặc gỡ một translator): `PropertyModel` phát
+  `headerDataChanged()` cho tiêu đề cột, editor đường dẫn đặt lại tool tip, còn menu ngữ cảnh được tạo lúc mở. qpb không
+  cập nhật chuỗi do ứng dụng truyền vào (tên hiển thị, tool tip, nhãn enum, ...) hay thông báo đang hiển thị; ứng dụng
+  tự đặt lại chuỗi của mình khi có `LanguageChange`. [D57]
+- Chuỗi của chính các widget Qt bên trong editor của qpb (menu ngữ cảnh của line edit và spin box, hộp thoại chọn file
+  không phải native) lấy từ bản dịch của Qt (`qtbase_<lang>.qm`), do ứng dụng nạp. Thông báo `qWarning()` dành cho lập
+  trình viên và giữ tiếng Anh.
 
 ---
 
@@ -651,6 +694,7 @@ property-browser/                  (repo phát triển)
 │   ├── CHANGELOG.md               # kèm hướng dẫn nâng cấp mỗi bản
 │   ├── README.md                  # tài liệu cho người dùng đi kèm folder: tính năng, API, hướng dẫn, các phiên bản
 │   ├── cmake/                     # helper và template CMake nội bộ
+│   ├── translations/              # qpb_<lang>.ts và các file .qm được nhúng (1.8, §4.10)
 │   ├── include/qpb/               # header public (duy nhất) — §9
 │   │   ├── qpb.h                  # umbrella header: tất cả (cần qpb::widgets)
 │   │   ├── qpbcore.h              # umbrella header chỉ cho qpb::core
@@ -786,6 +830,7 @@ Sau 1.0, tính năng mới đến dưới dạng **bổ sung** (minor), không s
 | 1.5   | `PropertyModel::resetAllToDefault()` (§4.6); `PropertyTreeView::setTabStopsOnCheckBoxes()` (§5.5)           | Bổ sung       |
 | 1.6   | Móc style sheet (§5.8): property màu của tree view, selector `qpbPart` / `qpbModified` của form view         | Bổ sung       |
 | 1.7   | Qt 5.15 là cấu hình thứ hai (§9.6); bản build Qt 6 không đổi                                                | Bổ sung       |
+| 1.8   | Bản dịch (§4.10): `loadTranslation()`, tiếng Anh, tiếng Nhật và tiếng Việt; thông báo mặc định dịch được      | Bổ sung       |
 | 2.0   | Chỉ khi thật sự cần phá vỡ API; gom mọi thứ đã deprecate                                                    | Breaking      |
 
 **Thiết kế 1.0 phải "chừa chỗ" cho 1.1/1.2** mà không đổi API: Form view và filter là class mới dùng
@@ -817,6 +862,7 @@ Dù vậy d-pointer vẫn được dùng (§9.3) để giữ header ổn định
 | Thêm attribute, `TypeId`, signal mới                                     | Đổi chữ ký signal/slot đã có                                      |
 | Thêm option CMake (mặc định giữ hành vi cũ)                              | Đổi tên target, option, đường dẫn include; tăng yêu cầu C++/Qt/CMake |
 | Deprecate (kèm thay thế)                                                  | Xóa thứ đã deprecate                                              |
+| Thêm chuỗi cần dịch và bản dịch (§4.10)                                   | Đổi context hoặc chuỗi nguồn của một chuỗi cần dịch               |
 
 ### 9.3 Quy tắc thiết kế header public
 
@@ -974,3 +1020,7 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D51| Form view và editor đường dẫn gắn dynamic property `qpbPart` và `qpbModified` lên widget, là API; tên class nội bộ thì không | Selector ổn định theo kiểu ứng dụng vốn dùng (`Widget[prop="value"]`), không phụ thuộc class nội bộ có thể đổi |
 | D52| Tiêu đề và nhãn đậm của form view được đặt lại sau khi style sheet reset font | Chương trình thử của M10: mọi rule sheet cho `QLabel` làm mất chữ đậm của nhãn đã sửa, nên dấu hiệu "đã sửa" biến mất dưới theme của ứng dụng |
 | D53| Qt 5.15 trở thành cấu hình thứ hai (dự kiến cho 1.7): CMake tìm Qt 6 hoặc Qt 5, header public có biến thể `QT_VERSION` ở chỗ Qt 5 không có tương đương (hằng `Attr` / `Types`, `TypeHandler::storageType`), và cam kết tương thích của §9 áp dụng theo từng major của Qt, mỗi major một snapshot API | Maintainer yêu cầu. Chương trình dò M11 cho thấy API 1.x dùng kiểu của Qt 6, nên không thể có một API cho cả hai major; một nhánh riêng sẽ nhân đôi mọi thay đổi sau này. Bản build Qt 6 giữ nguyên API và hành vi. Qt 5.15.0 build được với MSVC 2019 / 2022, không với MSVC 2026 |
+| D54| `qpb::loadTranslation(QTranslator&, const QLocale&)`: ứng dụng sở hữu và cài translator | Mẫu của chính Qt cho bản dịch của thư viện; ứng dụng quyết định thứ tự các translator và việc gỡ bỏ, qpb không giữ trạng thái global |
+| D55| File `.qm` do maintainer tạo, commit và nhúng vào `qpb::core` | Build chúng lúc configure cần Qt LinguistTools, mà consumer có thể chưa cài; bản nâng cấp không build được nữa là vi phạm G6 và §9.2. Nhúng sẵn thì không có gì phải deploy |
+| D56| Context và chuỗi nguồn của các chuỗi cần dịch trong qpb ổn định trong 1.x; context của 1.0–1.7 được giữ | Ứng dụng dịch qpb sang ngôn ngữ khác, hoặc sửa một cách diễn đạt, thông qua các khóa này; đổi một khóa là lặng lẽ làm mất bản dịch của họ |
+| D57| Khi có `LanguageChange`, qpb chỉ cập nhật những gì nó tự hiển thị (tiêu đề cột, tool tip của editor đường dẫn) | Chuỗi do ứng dụng truyền vào là `QString` thường, đã được dịch; chỉ ứng dụng mới dịch lại được, như với mọi UI Qt |

@@ -2,6 +2,7 @@
 #include <qpb/Property.h>
 #include <qpb/TypeRegistry.h>
 
+#include <QtCore/qcoreapplication.h>
 #include <QtCore/qdir.h>
 #include <QtCore/qfileinfo.h>
 #include <QtCore/qhash.h>
@@ -36,6 +37,9 @@ public:
 } // namespace detail
 
 namespace {
+
+// The messages below are translated in the context "qpb::TypeRegistry". Their
+// contexts and source texts are stable (README.md, "Translations"; D56).
 
 QString affixed(const QString& number, const Property& property)
 {
@@ -147,7 +151,8 @@ TypeHandler doubleHandler()
     };
     handler.validate = [](const QVariant& value, const Property&) {
         return std::isnan(value.toDouble())
-            ? ValidationResult::error(QStringLiteral("The value is not a number"))
+            ? ValidationResult::error(
+                QCoreApplication::translate("qpb::TypeRegistry", "The value is not a number"))
             : ValidationResult::valid();
     };
     return handler;
@@ -173,8 +178,8 @@ TypeHandler stringHandler()
         if (property.hasAttribute(Attr::MaxLength)) {
             const int maxLength = property.attribute(Attr::MaxLength).toInt();
             if (maxLength >= 0 && text.size() > maxLength)
-                return ValidationResult::error(
-                    QStringLiteral("At most %1 characters are allowed").arg(maxLength));
+                return ValidationResult::error(QCoreApplication::translate(
+                    "qpb::TypeRegistry", "At most %n characters are allowed", nullptr, maxLength));
         }
         const QString pattern = property.attribute(Attr::RegularExpression).toString();
         if (!pattern.isEmpty()) {
@@ -184,8 +189,8 @@ TypeHandler stringHandler()
                     qUtf8Printable(pattern), qUtf8Printable(property.path()),
                     qUtf8Printable(expression.errorString()));
             } else if (!expression.match(text).hasMatch()) {
-                return ValidationResult::error(
-                    QStringLiteral("The value does not match the pattern %1").arg(pattern));
+                return ValidationResult::error(QCoreApplication::translate("qpb::TypeRegistry",
+                    "The value does not match the pattern %1").arg(pattern));
             }
         }
         return ValidationResult::valid();
@@ -230,7 +235,8 @@ TypeHandler enumHandler()
                 return ValidationResult::valid();
         }
         return ValidationResult::error(
-            QStringLiteral("\"%1\" is not one of the options").arg(value.toString()));
+            QCoreApplication::translate("qpb::TypeRegistry", "\"%1\" is not one of the options")
+                .arg(value.toString()));
     };
     return handler;
 }
@@ -254,7 +260,8 @@ TypeHandler filePathHandler()
             = FileMode(property.attribute(Attr::DialogMode, int(FileMode::Open)).toInt());
         if (path.isEmpty() || !mustExist || mode != FileMode::Open || QFileInfo(path).isFile())
             return ValidationResult::valid();
-        return ValidationResult::error(QStringLiteral("The file %1 does not exist").arg(path));
+        return ValidationResult::error(
+            QCoreApplication::translate("qpb::TypeRegistry", "The file %1 does not exist").arg(path));
     };
     return handler;
 }
@@ -269,7 +276,9 @@ TypeHandler dirPathHandler()
         const bool mustExist = property.attribute(Attr::MustExist, false).toBool();
         if (path.isEmpty() || !mustExist || QFileInfo(path).isDir())
             return ValidationResult::valid();
-        return ValidationResult::error(QStringLiteral("The directory %1 does not exist").arg(path));
+        return ValidationResult::error(
+            QCoreApplication::translate("qpb::TypeRegistry", "The directory %1 does not exist")
+                .arg(path));
     };
     return handler;
 }

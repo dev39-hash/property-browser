@@ -24,8 +24,10 @@ QObject::connect(&model, &qpb::PropertyModel::valueChanged,
 
 More in [`examples/`](examples): quickstart, a custom `QColor` type, an inspector, a settings dialog, a runtime
 plugin configuration, (1.1) a form view and a tree view sharing one search filter, (1.2) an editor for QObjects
-with undo/redo and JSON files, and (1.6) a dark and a light theme from one style sheet template
-([`examples/custom_theme`](examples/custom_theme); styling hooks in [docs/SPEC.md section 5.8](docs/SPEC.md)).
+with undo/redo and JSON files, (1.6) a dark and a light theme from one style sheet template
+([`examples/custom_theme`](examples/custom_theme); styling hooks in [docs/SPEC.md section 5.8](docs/SPEC.md)), and
+(1.8) English, Japanese and Vietnamese switched at run time ([`examples/translations`](examples/translations);
+[docs/SPEC.md section 4.10](docs/SPEC.md)).
 
 To build and run them all in Qt Creator, open [`examples/qtcreator/CMakeLists.txt`](examples/qtcreator/CMakeLists.txt)
 (or [`qpb_examples.pro`](examples/qtcreator/qpb_examples.pro) with qmake), pick a Qt 6.5+ kit and choose the example in

@@ -10,7 +10,7 @@ replacing the folder: within a major version (1.x) your code and CMake never nee
 
 Contents: [Requirements](#requirements) - [Integration](#integration) - [Features](#features) -
 [Quick start](#quick-start) - [API](#api) - [Developer guide](#developer-guide) - [Style sheets](#style-sheets) -
-[Qt 5](#qt-5) - [Compatibility](#compatibility) - [Version history](#version-history)
+[Translations](#translations) - [Qt 5](#qt-5) - [Compatibility](#compatibility) - [Version history](#version-history)
 
 ## Requirements
 
@@ -34,7 +34,7 @@ target_link_libraries(my_app PRIVATE qpb::widgets)   # or qpb::core without widg
 
 | Target | Contains | Depends on |
 |---|---|---|
-| `qpb::core` | properties, model, types, validation, serialization, QObject source, filter proxy | Qt6::Core |
+| `qpb::core` | properties, model, types, validation, serialization, QObject source, filter proxy, translations | Qt6::Core |
 | `qpb::widgets` | tree view, form view, delegate, editors | `qpb::core`, Qt6::Widgets |
 
 - Static libraries by default. `-DQPB_BUILD_SHARED=ON` builds shared ones; then deploy the qpb libraries next to your
@@ -67,6 +67,7 @@ target_link_libraries(my_app PRIVATE qpb::widgets)   # or qpb::core without widg
 - **QObject properties**: show the `Q_PROPERTY`s of your objects and keep both sides in sync.
 - **Saving**: values to and from JSON and `QSettings`.
 - **Theming**: Qt style sheets, with hooks for what qpb paints itself.
+- **Translations**: qpb's own texts in English, Japanese and Vietnamese, switchable at run time.
 
 ## Quick start
 
@@ -159,6 +160,7 @@ All names are in namespace `qpb`. Header per class: `<qpb/Name.h>`, widgets in `
 - `QObjectPropertySource(model)`: `addObject(object, parentGroup, id)`, `removeObject()`, `groupOf()`, `objects()`,
   `refresh()`, `setTitleProperty()`, `setLiveReadOnlyProperties()`.
 - `qpb::serialization`: `toJson(group)`, `fromJson(group, json)`, `save(group, settings)`, `load(group, settings)`.
+- `Translations.h`: `loadTranslation(translator, locale)` (see [Translations](#translations)).
 - `qpbglobal.h`: `QPB_VERSION`, `QPB_VERSION_CHECK(major, minor, patch)`, `QPB_VERSION_STR`, `qpb::version()`,
   `QPB_DEPRECATED_X(text)`.
 
@@ -322,6 +324,61 @@ Notes: the section title is a checkable tool button (checked while expanded), so
 checked tool buttons. `qproperty-` values stay when a sheet is removed; set them back to invalid values when switching
 to a theme without them. A `::branch` rule replaces the tree's expand arrows and then needs `image:` for `:closed` and
 `:open`. Only these property names and values are part of the API, not the class names of internal widgets.
+
+## Translations
+
+Since 1.8 qpb ships translations of its own texts for English, Japanese and Vietnamese. They are embedded in
+`qpb::core`: there is nothing to deploy, and building needs no Qt Linguist tools. Load and install them like Qt's own:
+
+```cpp
+#include <qpb/Translations.h>
+
+QTranslator qpbTranslator;                          // keep it as long as it is installed
+if (qpb::loadTranslation(qpbTranslator, QLocale())) // the locale's UI languages: "ja-JP" finds Japanese
+    app.installTranslator(&qpbTranslator);
+```
+
+`loadTranslation()` returns false when qpb has no translation for the locale; qpb's texts then stay English. Without a
+qpb translation installed, every text is the English one of earlier versions.
+
+qpb translates what it shows by itself: the column titles, the context menus, the tool tips of the file and directory
+editors, and the messages of the built-in validation. Everything else is text you give qpb (display names, tool tips,
+enum labels, placeholders, messages of your validators): pass it translated, e.g. with `tr()`. Compare
+`ValidationResult::ok`, never the wording of a message. Texts that `QObjectPropertySource` takes from class info
+(`displayName=`, `toolTip=`) and from `Q_ENUM` keys are used as written; to translate them, set them again with
+`setDisplayName()` / `setToolTip()` / the `options` attribute after `addObject()`.
+
+**Changing the language at run time**: install and remove translators as usual. qpb updates the column titles and the
+editors it keeps open; context menus are built when they open; messages already shown keep their language. Set your
+own texts again when your window gets `QEvent::LanguageChange`:
+
+```cpp
+void Window::changeEvent(QEvent* event)
+{
+    if (event->type() == QEvent::LanguageChange) {
+        model.find("general/name")->setDisplayName(tr("Name"));
+        // ... tool tips, group titles, enum labels (setAttribute(qpb::Attr::Options, ...))
+    }
+    QWidget::changeEvent(event);
+}
+```
+
+Texts that come from Qt itself inside qpb's editors (the context menu of a line edit or spin box, a non-native file
+dialog) are translated by Qt's `qtbase_<lang>.qm`, which your application loads. Qt has Japanese, but not Vietnamese.
+
+**Other languages, other wording**: the contexts and source texts below are stable within 1.x. Translate them in a
+`.ts` file of your own (`lupdate components/qpb/src -ts myapp_qpb_de.ts` lists them) and install that translator after
+qpb's: the translator installed last wins.
+
+| Context | Source texts |
+|---|---|
+| `qpb::PropertyModel` | `Property`, `Value` |
+| `qpb::PropertyTreeView`, `qpb::PropertyFormView` | `Reset to default`, `Reset group` |
+| `qpb::detail::PathEdit` | `Choose a file`, `Choose a directory` |
+| `qpb::TypeRegistry` | `The value is not a number`, `At most %n characters are allowed` (plural), `The value does not match the pattern %1`, `"%1" is not one of the options`, `The file %1 does not exist`, `The directory %1 does not exist` |
+| `qpb::Property` | `Cannot convert the value to %1` |
+
+qpb's own translations are in `translations/qpb_<lang>.ts` (the embedded `.qm` files are generated from them).
 
 ## Qt 5
 
