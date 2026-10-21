@@ -489,6 +489,86 @@ và `ctest` đạt 34/34; RC trial đạt mà không phải sửa gì; dự án 
 - CI: job Qt 5.15.2 trên Ubuntu 22.04 và Windows 2022 (chạy khi bật lại CI); SPEC mục 9.6, D53; `qpb/README.md` mục
   "Qt 5". M11.8: đã phát hành `1.7.0`.
 
+### M12 — 1.8 (chỉ bổ sung): bản dịch (tiếng Anh, tiếng Nhật, tiếng Việt)
+
+Maintainer yêu cầu: ứng dụng chạy bằng ngôn ngữ khác muốn các chuỗi của chính qpb được dịch, và qpb đi kèm bản dịch
+tiếng Anh, tiếng Nhật và tiếng Việt. Hiện nay (1.7) ứng dụng đã tự truyền chuỗi của mình (tên hiển thị, tool tip, nhãn
+enum, placeholder, tên nhóm, thông báo của validator riêng) dưới dạng `QString`, nên phần này do ứng dụng dịch. Vấn đề
+nằm ở những gì qpb tự hiển thị:
+
+| Chuỗi | Ở đâu | Trong 1.7 |
+|---|---|---|
+| "Property", "Value" (tiêu đề cột) | `PropertyModel::headerData()` | `tr()`, context `qpb::PropertyModel` |
+| "Reset to default", "Reset group" (menu ngữ cảnh) | `PropertyTreeView`, `PropertyFormView` | `tr()`, context `qpb::PropertyTreeView`, `qpb::PropertyFormView` |
+| "Choose a file", "Choose a directory" (tool tip nút chọn, tiêu đề hộp thoại) | editor đường dẫn | `tr()`, context `qpb::detail::PathEdit` |
+| "The value is not a number", "At most %1 characters are allowed", "The value does not match the pattern %1", "\"%1\" is not one of the options", "The file %1 does not exist", "The directory %1 does not exist" | kiểm tra mặc định (SPEC §4.7) | `QStringLiteral` cố định: **không dịch được** |
+| "Cannot convert the value to %1" | `Property::setValue()` | `QStringLiteral` cố định: **không dịch được** |
+
+Còn thiếu thêm: qpb không đi kèm file dịch nào, nên muốn dịch cả các chuỗi `tr()` thì ứng dụng phải tự chạy `lupdate`
+trên mã nguồn qpb; đổi ngôn ngữ khi đang chạy không tới được tiêu đề cột và tool tip của editor đường dẫn trong form
+view (cả hai chỉ đặt một lần); và chưa có tài liệu. Thông báo `qWarning()` dành cho lập trình viên nên giữ tiếng Anh.
+
+**Nạp bản dịch của qpb.** Một hàm mới trong `qpb::core`, dùng giống bản dịch của Qt:
+
+```cpp
+#include <qpb/Translations.h>
+
+QTranslator qpbTranslator;                          // ứng dụng sở hữu
+if (qpb::loadTranslation(qpbTranslator, QLocale())) // en, ja, vi trong 1.8
+    app.installTranslator(&qpbTranslator);
+```
+
+- Thử lần lượt các ngôn ngữ UI của locale (`QTranslator::load(QLocale, ...)`), nên `ja_JP` tìm được tiếng Nhật; trả về
+  false khi qpb không có bản dịch cho chúng, và chuỗi của qpb giữ tiếng Anh.
+- Các file `.qm` được nhúng vào `qpb::core` dưới dạng resource (`:/qpb/translations/qpb_<lang>.qm`); hàm này cũng đăng
+  ký chúng trong bản build static (`Q_INIT_RESOURCE`). Consumer không cần công cụ Qt Linguist và không phải deploy gì.
+- Tiếng Anh là ngôn ngữ nguồn; `qpb_en` chỉ chứa dạng số nhiều ("At most 1 character is allowed").
+- Chuỗi của chính Qt bên trong editor của qpb (menu ngữ cảnh của line edit và spin box, hộp thoại chọn file không phải
+  native) lấy từ bản dịch của Qt (`qtbase_<lang>.qm`), do ứng dụng nạp như thường lệ. Qt có tiếng Nhật, không có tiếng
+  Việt.
+
+**Chuỗi cần dịch là ổn định.** Ứng dụng có thể dịch qpb sang ngôn ngữ khác, hoặc sửa một cách diễn đạt, trong file `.ts`
+của mình: translator cài sau thắng. Vì vậy context và chuỗi nguồn ở trên được ghi trong tài liệu (README) và giữ nguyên
+trong 1.x như API; chuỗi mới là phần bổ sung. Các context hiện có giữ nguyên (ứng dụng có thể đã dịch chúng); chuỗi mới
+dùng `qpb::TypeRegistry` và `qpb::Property`. "At most %1 characters" chuyển sang dạng số nhiều (`%n`), kết quả tiếng
+Anh không đổi khi chưa nạp bản dịch.
+
+**Đổi ngôn ngữ khi đang chạy** (`QEvent::LanguageChange`): `PropertyModel` phát `headerDataChanged()` để mọi view đọc
+lại tiêu đề cột; editor đường dẫn đặt lại tool tip. Menu ngữ cảnh được tạo lúc mở. Thông báo đang hiển thị (tool tip lỗi
+kiểm tra) giữ ngôn ngữ cũ tới lần kiểm tra sau. Chuỗi do ứng dụng truyền vào là việc của ứng dụng, như với mọi UI Qt:
+đặt lại chúng (hoặc dựng lại cây) khi có `LanguageChange`; README và example chỉ cách làm. Cách đưa cho qpb chuỗi chưa
+dịch để qpb tự dịch không thuộc 1.8.
+
+**Example `examples/translations`:** bộ chọn ngôn ngữ (English, 日本語, Tiếng Việt) đổi bản dịch của qpb, của Qt (khi có)
+và của chính example, với tên hiển thị được đặt lại khi có `LanguageChange`; một thuộc tính có `maxLength` và một đường
+dẫn bắt buộc tồn tại hiện thông báo đã dịch. File `.qm` của example được commit giống của qpb.
+
+**Quyết định** (D54–D57 theo đề xuất, maintainer chấp thuận ngày 2026-10-20):
+- **D54** API: `bool loadTranslation(QTranslator&, const QLocale&)`, ứng dụng sở hữu và cài translator (đã chọn: theo
+  mẫu của Qt; ứng dụng quyết định thứ tự và gỡ bỏ, qpb không giữ trạng thái global), không dùng
+  `installTranslation(const QLocale&)` với translator nằm trong qpb.
+- **D55** cách phân phối: file `.qm` do maintainer build (`tools/update_translations`), commit và nhúng vào (đã chọn),
+  không build lúc configure bằng Qt LinguistTools, một phụ thuộc build mới mà consumer có thể không có; bản nâng cấp mà
+  không build được nữa là vi phạm G6 và §9.2.
+- **D56** context và chuỗi nguồn ổn định trong 1.x; context hiện có giữ nguyên, chuỗi mới dùng context của class mà nó
+  thuộc về.
+- **D57** khi có `LanguageChange`, qpb cập nhật những gì nó tự hiển thị (tiêu đề cột, editor đường dẫn thường trực);
+  chuỗi do ứng dụng truyền vào và thông báo đang hiển thị không được qpb cập nhật.
+
+| ID    | Việc                                                                                           | Ước tính (h) | Xong khi |
+|-------|------------------------------------------------------------------------------------------------|----------|-----------|
+| M12.1 | SPEC: §4.10 mới (bản dịch), §4.7 (thông báo được dịch, không phải API), §8 (1.8), D54–D57; `-vi` | 1.5 | Đã ghi quyết định |
+| M12.2 | Mã nguồn: bảy thông báo qua `QCoreApplication::translate()` với context cố định, số nhiều `%n`; `<qpb/Translations.h>`, `loadTranslation()`, resource nhúng (CMake và `qpb.pro`), đăng ký trong bản static | 3 | Build được với Qt 6 và Qt 5; khi chưa nạp bản dịch, chuỗi tiếng Anh không đổi |
+| M12.3 | `qpb/translations/qpb_en.ts`, `qpb_ja.ts`, `qpb_vi.ts` và file `.qm`; `tools/update_translations` (lupdate + lrelease) | 2.5 | Mọi chuỗi đã dịch; cách diễn đạt tiếng Nhật và tiếng Việt được người bản ngữ duyệt |
+| M12.4 | Đổi ngôn ngữ khi đang chạy: tiêu đề cột của model, tool tip editor đường dẫn                    | 1.5 | Test widget đổi English → 日本語 → Tiếng Việt |
+| M12.5 | Test với Qt 6 và Qt 5: thông báo, tiêu đề, menu, tool tip theo từng ngôn ngữ; dạng số nhiều; fallback locale (`ja_JP` → ja, `de` → false); mỗi `.qm` khớp với `.ts`; `.ts` khớp với mã nguồn (khi tìm thấy `lupdate`) | 3 | `ctest` đạt với cả hai major Qt |
+| M12.6 | `tests/api_compat/v1_8.cpp`, `api-1.8.txt`, `api-qt5-1.8.txt`; `examples/translations` (+ dự án Qt Creator); `qpb/README.md` mục "Translations" (nạp, context, thêm ngôn ngữ) | 3 | Compat, snapshot và example build đạt; ảnh chụp đã kiểm ở cả ba ngôn ngữ |
+| M12.7 | RC trial vòng 9: ứng dụng trial chạy bằng tiếng Nhật và tiếng Việt; ghi lại phát hiện           | 1.5 | Test trial đạt, báo cáo đã cập nhật |
+| M12.8 | Phát hành 1.8.0                                                                                  | 0.5 | Có zip phát hành |
+
+Tổng ≈ 16.5 h. Code viết cho 1.0–1.7 build và chạy như cũ: khi chưa nạp bản dịch của qpb, mọi chuỗi vẫn là tiếng Anh
+như 1.7.
+
 ---
 
 ## 3. Phụ thuộc giữa các task
@@ -499,7 +579,7 @@ M0.* ─► M1.1 ─► M1.2, M1.3 ─► M1.4 ─► M1.5
 M1.* ─► M2.1 ─► M2.2 ─► M2.3
         M2.4 ─► M2.5 ─► M2.6 ─► M2.7 ─► M2.8
 M2.4 ─► M3.1 ─► M3.2 ─► M3.3 ─► M3.4, M3.5 ─► M3.6 ─► M3.7 ─► M3.8
-M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7 ─► M8 ─► M9 ─► M10 ─► M11
+M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7 ─► M8 ─► M9 ─► M10 ─► M11 ─► M12
 ```
 
 ---

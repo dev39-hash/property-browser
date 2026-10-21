@@ -500,6 +500,86 @@ examples start. Qt 6.11 with MSVC 2026: still 34/34, snapshots unchanged. What i
 - CI: Qt 5.15.2 jobs on Ubuntu 22.04 and Windows 2022 (run when CI is enabled again); SPEC section 9.6, D53;
   `qpb/README.md` "Qt 5". M11.8: released as `1.7.0`.
 
+### M12 — 1.8 (additive only): translations (English, Japanese, Vietnamese)
+
+Requested by the maintainer: applications that run in other languages want qpb's own texts translated, and qpb ships
+translations for English, Japanese and Vietnamese. Today (1.7) applications already pass their own texts (display
+names, tool tips, enum labels, placeholders, group titles, messages of their validators) as `QString`s, so these are
+translated by the application. What qpb shows by itself is the problem:
+
+| Text | Where | In 1.7 |
+|---|---|---|
+| "Property", "Value" (column titles) | `PropertyModel::headerData()` | `tr()`, context `qpb::PropertyModel` |
+| "Reset to default", "Reset group" (context menu) | `PropertyTreeView`, `PropertyFormView` | `tr()`, contexts `qpb::PropertyTreeView`, `qpb::PropertyFormView` |
+| "Choose a file", "Choose a directory" (browse button tool tip, dialog title) | path editors | `tr()`, context `qpb::detail::PathEdit` |
+| "The value is not a number", "At most %1 characters are allowed", "The value does not match the pattern %1", "\"%1\" is not one of the options", "The file %1 does not exist", "The directory %1 does not exist" | default validation (SPEC §4.7) | fixed `QStringLiteral`s: **cannot be translated** |
+| "Cannot convert the value to %1" | `Property::setValue()` | fixed `QStringLiteral`: **cannot be translated** |
+
+Also missing: qpb ships no translation files, so an application has to run `lupdate` over qpb's sources to translate
+even the `tr()` texts; a language change at run time does not reach the column titles or the tool tip of the form
+view's path editors (both are set once); and nothing is documented. `qWarning()` messages are for developers and stay
+English.
+
+**Loading qpb's translation.** One new function in `qpb::core`, used like Qt's own translations:
+
+```cpp
+#include <qpb/Translations.h>
+
+QTranslator qpbTranslator;                          // owned by the application
+if (qpb::loadTranslation(qpbTranslator, QLocale())) // en, ja, vi in 1.8
+    app.installTranslator(&qpbTranslator);
+```
+
+- Tries the locale's UI languages in order (`QTranslator::load(QLocale, ...)`), so `ja_JP` finds Japanese; returns
+  false when qpb has no translation for them, and qpb's texts stay English.
+- The `.qm` files are embedded in `qpb::core` as resources (`:/qpb/translations/qpb_<lang>.qm`); the function also
+  registers them in static builds (`Q_INIT_RESOURCE`). Consumers need no Qt Linguist tools and nothing to deploy.
+- English is the source language; `qpb_en` holds the plural forms only ("At most 1 character is allowed").
+- Qt's own texts inside qpb's editors (the line edit and spin box context menus, a non-native file dialog) come from
+  Qt's translations (`qtbase_<lang>.qm`), which the application loads as usual. Qt ships Japanese, not Vietnamese.
+
+**Translatable texts are stable.** Applications can translate qpb into further languages, or override a wording, in
+their own `.ts` files: a translator installed later wins. Hence the contexts and source texts above are documented
+(README) and kept within 1.x like API; new texts are additions. The existing contexts stay as they are (applications
+may already translate them); the new texts use `qpb::TypeRegistry` and `qpb::Property`. "At most %1 characters"
+becomes a plural form (`%n`), with the same English output when no translation is loaded.
+
+**Language changes at run time** (`QEvent::LanguageChange`): `PropertyModel` emits `headerDataChanged()` so every view
+re-reads the column titles; path editors set their tool tip again. Context menus are built when opened. Messages that
+are already shown (a validation tool tip) keep their language until the next validation. Texts given by the
+application are the application's job, as in any Qt UI: set them again (or rebuild the tree) on `LanguageChange`; the
+README and the example show how. A way to give qpb untranslated texts it translates itself is not part of 1.8.
+
+**Example `examples/translations`:** a language selector (English, 日本語, Tiếng Việt) switching qpb's translation,
+Qt's (where it exists) and the example's own, whose display names are set again on `LanguageChange`; a property with a
+`maxLength` and a path that must exist show translated messages. The example's `.qm` files are committed like qpb's.
+
+**Decisions** (D54–D57 as proposed, accepted by the maintainer on 2026-10-20):
+- **D54** the API: `bool loadTranslation(QTranslator&, const QLocale&)`, the application owns and installs the
+  translator (chosen: Qt's pattern; the application controls the order and removal, qpb keeps no global state), not
+  `installTranslation(const QLocale&)` with a translator inside qpb.
+- **D55** delivery: `.qm` files built by the maintainer (`tools/update_translations`), committed and embedded
+  (chosen), not built at configure time with Qt LinguistTools, a new build dependency that a consumer may not have;
+  an upgrade that stops building breaks G6 and §9.2.
+- **D56** contexts and source texts are stable within 1.x; the existing contexts are kept, new texts use the
+  context of the class they belong to.
+- **D57** on `LanguageChange` qpb updates what it shows by itself (column titles, persistent path editors); texts given
+  by the application and messages already shown are not updated by qpb.
+
+| ID    | Task                                                                                           | Est. (h) | Done when |
+|-------|------------------------------------------------------------------------------------------------|----------|-----------|
+| M12.1 | SPEC: new §4.10 (translations), §4.7 (messages are translated, not API), §8 (1.8), D54–D57; `-vi` | 1.5 | Decisions recorded |
+| M12.2 | Sources: the seven messages through `QCoreApplication::translate()` in fixed contexts, `%n` plural; `<qpb/Translations.h>`, `loadTranslation()`, embedded resource (CMake and `qpb.pro`), static registration | 3 | Builds with Qt 6 and Qt 5; English output unchanged without a translation |
+| M12.3 | `qpb/translations/qpb_en.ts`, `qpb_ja.ts`, `qpb_vi.ts` and their `.qm`; `tools/update_translations` (lupdate + lrelease) | 2.5 | Every text translated; Japanese and Vietnamese wording reviewed by a native speaker |
+| M12.4 | Run-time language change: model column titles, path editor tool tip                             | 1.5 | Widget test switches English → Japanese → Vietnamese |
+| M12.5 | Tests with Qt 6 and Qt 5: messages, titles, menus, tool tips per language; plural forms; locale fallback (`ja_JP` → ja, `de` → false); each `.qm` matches its `.ts`; `.ts` up to date with the sources (when `lupdate` is found) | 3 | `ctest` passes with both Qt majors |
+| M12.6 | `tests/api_compat/v1_8.cpp`, `api-1.8.txt`, `api-qt5-1.8.txt`; `examples/translations` (+ Qt Creator projects); `qpb/README.md` "Translations" (loading, contexts, adding a language) | 3 | Compat, snapshots and example builds pass; screenshots checked in the three languages |
+| M12.7 | RC trial round 9: the trial application runs in Japanese and Vietnamese; findings recorded       | 1.5 | Trial tests pass, report updated |
+| M12.8 | Release 1.8.0                                                                                    | 0.5 | Release zip |
+
+Total ≈ 16.5 h. Code written for 1.0–1.7 builds and behaves the same: without a qpb translation loaded every text is
+the English one of 1.7.
+
 ---
 
 ## 3. Task dependencies
@@ -510,7 +590,7 @@ M0.* ─► M1.1 ─► M1.2, M1.3 ─► M1.4 ─► M1.5
 M1.* ─► M2.1 ─► M2.2 ─► M2.3
         M2.4 ─► M2.5 ─► M2.6 ─► M2.7 ─► M2.8
 M2.4 ─► M3.1 ─► M3.2 ─► M3.3 ─► M3.4, M3.5 ─► M3.6 ─► M3.7 ─► M3.8
-M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7 ─► M8 ─► M9 ─► M10 ─► M11
+M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7 ─► M8 ─► M9 ─► M10 ─► M11 ─► M12
 ```
 
 ---
