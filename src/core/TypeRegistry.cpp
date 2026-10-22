@@ -142,7 +142,8 @@ TypeHandler doubleHandler()
         const double maximum
             = property.attribute(Attr::Maximum, std::numeric_limits<double>::infinity()).toDouble();
         number = qBound(minimum, number, qMax(minimum, maximum));
-        if (std::isfinite(number)) {
+        // Without rounding the value keeps every digit; decimals only affect display.
+        if (property.attribute(Attr::RoundToDecimals, true).toBool() && std::isfinite(number)) {
             const double scale = std::pow(10.0, decimalsOf(property));
             const double rounded = std::round(number * scale) / scale;
             if (std::isfinite(rounded))

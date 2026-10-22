@@ -95,6 +95,11 @@ id. The factory looks for the editor named by `EditorId` first and then for the 
 
 - The views commit an editor when it loses focus. For editors where a choice is final (a list item, a picked file,
   a colour), call `qpb::EditorFactory::notifyCommit(editor)` when the user has chosen, so the value is committed at once.
+- `qpb::EditorFactory::notifyCommitKeepOpen(editor)` (since 1.9) commits at once too, but the editor stays open, for
+  editors where the user keeps working after each change (a slider, a spin box step). The tree view then writes the
+  value the model holds back into the editor: the model may have clamped or normalised the input, or refused it (the
+  message shows as a tool tip). The form view commits as for `notifyCommit()`. Call it from the editor's own slot, for
+  example `connect(slider, &QSlider::valueChanged, this, [this] { qpb::EditorFactory::notifyCommitKeepOpen(this); })`.
 - While an editor shows a dialog, keep a `qpb::EditorDialogScope` alive. The dialog takes the focus; without the scope
   the view would commit and close the editor half-way:
 
@@ -112,9 +117,9 @@ void ColorButton::pickColor()
 | Type | Widget | Notes |
 |---|---|---|
 | Bool | check box | In the tree and list views the check indicator of the cell is used and there is no editor widget; Space or a click toggles it. The form view uses a `QCheckBox` |
-| Int | `QSpinBox` | Applies minimum, maximum, step, prefix and suffix; commits when editing finishes, not on every key |
+| Int | `QSpinBox` | Applies minimum, maximum, step, prefix and suffix; commits when editing finishes, not on every key. With `Attr::CommitOnStep` (since 1.9) every step (arrow buttons, arrow keys, wheel, Page Up / Down) is committed at once and the editor stays open; typed text still waits for Enter or focus out |
 | Int64 | a spin box for 64-bit values | Like Int; steps stop at the limits |
-| Double | `QDoubleSpinBox` | Like Int, with decimals; a cell that is not edited shows at most that many fractional digits, without trailing zeros |
+| Double | `QDoubleSpinBox` | Like Int, with decimals; a cell that is not edited shows at most that many fractional digits, without trailing zeros. With `Attr::RoundToDecimals` false the stored value keeps its digits and an editor the user did not change writes it back as it is |
 | String | `QLineEdit`; `QPlainTextEdit` with `multiline` | The single-line editor limits typing live to the max length and the regular expression. The multi-line editor checks both when the value is committed; it is at least four lines tall, Tab moves on, Enter inserts a line break and Ctrl+Enter commits (see [Views](views.md#keyboard)) |
 | Enum | non-editable `QComboBox` | Commits when an item is chosen |
 | FilePath | line edit with a "..." button | The button opens an open or save dialog according to `DialogMode`; choosing a file commits |

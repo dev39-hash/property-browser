@@ -99,6 +99,10 @@ In the tree view check boxes are not in the Tab chain by default; the arrow keys
 opens there, Space toggles the value, and the next Tab goes on. Leaving the view at either end works as before. The
 form view needs no such option: its check boxes are ordinary widgets in the focus chain.
 
+With the `commitOnStep` attribute (since 1.9) each step of an Int, Int64 or Double spin box (arrow buttons, arrow keys,
+wheel, Page Up / Down) commits at once and the tree view's editor stays open; typed text still waits for Enter or focus
+out.
+
 The form view commits an editor on focus out, on Enter (Ctrl+Enter in a multi-line editor), and at once for check
 boxes, combo boxes, path editors and custom editors that call `EditorFactory::notifyCommit()`. A value that did not
 change is not written.

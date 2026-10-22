@@ -26,6 +26,16 @@ Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC tria
   sheet): labels and section titles show the model's `Qt::ForegroundRole` colour, also while a section is collapsed.
   The colour is taken from the name cell, else the value cell; it follows `dataChanged()` and wins over a `color` of
   the application style sheet (`doc/guide/views.md`, `doc/guide/style-sheets.md`).
+- `EditorFactory::notifyCommitKeepOpen(editor)`: like `notifyCommit()`, but the editor stays open. The tree view
+  commits the value and shows the value the model holds in the editor (clamped, normalised or, when refused, the old
+  one with the message as a tool tip); the form view commits as for `notifyCommit()`.
+- `Attr::CommitOnStep` (key `commitOnStep`, `bool`, default `false`): the Int, Int64 and Double spin boxes commit
+  every step (arrow buttons, arrow keys, wheel, Page Up / Down) and stay open; typed text still commits on Enter or
+  when the editor loses focus.
+- `Attr::RoundToDecimals` (key `roundToDecimals`, `bool`, Double, default `true`): `false` stores values unrounded
+  (still clamped to the range); `Attr::Decimals` then only sets the digits shown and the spin box's. A Double editor
+  the user did not change writes the stored value back as it is, and `resetToDefault()` restores the full default
+  (`doc/guide/values-and-validation.md`).
 
 ### Fixed
 - `PropertyFormView` editors keep the text being typed when the model reports a change that leaves the

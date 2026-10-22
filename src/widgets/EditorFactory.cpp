@@ -63,17 +63,51 @@ EditorHandler boolEditor()
 
 // --- Int -------------------------------------------------------------------------
 
+// Spin boxes of the built-in editors. With Attr::CommitOnStep every step (arrow
+// buttons, arrow keys, wheel, Page Up / Down: they all end in stepBy()) is
+// committed at once and the editor stays open. Typed text is not a step. The
+// attribute reaches the spin box as a dynamic property (CommitOnStepProperty).
+class StepSpinBox : public QSpinBox
+{
+public:
+    using QSpinBox::QSpinBox;
+
+    void stepBy(int steps) override
+    {
+        QSpinBox::stepBy(steps);
+        if (property(detail::CommitOnStepProperty).toBool())
+            EditorFactory::notifyCommitKeepOpen(this); // last: a commit may destroy the editor
+    }
+};
+
+class StepDoubleSpinBox : public QDoubleSpinBox
+{
+public:
+    using QDoubleSpinBox::QDoubleSpinBox;
+
+    void stepBy(int steps) override
+    {
+        QDoubleSpinBox::stepBy(steps);
+        if (property(detail::CommitOnStepProperty).toBool())
+            EditorFactory::notifyCommitKeepOpen(this);
+    }
+};
+
 EditorHandler intEditor()
 {
     EditorHandler handler;
     handler.createEditor = [](QWidget* parent, const Property&) {
-        auto* spinBox = new QSpinBox(parent);
+        auto* spinBox = new StepSpinBox(parent);
         spinBox->setFrame(false);
         spinBox->setKeyboardTracking(false);
         return spinBox;
     };
     handler.applyAttributes = [](QWidget* editor, const Property& property) {
         auto* spinBox = static_cast<QSpinBox*>(editor);
+        // A dynamic property: harmless on a plain QSpinBox an application's copy of
+        // this handler creates.
+        spinBox->setProperty(
+            detail::CommitOnStepProperty, property.attribute(Attr::CommitOnStep).toBool());
         spinBox->setRange(
             property.attribute(Attr::Minimum, std::numeric_limits<int>::min()).toInt(),
             property.attribute(Attr::Maximum, std::numeric_limits<int>::max()).toInt());
@@ -105,6 +139,8 @@ EditorHandler int64Editor()
     };
     handler.applyAttributes = [](QWidget* editor, const Property& property) {
         auto* spinBox = static_cast<detail::Int64SpinBox*>(editor);
+        spinBox->setProperty(
+            detail::CommitOnStepProperty, property.attribute(Attr::CommitOnStep).toBool());
         spinBox->setRange(
             property.attribute(Attr::Minimum, std::numeric_limits<qint64>::min()).toLongLong(),
             property.attribute(Attr::Maximum, std::numeric_limits<qint64>::max()).toLongLong());
@@ -129,13 +165,15 @@ EditorHandler doubleEditor()
 {
     EditorHandler handler;
     handler.createEditor = [](QWidget* parent, const Property&) {
-        auto* spinBox = new QDoubleSpinBox(parent);
+        auto* spinBox = new StepDoubleSpinBox(parent);
         spinBox->setFrame(false);
         spinBox->setKeyboardTracking(false);
         return spinBox;
     };
     handler.applyAttributes = [](QWidget* editor, const Property& property) {
         auto* spinBox = static_cast<QDoubleSpinBox*>(editor);
+        spinBox->setProperty(
+            detail::CommitOnStepProperty, property.attribute(Attr::CommitOnStep).toBool());
         // Decimals first: setRange() rounds the limits to the current decimals.
         spinBox->setDecimals(qBound(0, property.attribute(Attr::Decimals, 2).toInt(), 15));
         spinBox->setRange(
@@ -148,9 +186,19 @@ EditorHandler doubleEditor()
     handler.setEditorData = [](QWidget* editor, const QVariant& value, const Property&) {
         static_cast<QDoubleSpinBox*>(editor)->setValue(value.toDouble());
     };
-    handler.editorData = [](QWidget* editor, const Property&) {
+    handler.editorData = [](QWidget* editor, const Property& property) {
         auto* spinBox = static_cast<QDoubleSpinBox*>(editor);
         spinBox->interpretText();
+        // A property that keeps more digits than the spin box shows: while the
+        // spin box still shows the stored value rounded to its decimals the user
+        // changed nothing, so the stored value is written back as it is.
+        if (!property.attribute(Attr::RoundToDecimals, true).toBool()) {
+            const QVariant stored = property.value();
+            const double shown
+                = QString::number(stored.toDouble(), 'f', spinBox->decimals()).toDouble();
+            if (spinBox->value() == qBound(spinBox->minimum(), shown, spinBox->maximum()))
+                return stored;
+        }
         return QVariant(spinBox->value());
     };
     return handler;
@@ -351,6 +399,12 @@ void EditorFactory::notifyCommit(QWidget* editor)
 {
     if (editor)
         emit detail::CommitNotifier::instance() -> commitRequested(editor);
+}
+
+void EditorFactory::notifyCommitKeepOpen(QWidget* editor)
+{
+    if (editor)
+        emit detail::CommitNotifier::instance() -> commitKeepOpenRequested(editor);
 }
 
 EditorDialogScope::EditorDialogScope(QWidget* editor)

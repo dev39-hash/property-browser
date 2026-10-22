@@ -42,8 +42,8 @@ the CMake options, static and shared builds, Qt 5 and upgrading are in [doc/inte
   and a default value. Built in code with fluent builders.
 - **Types**: bool, int, 64-bit int, double, string (single or multiple lines), enum, file path, directory path, and
   your own types (e.g. `QColor`) through a type registry.
-- **Attributes**: ranges, steps, decimals, prefix and suffix, maximum length, placeholder, regular expression, file
-  filter, dialog mode, default directory, "must exist", enum options.
+- **Attributes**: ranges, steps, decimals (rounding optional), commit on every step, prefix and suffix, maximum
+  length, placeholder, regular expression, file filter, dialog mode, default directory, "must exist", enum options.
 - **Validation**: conversion, normalization (clamping, rounding) and type checks, plus a validator per property.
   Rejected values keep the old value and report a message.
 - **State**: read-only, disabled, hidden and live (a value maintained by the application), inherited by children.
