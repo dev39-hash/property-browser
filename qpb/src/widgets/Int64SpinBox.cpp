@@ -1,9 +1,12 @@
+#include <qpb/widgets/EditorFactory.h>
+
 #include <QtCore/qlocale.h>
 #include <QtWidgets/qlineedit.h>
 
 #include <limits>
 
 #include "Int64SpinBox_p.h"
+#include "widgets_p.h"
 #include "core/compat_p.h"
 
 namespace qpb::detail {
@@ -76,6 +79,9 @@ void Int64SpinBox::stepBy(int steps)
     interpretInput();
     setValue(saturatedAdd(m_value, saturatedMultiply(m_step, steps)));
     selectAll();
+    // With Attr::CommitOnStep every step is committed and the editor stays open.
+    if (property(CommitOnStepProperty).toBool())
+        EditorFactory::notifyCommitKeepOpen(this); // last: a commit may destroy the editor
 }
 
 QString Int64SpinBox::numberText(const QString& text) const

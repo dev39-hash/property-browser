@@ -88,6 +88,12 @@ public:
     // picked an item or a file) so the view commits it immediately instead of
     // waiting for the editor to lose focus.
     static void notifyCommit(QWidget* editor);
+    // Like notifyCommit(), but the editor stays open: a tree view commits the
+    // value and then shows the value the model holds in the editor (it may have
+    // clamped or normalised the input, or refused it); a form view commits as
+    // for notifyCommit(). For editors that apply a value while the user keeps
+    // working in them (e.g. a step of a spin box).
+    static void notifyCommitKeepOpen(QWidget* editor);
 
 private:
     EditorFactory();

@@ -21,8 +21,8 @@ class PropertyModel;
 
 namespace detail {
 
-// Carries EditorFactory::notifyCommit() to the delegates (and later form
-// views) that own the editor.
+// Carries EditorFactory::notifyCommit() and notifyCommitKeepOpen() to the
+// delegates and form views that own the editor.
 class CommitNotifier : public QObject
 {
     Q_OBJECT
@@ -31,7 +31,10 @@ public:
     static CommitNotifier* instance();
 
 signals:
+    // Commit and close (a form view just commits).
     void commitRequested(QWidget* editor);
+    // Commit and keep the editor open, showing the model's value afterwards.
+    void commitKeepOpenRequested(QWidget* editor);
 };
 
 // Editors opened by a PropertyDelegate carry this dynamic property (the
@@ -40,6 +43,11 @@ inline constexpr char EditorOwnerProperty[] = "_qpb_editorOwner";
 
 // The (persistent) index an editor was opened for (dynamic property).
 inline constexpr char EditorIndexProperty[] = "_qpb_editorIndex";
+
+// Set (bool) by the built-in spin box handlers from Attr::CommitOnStep: the
+// spin box commits every step. A dynamic property needs no cast, so a handler
+// copied by an application may set it on a plain spin box of its own.
+inline constexpr char CommitOnStepProperty[] = "_qpb_commitOnStep";
 
 // Number of EditorDialogScope objects alive for an editor (dynamic property).
 inline constexpr char DialogDepthProperty[] = "_qpb_dialogDepth";

@@ -10,7 +10,7 @@ Every change, from a view or from code, goes through the same steps:
 1. The value is converted to the type's storage type (for example a string typed into a spin box becomes an `int`). If
    the conversion fails, the value is rejected.
 2. It is normalized: `Int`, `Int64` and `Double` values are clamped to `Attr::Minimum` / `Attr::Maximum`, and `Double`
-   values are rounded to `Attr::Decimals`.
+   values are rounded to `Attr::Decimals` (unless `Attr::RoundToDecimals` is `false`, see below).
 3. The type's own validation runs (see the table below).
 4. The property's validator runs, if it has one.
 5. A value equal to the current one changes nothing and emits nothing.
@@ -21,6 +21,20 @@ message)`; the views show the message as a tool tip. Numbers are clamped rather 
 that a value set from code behaves like one typed by the user.
 
 Setting a value on a group, or on a property whose type is not registered, returns `false` and emits nothing.
+
+**Doubles with more digits than they show (since 1.9).** With `Attr::RoundToDecimals` set to `false` a `Double` keeps
+every digit it is given and is only clamped to its range; `Attr::Decimals` then sets the digits shown in a cell and in
+the spin box. Showing the value, refreshing the editor, committing an editor the user did not change and
+`resetToDefault()` leave the stored value as it is. A value the user changes in the editor (a step, typed text) is
+stored as the spin box holds it, rounded to its decimals; typing the text that is already shown counts as no change
+(with 0.0125 stored and 0.01 shown, typing 0.01 keeps 0.0125). Serialization keeps the stored number. The default
+`true` rounds as before.
+
+```cpp
+qpb::Property* scale = model.find("scale");   // a Double with decimals 2
+scale->setAttribute(qpb::Attr::RoundToDecimals, false);
+scale->setValue(0.0125);                       // stores 0.0125, shows 0.01
+```
 
 **Changing an attribute never moves a value.** After `setAttribute()` lowers a maximum or a number of decimals, the
 stored value stays as it was, even when it is now outside the range. To bring values inside the current attributes, run

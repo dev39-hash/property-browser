@@ -51,8 +51,10 @@ your own types can define keys of their own (use a prefix such as `"myapp."`). T
 |---|---|---|---|
 | `Minimum`, `Maximum` | Int, Int64, Double | same type as the value; values are clamped | the whole range of the type; none for Double |
 | `Step` | Int, Int64, Double | spin box step | 1 (1.0) |
-| `Decimals` | Double | number of decimals (0 to 15); values are rounded to it | 2 |
+| `Decimals` | Double | number of decimals (0 to 15); values are rounded to it unless `RoundToDecimals` is `false` | 2 |
+| `RoundToDecimals` | Double | `bool`; `false` stores values unrounded (still clamped) and uses `Decimals` for display and the editor only (since 1.9) | `true` |
 | `Prefix`, `Suffix` | Int, Int64, Double | `QString` shown before / after the number | none |
+| `CommitOnStep` | Int, Int64, Double | `bool`; every step of the spin box is committed and the editor stays open (since 1.9) | `false` |
 | `MaxLength` | String | maximum number of characters | unlimited |
 | `Placeholder` | String | placeholder text of the editor | none |
 | `RegularExpression` | String | pattern the whole value must match (`QRegularExpression` syntax) | none |
@@ -185,8 +187,9 @@ property is enabled and not read-only and its type is registered. Groups are nev
 - `PropertyDelegate`: the tree view's delegate (Tree and List modes); set it on any `QAbstractItemView` showing a
   `PropertyModel`. `PropertyFormView` has editors of its own.
 - `EditorFactory::global()`: `registerEditor(id, handler)`, `replaceEditor()`, `handler()`, `handlerFor(property)`,
-  `createEditor(parent, property)`, `contains()`, `editors()`, and the static `notifyCommit(editor)`. `EditorHandler`
-  fields: `createEditor`, `setEditorData`, `editorData` (required), `applyAttributes`, `paint` (optional).
+  `createEditor(parent, property)`, `contains()`, `editors()`, and the static `notifyCommit(editor)` and
+  `notifyCommitKeepOpen(editor)` (since 1.9). `EditorHandler` fields: `createEditor`, `setEditorData`, `editorData`
+  (required), `applyAttributes`, `paint` (optional).
 - `EditorDialogScope`: keeps an editor open while it shows a dialog.
 
 See [Views](guide/views.md) for how the views behave and [Custom types and editors](guide/custom-types-and-editors.md)

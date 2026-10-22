@@ -59,6 +59,34 @@ public:
         emit q->closeEditor(editor, hint);
     }
 
+    // Commits without closing the editor, then shows the model's value in it:
+    // the model may have clamped or normalised the input (also to the value it
+    // already held, which sends no dataChanged), or refused it.
+    void commitKeepOpen(QWidget* editor)
+    {
+        if (!isOpen(editor))
+            return;
+        const QPointer<QWidget> guard(editor);
+        emit q->commitData(editor);
+        if (!guard || !isOpen(editor))
+            return; // a handler changed the tree and the view dropped the editor
+        const QModelIndex index = editor->property(EditorIndexProperty)
+                                      .value<QPersistentModelIndex>();
+        const Property* property = propertyOf(index);
+        const EditorHandler* handler
+            = property ? EditorFactory::global().handlerFor(*property) : nullptr;
+        if (!handler)
+            return;
+        const QVariant current = index.data(Qt::EditRole);
+        const auto known = editors.find(editor);
+        if (known != editors.end()) {
+            known->shown = current;
+            known->hasShown = true;
+        }
+        if (handler->editorData(editor, *property) != current)
+            handler->setEditorData(editor, current, *property);
+    }
+
     // Enter: commit after the event has been processed, so line edits and spin
     // boxes can fix up their text first (as QStyledItemDelegate does).
     void commitAndCloseLater(QWidget* editor)
@@ -128,6 +156,11 @@ PropertyDelegate::PropertyDelegate(QObject* parent)
         [this](QWidget* editor) {
             if (QWidget* owned = d->editorFor(editor))
                 d->commitAndClose(owned, QAbstractItemDelegate::NoHint);
+        });
+    connect(detail::CommitNotifier::instance(), &detail::CommitNotifier::commitKeepOpenRequested,
+        this, [this](QWidget* editor) {
+            if (QWidget* owned = d->editorFor(editor))
+                d->commitKeepOpen(owned);
         });
 }
 

@@ -658,6 +658,9 @@ PropertyFormView::PropertyFormView(QWidget* parent)
     setWidgetResizable(true);
     connect(detail::CommitNotifier::instance(), &detail::CommitNotifier::commitRequested, d.get(),
         [this](QWidget* editor) { d->commitEditor(editor); });
+    // A form's editors stay open anyway: a keep-open request commits as well.
+    connect(detail::CommitNotifier::instance(), &detail::CommitNotifier::commitKeepOpenRequested,
+        d.get(), [this](QWidget* editor) { d->commitEditor(editor); });
     d->rebuild();
 }
 

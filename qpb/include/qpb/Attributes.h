@@ -24,12 +24,24 @@ inline constexpr QLatin1StringView Minimum {"minimum"};
 inline constexpr QLatin1StringView Maximum {"maximum"};
 // Int, Double: spin box step (int / double).
 inline constexpr QLatin1StringView Step {"step"};
-// Double: number of decimals (int). Values are rounded to it. Default 2.
+// Double: number of decimals (int). Values are rounded to it unless
+// RoundToDecimals is false. Default 2.
 inline constexpr QLatin1StringView Decimals {"decimals"};
+// Double: values are rounded to Decimals (bool). Default true. False stores the
+// value as given (still clamped to the range); Decimals then sets only the
+// digits shown and the editor's. An editor that still shows the stored value
+// (rounded to Decimals) counts as unchanged, also when the user typed that text.
+// Since 1.9.
+inline constexpr QLatin1StringView RoundToDecimals {"roundToDecimals"};
 // Int, Double: text shown before the number (QString).
 inline constexpr QLatin1StringView Prefix {"prefix"};
 // Int, Double: text shown after the number (QString).
 inline constexpr QLatin1StringView Suffix {"suffix"};
+// Int, Int64, Double: the spin box commits every step (arrow buttons, arrow
+// keys, mouse wheel, Page Up / Down) and stays open (bool). Default false.
+// Typed text is still committed on Enter or when the editor loses focus.
+// Since 1.9.
+inline constexpr QLatin1StringView CommitOnStep {"commitOnStep"};
 
 // String: maximum number of characters (int).
 inline constexpr QLatin1StringView MaxLength {"maxLength"};
@@ -67,6 +79,8 @@ inline constexpr QLatin1String Step {"step", 4};
 inline constexpr QLatin1String Decimals {"decimals", 8};
 inline constexpr QLatin1String Prefix {"prefix", 6};
 inline constexpr QLatin1String Suffix {"suffix", 6};
+inline constexpr QLatin1String RoundToDecimals {"roundToDecimals", 15};
+inline constexpr QLatin1String CommitOnStep {"commitOnStep", 12};
 inline constexpr QLatin1String MaxLength {"maxLength", 9};
 inline constexpr QLatin1String Placeholder {"placeholder", 11};
 inline constexpr QLatin1String RegularExpression {"regularExpression", 17};

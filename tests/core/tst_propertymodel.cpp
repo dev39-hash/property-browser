@@ -270,6 +270,13 @@ private slots:
     void makeValueDefaultNotifiesTheRow();
     void makeValueDefaultOnGroupsAndTheModel();
     void attributeChangesNeverMoveValues();
+
+    // Doubles stored without rounding.
+    void unroundedDoubleKeepsEveryDigitThroughTheModel();
+    void unroundedDoubleStillClampsThroughTheModel();
+    void unroundedDoubleResetsToItsFullDefault();
+    void roundingDoubleResetsToItsRoundedDefault();
+    void unroundedDoubleSurvivesNormalizingAndDefaults();
 };
 
 void tst_PropertyModel::initTestCase()
@@ -2060,6 +2067,173 @@ void tst_PropertyModel::attributeChangesNeverMoveValues()
     QCOMPARE(values.count(), 0);
     QCOMPARE(user.count(), 0);
     QCOMPARE(batch.count(), 0);
+}
+
+// A double that keeps its digits: application writes, user writes and the
+// cell's roles. The cell shows the decimals; editing and signals carry the value.
+void tst_PropertyModel::unroundedDoubleKeepsEveryDigitThroughTheModel()
+{
+    auto root = PropertyGroup::create(QStringLiteral("root"));
+    root->addDouble(QStringLiteral("scale"), 0.0).attribute(Attr::RoundToDecimals, false);
+    root->addDouble(QStringLiteral("plain"), 0.0);
+    PropertyModel model(std::move(root));
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    QSignalSpy user(&model, &PropertyModel::userValueChanged);
+    const QModelIndex cell = valueIndex(model, QStringLiteral("scale"));
+
+    QVERIFY(model.setValue(QStringLiteral("scale"), 0.0125));
+    QCOMPARE(model.find(QStringLiteral("scale"))->value(), QVariant(0.0125));
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(values.at(0).at(0).toString(), QStringLiteral("scale"));
+    QCOMPARE(values.at(0).at(1), QVariant(0.0125));
+    QCOMPARE(values.at(0).at(2), QVariant(0.0));
+    QCOMPARE(user.count(), 0);
+    QCOMPARE(cell.data(Qt::EditRole), QVariant(0.0125));
+    QCOMPARE(cell.data(Qt::DisplayRole).toString(), QStringLiteral("0.01"));
+    QVERIFY(model.find(QStringLiteral("scale"))->isModified());
+
+    // Writing the same value again, as a user too, is silent.
+    QVERIFY(model.setData(cell, 0.0125, Qt::EditRole));
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(user.count(), 0);
+
+    // A user write keeps the digits as well.
+    QVERIFY(model.setData(cell, 0.0375, Qt::EditRole));
+    QCOMPARE(values.count(), 2);
+    QCOMPARE(values.at(1).at(1), QVariant(0.0375));
+    QCOMPARE(values.at(1).at(2), QVariant(0.0125));
+    QCOMPARE(user.count(), 1);
+    QCOMPARE(user.at(0).at(1), QVariant(0.0375));
+    QCOMPARE(cell.data(Qt::EditRole), QVariant(0.0375));
+    QCOMPARE(cell.data(Qt::DisplayRole).toString(), QStringLiteral("0.04"));
+
+    // What a rounded editor would send is a different value and is stored as sent.
+    QVERIFY(model.setData(cell, 0.04, Qt::EditRole));
+    QCOMPARE(model.find(QStringLiteral("scale"))->value(), QVariant(0.04));
+    QCOMPARE(values.count(), 3);
+
+    // Guard: a property without the attribute still rounds (user and application).
+    QVERIFY(model.setValue(QStringLiteral("plain"), 0.0375));
+    QCOMPARE(model.find(QStringLiteral("plain"))->value(), QVariant(0.04));
+    QVERIFY(model.setData(valueIndex(model, QStringLiteral("plain")), 1234.5678, Qt::EditRole));
+    QCOMPARE(model.find(QStringLiteral("plain"))->value(), QVariant(1234.57));
+}
+
+void tst_PropertyModel::unroundedDoubleStillClampsThroughTheModel()
+{
+    auto root = PropertyGroup::create(QStringLiteral("root"));
+    root->addDouble(QStringLiteral("level"), 0.5)
+        .range(0.0, 10.0)
+        .attribute(Attr::RoundToDecimals, false);
+    PropertyModel model(std::move(root));
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    const QModelIndex cell = valueIndex(model, QStringLiteral("level"));
+
+    QVERIFY(model.setData(cell, 12.3456, Qt::EditRole));
+    QCOMPARE(model.find(QStringLiteral("level"))->value(), QVariant(10.0));
+    QVERIFY(model.setData(cell, -0.5, Qt::EditRole));
+    QCOMPARE(model.find(QStringLiteral("level"))->value(), QVariant(0.0));
+    QVERIFY(model.setData(cell, 9.87654321, Qt::EditRole));
+    QCOMPARE(model.find(QStringLiteral("level"))->value(), QVariant(9.87654321));
+}
+
+// Reset restores the default as it was given, also in a group reset and in
+// resetAllToDefault(); the reset is an application write.
+void tst_PropertyModel::unroundedDoubleResetsToItsFullDefault()
+{
+    auto root = PropertyGroup::create(QStringLiteral("root"));
+    root->addDouble(QStringLiteral("price"), 1234.5678).attribute(Attr::RoundToDecimals, false);
+    PropertyGroup& optics = root->addGroup(QStringLiteral("Optics"));
+    optics.addDouble(QStringLiteral("scale"), 0.0125).attribute(Attr::RoundToDecimals, false);
+    PropertyModel model(std::move(root));
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    Property* price = model.find(QStringLiteral("price"));
+    Property* scale = model.find(QStringLiteral("Optics/scale"));
+    QCOMPARE(price->value(), QVariant(1234.5678));
+    QVERIFY(!price->isModified());
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    QSignalSpy user(&model, &PropertyModel::userValueChanged);
+
+    // One property.
+    QVERIFY(model.setValue(QStringLiteral("price"), 5.0));
+    QVERIFY(price->isModified());
+    QVERIFY(model.resetToDefault(valueIndex(model, QStringLiteral("price"))));
+    QCOMPARE(price->value(), QVariant(1234.5678));
+    QVERIFY(!price->isModified());
+    QCOMPARE(values.count(), 2);
+    QCOMPARE(values.at(1).at(1), QVariant(1234.5678));
+    QCOMPARE(values.at(1).at(2), QVariant(5.0));
+
+    // Property::resetToDefault() directly.
+    QVERIFY(price->setValue(6.0));
+    QVERIFY(price->resetToDefault());
+    QCOMPARE(price->value(), QVariant(1234.5678));
+
+    // A group.
+    QVERIFY(scale->setValue(0.5));
+    QVERIFY(model.resetToDefault(model.indexOf(model.find(QStringLiteral("Optics")))));
+    QCOMPARE(scale->value(), QVariant(0.0125));
+    QVERIFY(!scale->isModified());
+
+    // The whole tree.
+    QVERIFY(price->setValue(7.0));
+    QVERIFY(scale->setValue(0.75));
+    QVERIFY(model.resetAllToDefault());
+    QCOMPARE(price->value(), QVariant(1234.5678));
+    QCOMPARE(scale->value(), QVariant(0.0125));
+    QVERIFY(!price->isModified());
+    QVERIFY(!scale->isModified());
+    QCOMPARE(user.count(), 0);
+}
+
+// Guard (passes without the new attribute): a rounding double resets through the
+// rounding pipeline, so a default with more digits comes back rounded.
+void tst_PropertyModel::roundingDoubleResetsToItsRoundedDefault()
+{
+    auto root = PropertyGroup::create(QStringLiteral("root"));
+    root->addDouble(QStringLiteral("price"), 1234.5678);
+    PropertyModel model(std::move(root));
+    Property* price = model.find(QStringLiteral("price"));
+    QVERIFY(price->setValue(5.0));
+    QVERIFY(model.resetToDefault(valueIndex(model, QStringLiteral("price"))));
+    QCOMPARE(price->value(), QVariant(1234.57));
+}
+
+// Normalising, making defaults and changing "decimals" do not take digits away.
+void tst_PropertyModel::unroundedDoubleSurvivesNormalizingAndDefaults()
+{
+    auto root = PropertyGroup::create(QStringLiteral("root"));
+    root->addDouble(QStringLiteral("scale"), 0.0125).attribute(Attr::RoundToDecimals, false);
+    root->addDouble(QStringLiteral("gain"), 0.0375).attribute(Attr::RoundToDecimals, false);
+    PropertyModel model(std::move(root));
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    Property* scale = model.find(QStringLiteral("scale"));
+    Property* gain = model.find(QStringLiteral("gain"));
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+
+    QVERIFY(scale->normalizeValue());
+    QVERIFY(model.normalizeAllValues());
+    QCOMPARE(scale->value(), QVariant(0.0125));
+    QCOMPARE(gain->value(), QVariant(0.0375));
+    QCOMPARE(values.count(), 0);
+
+    scale->setAttribute(Attr::Decimals, 1);
+    QVERIFY(model.normalizeAllValues());
+    QCOMPARE(scale->value(), QVariant(0.0125));
+    QCOMPARE(values.count(), 0);
+    QCOMPARE(valueIndex(model, QStringLiteral("scale")).data(Qt::DisplayRole).toString(),
+        QStringLiteral("0"));
+
+    // The current values become the defaults as they are.
+    QVERIFY(scale->setValue(0.0625));
+    QVERIFY(gain->setValue(0.0625));
+    model.makeAllValuesDefault();
+    QCOMPARE(scale->defaultValue(), QVariant(0.0625));
+    QVERIFY(!scale->isModified());
+    QVERIFY(scale->setValue(9.0));
+    QVERIFY(scale->resetToDefault());
+    QCOMPARE(scale->value(), QVariant(0.0625));
 }
 
 QTEST_APPLESS_MAIN(tst_PropertyModel)

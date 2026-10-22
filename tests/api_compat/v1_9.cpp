@@ -12,6 +12,7 @@
 #include <QApplication>
 #include <QIdentityProxyModel>
 #include <QLabel>
+#include <QSpinBox>
 #include <QTest>
 
 #include <type_traits>
@@ -56,6 +57,9 @@ private slots:
     void onUserValueChanged();
     void normalizeValues();
     void makeValuesDefault();
+    void notifyCommitKeepOpen();
+    void commitOnStep();
+    void roundToDecimals();
 };
 
 void tst_ApiCompat_1_9::cleanup()
@@ -232,6 +236,86 @@ void tst_ApiCompat_1_9::makeValuesDefault()
     QVERIFY(!n->isModified());
     QVERIFY(!m->isModified());
     QCOMPARE(m->defaultValue().toInt(), 21);
+}
+
+void tst_ApiCompat_1_9::notifyCommitKeepOpen()
+{
+    static_assert(std::is_same_v<decltype(&qpb::EditorFactory::notifyCommitKeepOpen),
+        void (*)(QWidget*)>);
+    // Neither an editor of no view nor a null pointer is an error.
+    qpb::EditorFactory::notifyCommitKeepOpen(nullptr);
+    QWidget loose;
+    qpb::EditorFactory::notifyCommitKeepOpen(&loose);
+
+    // A form view commits the editor's value and keeps it.
+    auto root = qpb::PropertyGroup::create(QStringLiteral("root"));
+    root->addInt(QStringLiteral("n"), 1);
+    qpb::PropertyModel model(std::move(root));
+    qpb::PropertyFormView view;
+    view.setModel(&model);
+    auto* spinBox = qobject_cast<QSpinBox*>(view.editor(QStringLiteral("n")));
+    QVERIFY(spinBox);
+    spinBox->setValue(7);
+    qpb::EditorFactory::notifyCommitKeepOpen(spinBox);
+    QCOMPARE(model.find(QStringLiteral("n"))->value().toInt(), 7);
+    QCOMPARE(view.editor(QStringLiteral("n")), spinBox);
+}
+
+void tst_ApiCompat_1_9::commitOnStep()
+{
+    QCOMPARE(QString(qpb::Attr::CommitOnStep), QStringLiteral("commitOnStep"));
+
+    auto root = qpb::PropertyGroup::create(QStringLiteral("root"));
+    root->addInt(QStringLiteral("n"), 1);
+    root->addDouble(QStringLiteral("d"), 1.0);
+    qpb::PropertyModel model(std::move(root));
+    qpb::Property* n = model.find(QStringLiteral("n"));
+    qpb::Property* d = model.find(QStringLiteral("d"));
+    qpb::PropertyFormView view;
+    view.setModel(&model);
+    auto* intBox = qobject_cast<QSpinBox*>(view.editor(QStringLiteral("n")));
+    auto* doubleBox = qobject_cast<QDoubleSpinBox*>(view.editor(QStringLiteral("d")));
+    QVERIFY(intBox && doubleBox);
+
+    // Off by default: a step stays in the editor.
+    intBox->stepBy(1);
+    QCOMPARE(n->value().toInt(), 1);
+
+    n->setAttribute(qpb::Attr::CommitOnStep, true);
+    d->setAttribute(qpb::Attr::CommitOnStep, true);
+    QCOMPARE(view.editor(QStringLiteral("n")), intBox);
+    QCOMPARE(view.editor(QStringLiteral("d")), doubleBox);
+    intBox->stepBy(1);
+    QCOMPARE(n->value().toInt(), 2);
+    doubleBox->stepBy(-1);
+    QCOMPARE(d->value().toDouble(), 0.0);
+}
+
+void tst_ApiCompat_1_9::roundToDecimals()
+{
+    QCOMPARE(QString(qpb::Attr::RoundToDecimals), QStringLiteral("roundToDecimals"));
+
+    auto root = qpb::PropertyGroup::create(QStringLiteral("root"));
+    root->addDouble(QStringLiteral("rounded"), 0.0).decimals(2);
+    root->addDouble(QStringLiteral("exact"), 0.0).decimals(2);
+    qpb::PropertyModel model(std::move(root));
+    qpb::Property* rounded = model.find(QStringLiteral("rounded"));
+    qpb::Property* exact = model.find(QStringLiteral("exact"));
+    exact->setAttribute(qpb::Attr::RoundToDecimals, false);
+
+    QVERIFY(rounded->setValue(0.0125));
+    QCOMPARE(rounded->value().toDouble(), 0.01);
+    QVERIFY(exact->setValue(0.0125));
+    QCOMPARE(exact->value().toDouble(), 0.0125);
+
+    // The editor writes back what is stored when the user changed nothing.
+    qpb::PropertyFormView view;
+    view.setModel(&model);
+    auto* spinBox = qobject_cast<QDoubleSpinBox*>(view.editor(QStringLiteral("exact")));
+    QVERIFY(spinBox);
+    QCOMPARE(spinBox->value(), 0.01);
+    qpb::EditorFactory::notifyCommitKeepOpen(spinBox);
+    QCOMPARE(exact->value().toDouble(), 0.0125);
 }
 
 QTEST_MAIN(tst_ApiCompat_1_9)

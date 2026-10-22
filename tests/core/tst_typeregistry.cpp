@@ -66,6 +66,15 @@ private slots:
     void registerCustomType();
     void reservedIdsAreRejected();
     void replaceType();
+
+    // Doubles stored without rounding.
+    void roundToDecimalsKeyAndSpelling();
+    void doubleWithoutRoundingKeepsEveryDigit();
+    void doubleWithoutRoundingStillClamps();
+    void doubleWithoutRoundingDisplaysItsDecimals();
+    void doubleWithoutRoundingConvertsOtherTypes();
+    void doubleRoundsByDefaultAndWhenAskedTo();
+    void roundingAttributeChangesNeverMoveTheValue();
 };
 
 void tst_TypeRegistry::initTestCase()
@@ -360,6 +369,167 @@ void tst_TypeRegistry::replaceType()
     auto root = PropertyGroup::create(QStringLiteral("r"));
     QCOMPARE(display(root->add(id, QStringLiteral("p"), 1)), QStringLiteral("second"));
     QVERIFY(!registry.replaceType(QStringLiteral("test.missing"), second));
+}
+
+// The attribute key is the documented spelling; a map written with that spelling
+// switches rounding off.
+void tst_TypeRegistry::roundToDecimalsKeyAndSpelling()
+{
+    QCOMPARE(QString(Attr::RoundToDecimals), QStringLiteral("roundToDecimals"));
+
+    auto root = PropertyGroup::create(QStringLiteral("r"));
+    Property& d = root->addDouble(QStringLiteral("d"), 0.0);
+    d.setAttribute(QStringLiteral("roundToDecimals"), false);
+    QVERIFY(d.setValue(0.0125));
+    QCOMPARE(d.value(), QVariant(0.0125));
+}
+
+// With roundToDecimals false every digit of an assigned double is stored,
+// whatever "decimals" says (the default of 2 included).
+void tst_TypeRegistry::doubleWithoutRoundingKeepsEveryDigit()
+{
+    auto root = PropertyGroup::create(QStringLiteral("r"));
+    Property& d = root->addDouble(QStringLiteral("d"), 0.0).attribute(Attr::RoundToDecimals, false);
+
+    QVERIFY(d.setValue(0.0125));
+    QCOMPARE(d.value(), QVariant(0.0125));
+    QVERIFY(d.setValue(1234.5678));
+    QCOMPARE(d.value(), QVariant(1234.5678));
+    QVERIFY(d.setValue(-0.000123456));
+    QCOMPARE(d.value(), QVariant(-0.000123456));
+    QVERIFY(d.setValue(0.3333333333333333));
+    QCOMPARE(d.value(), QVariant(0.3333333333333333));
+    QCOMPARE(d.value().userType(), qMetaTypeId<double>());
+
+    d.setAttribute(Attr::Decimals, 0);
+    QVERIFY(d.setValue(2.71828));
+    QCOMPARE(d.value(), QVariant(2.71828));
+    d.setAttribute(Attr::Decimals, 6);
+    QVERIFY(d.setValue(2.718281828));
+    QCOMPARE(d.value(), QVariant(2.718281828));
+
+    // Values beyond the range of exact decimals, and the infinities, are kept too.
+    QVERIFY(d.setValue(123456789012.345678));
+    QCOMPARE(d.value(), QVariant(123456789012.345678));
+    QVERIFY(d.setValue(std::numeric_limits<double>::infinity()));
+    QVERIFY(qIsInf(d.value().toDouble()));
+}
+
+// Unrounded values are still limited to the range.
+void tst_TypeRegistry::doubleWithoutRoundingStillClamps()
+{
+    auto root = PropertyGroup::create(QStringLiteral("r"));
+    Property& d = root->addDouble(QStringLiteral("d"), 0.0)
+                      .range(-1.0, 1.0)
+                      .attribute(Attr::RoundToDecimals, false);
+    QVERIFY(d.setValue(0.123456));
+    QCOMPARE(d.value(), QVariant(0.123456));
+    QVERIFY(d.setValue(5.0));
+    QCOMPARE(d.value(), QVariant(1.0));
+    QVERIFY(d.setValue(-3.14159));
+    QCOMPARE(d.value(), QVariant(-1.0));
+
+    // A limit with more digits than "decimals" is reached exactly.
+    Property& narrow = root->addDouble(QStringLiteral("narrow"), 0.0)
+                           .range(0.0, 0.0125)
+                           .attribute(Attr::RoundToDecimals, false);
+    QVERIFY(narrow.setValue(7.0));
+    QCOMPARE(narrow.value(), QVariant(0.0125));
+    QVERIFY(narrow.setValue(0.0124));
+    QCOMPARE(narrow.value(), QVariant(0.0124));
+
+    // The type's own checks are unchanged: not a number is refused.
+    QVERIFY(!d.setValue(std::numeric_limits<double>::quiet_NaN()));
+    QCOMPARE(d.value(), QVariant(-1.0));
+}
+
+// "decimals" then only decides the displayed digits (trailing zeros removed,
+// prefix and suffix as before); the stored value does not change.
+void tst_TypeRegistry::doubleWithoutRoundingDisplaysItsDecimals()
+{
+    auto root = PropertyGroup::create(QStringLiteral("r"));
+    Property& d = root->addDouble(QStringLiteral("d"), 0.0)
+                      .suffix(QStringLiteral(" mm"))
+                      .attribute(Attr::RoundToDecimals, false);
+
+    QVERIFY(d.setValue(0.0125));
+    QCOMPARE(display(d), QStringLiteral("0.01 mm"));
+    QVERIFY(d.setValue(1234.5678));
+    QCOMPARE(display(d), QStringLiteral("1234.57 mm"));
+    QCOMPARE(d.value(), QVariant(1234.5678));
+
+    d.setAttribute(Attr::Decimals, 4);
+    QCOMPARE(display(d), QStringLiteral("1234.5678 mm"));
+    d.setAttribute(Attr::Decimals, 0);
+    QCOMPARE(display(d), QStringLiteral("1235 mm"));
+    d.setAttribute(Attr::Decimals, 1);
+    QVERIFY(d.setValue(0.5));
+    QCOMPARE(display(d), QStringLiteral("0.5 mm"));
+    QVERIFY(d.setValue(2.0));
+    QCOMPARE(display(d), QStringLiteral("2 mm"));
+}
+
+// Text read from an INI file and integers reach the property as doubles
+// without rounding.
+void tst_TypeRegistry::doubleWithoutRoundingConvertsOtherTypes()
+{
+    auto root = PropertyGroup::create(QStringLiteral("r"));
+    Property& d = root->addDouble(QStringLiteral("d"), 0.0).attribute(Attr::RoundToDecimals, false);
+    QVERIFY(d.setValue(QStringLiteral("1234.5678")));
+    QCOMPARE(d.value(), QVariant(1234.5678));
+    QVERIFY(d.setValue(QStringLiteral("0.0125")));
+    QCOMPARE(d.value(), QVariant(0.0125));
+    QVERIFY(d.setValue(3));
+    QCOMPARE(d.value(), QVariant(3.0));
+    QCOMPARE(d.value().userType(), qMetaTypeId<double>());
+    QVERIFY(!d.setValue(QStringLiteral("abc")));
+    QCOMPARE(d.value(), QVariant(3.0));
+}
+
+// Guard (passes without the new attribute): no attribute and "true" round to
+// the decimals as before.
+void tst_TypeRegistry::doubleRoundsByDefaultAndWhenAskedTo()
+{
+    auto root = PropertyGroup::create(QStringLiteral("r"));
+    Property& plain = root->addDouble(QStringLiteral("plain"), 0.0);
+    Property& asked = root->addDouble(QStringLiteral("asked"), 0.0)
+                          .attribute(Attr::RoundToDecimals, true);
+    Property& three = root->addDouble(QStringLiteral("three"), 0.0)
+                          .decimals(3)
+                          .attribute(Attr::RoundToDecimals, true);
+
+    QVERIFY(plain.setValue(0.0125));
+    QCOMPARE(plain.value(), QVariant(0.01));
+    QVERIFY(plain.setValue(1234.5678));
+    QCOMPARE(plain.value(), QVariant(1234.57));
+    QVERIFY(asked.setValue(0.0125));
+    QCOMPARE(asked.value(), QVariant(0.01));
+    QVERIFY(asked.setValue(1234.5678));
+    QCOMPARE(asked.value(), QVariant(1234.57));
+    QVERIFY(three.setValue(2.34567));
+    QCOMPARE(three.value(), QVariant(2.346));
+    QCOMPARE(display(three), QStringLiteral("2.346"));
+}
+
+// Guard for the rule that attribute changes never move a stored value: turning
+// rounding on again keeps the digits until the value is written or normalised.
+void tst_TypeRegistry::roundingAttributeChangesNeverMoveTheValue()
+{
+    auto root = PropertyGroup::create(QStringLiteral("r"));
+    Property& d = root->addDouble(QStringLiteral("d"), 0.0).attribute(Attr::RoundToDecimals, false);
+    QVERIFY(d.setValue(0.0125));
+
+    d.setAttribute(Attr::RoundToDecimals, true);
+    QCOMPARE(d.value(), QVariant(0.0125));
+    QVERIFY(d.normalizeValue());
+    QCOMPARE(d.value(), QVariant(0.01));
+
+    d.setAttribute(Attr::RoundToDecimals, false);
+    QCOMPARE(d.value(), QVariant(0.01)); // nothing brings the digits back
+    QVERIFY(d.setValue(0.0125));
+    QCOMPARE(d.value(), QVariant(0.0125));
+    QVERIFY(d.normalizeValue()); // keeps them
+    QCOMPARE(d.value(), QVariant(0.0125));
 }
 
 QTEST_APPLESS_MAIN(tst_TypeRegistry)

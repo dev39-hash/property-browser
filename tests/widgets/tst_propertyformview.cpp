@@ -9,9 +9,12 @@
 #include <QComboBox>
 #include <QContextMenuEvent>
 #include <QDoubleSpinBox>
+#include <QElapsedTimer>
+#include <QEventLoop>
 #include <QIdentityProxyModel>
 #include <QLabel>
 #include <QLineEdit>
+#include <QLocale>
 #include <QMenu>
 #include <QPixmap>
 #include <QPlainTextEdit>
@@ -19,15 +22,19 @@
 #include <QPushButton>
 #include <QSignalSpy>
 #include <QSpinBox>
+#include <QStyle>
+#include <QStyleOptionSpinBox>
 #include <QTest>
 #include <QTimer>
 #include <QToolButton>
 #include <QToolTip>
 #include <QVBoxLayout>
+#include <QWheelEvent>
 
 #include <algorithm>
 #include <memory>
 
+#include "widgets/Int64SpinBox_p.h"
 #include "widgets/PathEdit_p.h"
 
 using namespace qpb;
@@ -391,6 +398,29 @@ private slots:
     void commitWithUserHandlerChangingTree();
     void groupResetWithUserHandlerChangingTree_data();
     void groupResetWithUserHandlerChangingTree();
+
+    // Committing without closing, and spin boxes that commit on every step.
+    void commitOnStepCommitsEachStep_data();
+    void commitOnStepCommitsEachStep();
+    void stepsWithoutCommitOnStepDoNotCommit_data();
+    void stepsWithoutCommitOnStepDoNotCommit();
+    void typedTextWaitsForEnterOrFocusOutAndSurvivesRefreshes_data();
+    void typedTextWaitsForEnterOrFocusOutAndSurvivesRefreshes();
+    void stepAtALimitCommitsNothing_data();
+    void stepAtALimitCommitsNothing();
+    void normalisedStepShowsTheModelsValue_data();
+    void normalisedStepShowsTheModelsValue();
+    void openEditorFollowsCommitOnStepChanges();
+    void keepOpenRequestCommitsLikeACommitRequest_data();
+    void keepOpenRequestCommitsLikeACommitRequest();
+    void keepOpenRequestShowsTheModelsValue();
+    void keepOpenRequestRejectedValueShowsError();
+
+    // Doubles stored without rounding.
+    void unchangedDoubleEditorKeepsTheStoredValue_data();
+    void unchangedDoubleEditorKeepsTheStoredValue();
+    void changedDoubleEditorStoresTheSpinBoxValue();
+    void commitOnStepStoresTheSpinBoxValueOfAnUnroundedDouble();
 
 private:
     // Shows the form through a MarkProxy over the fixture's model.
@@ -2519,6 +2549,748 @@ void tst_PropertyFormView::groupResetWithUserHandlerChangingTree()
         QVERIFY(!f->model.find(QStringLiteral("Camera/fov")));
         QVERIFY(!f->view->editor(QStringLiteral("Camera/fov")));
     }
+}
+
+namespace {
+
+enum class Spin { Int, Int64, Double };
+enum class Commit { Unset, Off, On };
+enum class Step {
+    UpKey,
+    DownKey,
+    PageUpKey,
+    PageDownKey,
+    WheelUp,
+    WheelDown,
+    UpButton,
+    DownButton,
+};
+
+const char* const SpinNames[] = {"int", "int64", "double"};
+const char* const StepNames[] = {"upKey", "downKey", "pageUpKey", "pageDownKey", "wheelUp",
+    "wheelDown", "upButton", "downButton"};
+const QString SpinPath = QStringLiteral("spin");
+
+// A spin-box property at the end of the tree: 500 in 0..1000, step 5.
+Property& addSpinProperty(PropertyModel& model, Spin type, Commit commit)
+{
+    PropertyGroup& root = *model.root();
+    Property* property = nullptr;
+    switch (type) {
+    case Spin::Int:
+        property = &root.addInt(SpinPath, 500).range(0, 1000).step(5).property();
+        break;
+    case Spin::Int64:
+        property = &root.addInt64(SpinPath, 500).range(0, 1000).step(5).property();
+        break;
+    case Spin::Double:
+        property = &root.addDouble(SpinPath, 500.0).range(0.0, 1000.0).step(5.0).property();
+        break;
+    }
+    if (commit != Commit::Unset)
+        property->setAttribute(Attr::CommitOnStep, commit == Commit::On);
+    return *property;
+}
+
+// A whole number as the model stores it for type.
+QVariant spinNumber(Spin type, int number)
+{
+    switch (type) {
+    case Spin::Int:
+        return QVariant(number);
+    case Spin::Int64:
+        return QVariant::fromValue(qint64(number));
+    case Spin::Double:
+        break;
+    }
+    return QVariant(double(number));
+}
+
+// The value the spin box shows, as the model would store it.
+QVariant shownBy(Spin type, QAbstractSpinBox* spinBox)
+{
+    switch (type) {
+    case Spin::Int:
+        return QVariant(static_cast<QSpinBox*>(spinBox)->value());
+    case Spin::Int64:
+        return QVariant::fromValue(static_cast<detail::Int64SpinBox*>(spinBox)->value());
+    case Spin::Double:
+        break;
+    }
+    return QVariant(static_cast<QDoubleSpinBox*>(spinBox)->value());
+}
+
+bool stepsUp(Step step)
+{
+    return step == Step::UpKey || step == Step::PageUpKey || step == Step::WheelUp
+        || step == Step::UpButton;
+}
+
+// One step of the spin box's single step (not a page).
+bool isSingleStep(Step step)
+{
+    return step != Step::PageUpKey && step != Step::PageDownKey;
+}
+
+void wheelOnce(QWidget* widget, int notches)
+{
+    const QPointF position = QPointF(widget->rect().center());
+    QWheelEvent event(position, QPointF(widget->mapToGlobal(position.toPoint())), QPoint(),
+        QPoint(0, 120 * notches), Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+    QApplication::sendEvent(widget, &event);
+}
+
+QPoint spinButtonPoint(const QAbstractSpinBox* spinBox, QStyle::SubControl control)
+{
+    QStyleOptionSpinBox option;
+    option.initFrom(spinBox);
+    option.frame = spinBox->hasFrame();
+    option.buttonSymbols = spinBox->buttonSymbols();
+    option.stepEnabled = QAbstractSpinBox::StepUpEnabled | QAbstractSpinBox::StepDownEnabled;
+    option.subControls = QStyle::SC_All;
+    return spinBox->style()->subControlRect(QStyle::CC_SpinBox, &option, control, spinBox).center();
+}
+
+// Steps spinBox the way a user does.
+void performStep(QAbstractSpinBox* spinBox, Step step)
+{
+    switch (step) {
+    case Step::UpKey:
+        QTest::keyClick(spinBox, Qt::Key_Up);
+        break;
+    case Step::DownKey:
+        QTest::keyClick(spinBox, Qt::Key_Down);
+        break;
+    case Step::PageUpKey:
+        QTest::keyClick(spinBox, Qt::Key_PageUp);
+        break;
+    case Step::PageDownKey:
+        QTest::keyClick(spinBox, Qt::Key_PageDown);
+        break;
+    case Step::WheelUp:
+        wheelOnce(spinBox, 1);
+        break;
+    case Step::WheelDown:
+        wheelOnce(spinBox, -1);
+        break;
+    case Step::UpButton:
+        QTest::mouseClick(
+            spinBox, Qt::LeftButton, {}, spinButtonPoint(spinBox, QStyle::SC_SpinBoxUp));
+        break;
+    case Step::DownButton:
+        QTest::mouseClick(
+            spinBox, Qt::LeftButton, {}, spinButtonPoint(spinBox, QStyle::SC_SpinBoxDown));
+        break;
+    }
+}
+
+// True when the application's focus is on widget or one of its children.
+bool hasFocusWithin(const QWidget* widget)
+{
+    for (const QWidget* focus = QApplication::focusWidget(); focus; focus = focus->parentWidget()) {
+        if (focus == widget)
+            return true;
+    }
+    return false;
+}
+
+// Runs the zero-delay timers that were started before this call (the form
+// commits on Enter from one), so that "nothing happened" can be checked.
+bool timersDrained()
+{
+    bool done = false;
+    QTimer::singleShot(0, qApp, [&done] { done = true; });
+    QElapsedTimer limit;
+    limit.start();
+    while (!done && limit.elapsed() < 2000)
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+    return done;
+}
+
+// A type whose values snap to multiples of ten, edited by the editor of Int.
+const TypeId SnapType = QStringLiteral("test.snapToTen");
+
+void registerSnapType()
+{
+    if (!TypeRegistry::global().contains(SnapType)) {
+        TypeHandler type;
+        type.normalize = [](const QVariant& value, const Property&) {
+            return QVariant(qRound(value.toInt() / 10.0) * 10);
+        };
+        QVERIFY(TypeRegistry::global().registerType<int>(SnapType, type));
+    }
+    if (!EditorFactory::global().contains(SnapType))
+        QVERIFY(EditorFactory::global().registerEditor(
+            SnapType, *EditorFactory::global().handler(Types::Int)));
+}
+
+// An int editor that is a button counting up on every click and committing at
+// once: with notifyCommitKeepOpen() when the property's "test.keepOpen" is
+// true, with notifyCommit() otherwise. The type limits values to
+// "test.cap" (1000 unless set).
+const TypeId ClickerType = QStringLiteral("test.clicker");
+
+void registerClicker()
+{
+    if (!TypeRegistry::global().contains(ClickerType)) {
+        TypeHandler type;
+        type.normalize = [](const QVariant& value, const Property& property) {
+            return QVariant(
+                qMin(value.toInt(), property.attribute(QStringLiteral("test.cap"), 1000).toInt()));
+        };
+        QVERIFY(TypeRegistry::global().registerType<int>(ClickerType, type));
+    }
+    if (EditorFactory::global().contains(ClickerType))
+        return;
+    EditorHandler handler;
+    handler.createEditor = [](QWidget* parent, const Property& property) {
+        auto* button = new QPushButton(parent);
+        const bool keepOpen = property.attribute(QStringLiteral("test.keepOpen")).toBool();
+        // Called through the button: MSVC 2019 warns (C4573) on QObject::connect here.
+        button->connect(button, &QPushButton::clicked, button, [button, keepOpen] {
+            button->setText(QString::number(button->text().toInt() + 1));
+            if (keepOpen)
+                EditorFactory::notifyCommitKeepOpen(button);
+            else
+                EditorFactory::notifyCommit(button);
+        });
+        return button;
+    };
+    handler.setEditorData = [](QWidget* editor, const QVariant& value, const Property&) {
+        static_cast<QPushButton*>(editor)->setText(value.toString());
+    };
+    handler.editorData = [](QWidget* editor, const Property&) {
+        return QVariant(static_cast<QPushButton*>(editor)->text().toInt());
+    };
+    QVERIFY(EditorFactory::global().registerEditor(ClickerType, handler));
+}
+
+Property& addClicker(PropertyModel& model, const QString& id, int value, bool keepOpen)
+{
+    Property& property = model.root()->add(ClickerType, id, value);
+    property.setAttribute(QStringLiteral("test.keepOpen"), keepOpen);
+    return property;
+}
+
+// A double that keeps its digits (0.0125, two decimals), and an int after it.
+const QString UnroundedPath = QStringLiteral("unrounded");
+
+Property& addUnroundedDouble(PropertyModel& model)
+{
+    Property& property = model.root()
+                             ->addDouble(UnroundedPath, 0.0125)
+                             .decimals(2)
+                             .attribute(Attr::RoundToDecimals, false)
+                             .property();
+    model.root()->addInt(QStringLiteral("after"), 1);
+    return property;
+}
+
+} // namespace
+
+void tst_PropertyFormView::commitOnStepCommitsEachStep_data()
+{
+    QTest::addColumn<int>("type");
+    QTest::addColumn<int>("step");
+    for (int type = 0; type < 3; ++type) {
+        for (int step = 0; step < 8; ++step)
+            QTest::newRow(qPrintable(QString::fromLatin1(SpinNames[type]) + QLatin1Char('/')
+                              + QLatin1String(StepNames[step])))
+                << type << step;
+    }
+}
+
+// Each step of a spin box commits, once, and the editor stays where it is,
+// focused, showing the model's value.
+void tst_PropertyFormView::commitOnStepCommitsEachStep()
+{
+    QFETCH(int, type);
+    QFETCH(int, step);
+    const Spin spin = Spin(type);
+    const Step how = Step(step);
+    addSpinProperty(f->model, spin, Commit::On);
+    auto* spinBox = qobject_cast<QAbstractSpinBox*>(f->view->editor(SpinPath));
+    QVERIFY(spinBox);
+    f->window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&f->window));
+    spinBox->setFocus();
+    QTRY_VERIFY(hasFocusWithin(spinBox));
+    QSignalSpy values(&f->model, &PropertyModel::valueChanged);
+    QSignalSpy user(&f->model, &PropertyModel::userValueChanged);
+    QCOMPARE(f->stored(SpinPath), spinNumber(spin, 500));
+
+    for (int round = 1; round <= 2; ++round) {
+        const QVariant previous = f->stored(SpinPath);
+        performStep(spinBox, how);
+        QTRY_COMPARE(values.count(), round);
+        QVERIFY(timersDrained());
+        QCOMPARE(values.count(), round); // one commit per step
+        QCOMPARE(user.count(), round);
+        QCOMPARE(f->view->editor(SpinPath), spinBox);
+        QVERIFY(hasFocusWithin(spinBox));
+
+        const QVariant now = f->stored(SpinPath);
+        QCOMPARE(user.at(round - 1).at(0).toString(), SpinPath);
+        QCOMPARE(user.at(round - 1).at(1), now);
+        QCOMPARE(user.at(round - 1).at(2), previous);
+        QCOMPARE(shownBy(spin, spinBox), now);
+        if (isSingleStep(how)) {
+            QCOMPARE(now, spinNumber(spin, 500 + (stepsUp(how) ? 5 : -5) * round));
+        } else if (stepsUp(how)) {
+            QVERIFY(now.toDouble() > previous.toDouble());
+        } else {
+            QVERIFY(now.toDouble() < previous.toDouble());
+        }
+    }
+}
+
+void tst_PropertyFormView::stepsWithoutCommitOnStepDoNotCommit_data()
+{
+    QTest::addColumn<int>("type");
+    QTest::addColumn<int>("commit");
+    QTest::addColumn<int>("step");
+    QTest::addColumn<bool>("enter"); // else the focus leaves the editor
+    const char* const modes[] = {"unset", "off"};
+    const Step steps[] = {Step::UpKey, Step::DownKey, Step::PageUpKey, Step::WheelUp,
+        Step::UpButton};
+    for (int type = 0; type < 3; ++type) {
+        for (int mode = 0; mode < 2; ++mode) {
+            for (const Step step : steps) {
+                QTest::newRow(qPrintable(QString::fromLatin1(SpinNames[type]) + QLatin1Char('/')
+                                  + QLatin1String(modes[mode]) + QLatin1Char('/')
+                                  + QLatin1String(StepNames[int(step)]) + QLatin1String("/enter")))
+                    << type << mode << int(step) << true;
+            }
+            QTest::newRow(qPrintable(QString::fromLatin1(SpinNames[type]) + QLatin1Char('/')
+                              + QLatin1String(modes[mode]) + QLatin1String("/upKey/focusOut")))
+                << type << mode << int(Step::UpKey) << false;
+        }
+    }
+}
+
+// Guard (passes without the new attribute): without commitOnStep, or with it
+// off, steps only move the spin box; Enter or leaving the editor commits.
+void tst_PropertyFormView::stepsWithoutCommitOnStepDoNotCommit()
+{
+    QFETCH(int, type);
+    QFETCH(int, commit);
+    QFETCH(int, step);
+    QFETCH(bool, enter);
+    const Spin spin = Spin(type);
+    const Step how = Step(step);
+    addSpinProperty(f->model, spin, commit == 0 ? Commit::Unset : Commit::Off);
+    auto* spinBox = qobject_cast<QAbstractSpinBox*>(f->view->editor(SpinPath));
+    QVERIFY(spinBox);
+    f->window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&f->window));
+    spinBox->setFocus();
+    QTRY_VERIFY(hasFocusWithin(spinBox));
+    QSignalSpy values(&f->model, &PropertyModel::valueChanged);
+    QSignalSpy user(&f->model, &PropertyModel::userValueChanged);
+
+    performStep(spinBox, how);
+    QVERIFY(timersDrained());
+    QCOMPARE(values.count(), 0);
+    QCOMPARE(user.count(), 0);
+    QCOMPARE(f->stored(SpinPath), spinNumber(spin, 500));
+    const QVariant stepped = shownBy(spin, spinBox);
+    if (isSingleStep(how))
+        QCOMPARE(stepped, spinNumber(spin, stepsUp(how) ? 505 : 495));
+    else
+        QVERIFY(stepsUp(how) ? stepped.toDouble() > 500 : stepped.toDouble() < 500);
+
+    if (enter)
+        QTest::keyClick(spinBox, Qt::Key_Return);
+    else
+        f->other->setFocus();
+    QTRY_COMPARE(values.count(), 1);
+    QCOMPARE(f->stored(SpinPath), stepped);
+    QCOMPARE(user.count(), 1);
+}
+
+void tst_PropertyFormView::typedTextWaitsForEnterOrFocusOutAndSurvivesRefreshes_data()
+{
+    QTest::addColumn<int>("type");
+    QTest::addColumn<bool>("enter");
+    for (int type = 0; type < 3; ++type) {
+        QTest::newRow(qPrintable(QString::fromLatin1(SpinNames[type]) + QLatin1String("/enter")))
+            << type << true;
+        QTest::newRow(qPrintable(QString::fromLatin1(SpinNames[type]) + QLatin1String("/focusOut")))
+            << type << false;
+    }
+}
+
+// A step commits at once; text typed afterwards stays in the editor through
+// refreshes of the row and waits for Enter or focus-out.
+void tst_PropertyFormView::typedTextWaitsForEnterOrFocusOutAndSurvivesRefreshes()
+{
+    QFETCH(int, type);
+    QFETCH(bool, enter);
+    const Spin spin = Spin(type);
+    MarkProxy* marks = useProxy();
+    addSpinProperty(f->model, spin, Commit::On);
+    auto* spinBox = qobject_cast<QAbstractSpinBox*>(f->view->editor(SpinPath));
+    QVERIFY(spinBox);
+    f->window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&f->window));
+    spinBox->setFocus();
+    QTRY_VERIFY(hasFocusWithin(spinBox));
+    QSignalSpy values(&f->model, &PropertyModel::valueChanged);
+    QSignalSpy user(&f->model, &PropertyModel::userValueChanged);
+
+    performStep(spinBox, Step::UpKey);
+    QTRY_COMPARE(values.count(), 1);
+    QCOMPARE(f->stored(SpinPath), spinNumber(spin, 505));
+
+    spinBox->selectAll();
+    QTest::keyClicks(spinBox, QStringLiteral("35"));
+    QCOMPARE(spinBox->text(), QStringLiteral("35"));
+    marks->setToolTip(SpinPath, QStringLiteral("first"));
+    marks->refreshAll({});
+    marks->setToolTip(SpinPath, QStringLiteral("second"));
+    marks->refresh(SpinPath, {Qt::ToolTipRole});
+    QVERIFY(timersDrained());
+    QCOMPARE(spinBox->text(), QStringLiteral("35")); // the refreshes left the typing alone
+    QVERIFY(hasFocusWithin(spinBox));
+    QCOMPARE(values.count(), 1); // and typing alone committed nothing
+    QCOMPARE(f->stored(SpinPath), spinNumber(spin, 505));
+
+    if (enter)
+        QTest::keyClick(spinBox, Qt::Key_Return);
+    else
+        f->other->setFocus();
+    QTRY_COMPARE(values.count(), 2);
+    QCOMPARE(f->stored(SpinPath), spinNumber(spin, 35));
+    QCOMPARE(user.count(), 2);
+    QCOMPARE(user.at(1).at(1), spinNumber(spin, 35));
+    QCOMPARE(user.at(1).at(2), spinNumber(spin, 505));
+}
+
+void tst_PropertyFormView::stepAtALimitCommitsNothing_data()
+{
+    QTest::addColumn<int>("type");
+    for (int type = 0; type < 3; ++type)
+        QTest::newRow(SpinNames[type]) << type;
+}
+
+// At the limit a step does not move the spin box: nothing is written, and
+// the step the other way commits.
+void tst_PropertyFormView::stepAtALimitCommitsNothing()
+{
+    QFETCH(int, type);
+    const Spin spin = Spin(type);
+    addSpinProperty(f->model, spin, Commit::On);
+    QVERIFY(f->model.setValue(SpinPath, spinNumber(spin, 1000)));
+    auto* spinBox = qobject_cast<QAbstractSpinBox*>(f->view->editor(SpinPath));
+    QVERIFY(spinBox);
+    f->window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&f->window));
+    spinBox->setFocus();
+    QTRY_VERIFY(hasFocusWithin(spinBox));
+    QCOMPARE(shownBy(spin, spinBox), spinNumber(spin, 1000));
+    QSignalSpy values(&f->model, &PropertyModel::valueChanged);
+
+    performStep(spinBox, Step::UpKey);
+    performStep(spinBox, Step::WheelUp);
+    performStep(spinBox, Step::PageUpKey);
+    QVERIFY(timersDrained());
+    QCOMPARE(values.count(), 0);
+    QCOMPARE(f->stored(SpinPath), spinNumber(spin, 1000));
+    QCOMPARE(shownBy(spin, spinBox), spinNumber(spin, 1000));
+
+    performStep(spinBox, Step::DownKey);
+    QTRY_COMPARE(values.count(), 1);
+    QCOMPARE(f->stored(SpinPath), spinNumber(spin, 995));
+    QCOMPARE(values.at(0).at(2), spinNumber(spin, 1000));
+}
+
+void tst_PropertyFormView::normalisedStepShowsTheModelsValue_data()
+{
+    QTest::addColumn<int>("singleStep");
+    QTest::addColumn<int>("expected"); // stored after one step from 500
+    QTest::addColumn<int>("expectedAgain"); // after a second step
+    QTest::newRow("backToWhatTheModelHolds") << 4 << 500 << 500; // 504 snaps back to 500, twice
+    QTest::newRow("snapsToTheNextTen") << 6 << 510 << 520; // 506 snaps to 510, then 516 to 520
+}
+
+// A step the model normalises: the committed value is the model's, and the
+// editor shows it instead of the number the spin box stepped to.
+void tst_PropertyFormView::normalisedStepShowsTheModelsValue()
+{
+    QFETCH(int, singleStep);
+    QFETCH(int, expected);
+    QFETCH(int, expectedAgain);
+    registerSnapType();
+    if (QTest::currentTestFailed())
+        return;
+    Property& property = f->model.root()->add(SnapType, QStringLiteral("snap"), 500);
+    property.setAttribute(Attr::Step, singleStep);
+    property.setAttribute(Attr::CommitOnStep, true);
+    auto* spinBox = f->editor<QSpinBox>(QStringLiteral("snap"));
+    QVERIFY(spinBox);
+    f->window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&f->window));
+    spinBox->setFocus();
+    QTRY_VERIFY(hasFocusWithin(spinBox));
+    QSignalSpy values(&f->model, &PropertyModel::valueChanged);
+
+    QTest::keyClick(spinBox, Qt::Key_Up);
+    QTRY_COMPARE(spinBox->value(), expected);
+    QCOMPARE(f->stored(QStringLiteral("snap")), QVariant(expected));
+    QCOMPARE(values.count(), expected == 500 ? 0 : 1);
+    QVERIFY(hasFocusWithin(spinBox));
+
+    QTest::keyClick(spinBox, Qt::Key_Up);
+    QTRY_COMPARE(spinBox->value(), expectedAgain);
+    QCOMPARE(f->stored(QStringLiteral("snap")), QVariant(expectedAgain));
+    QCOMPARE(f->view->editor(QStringLiteral("snap")), spinBox);
+}
+
+// The form follows the attribute while its editor exists.
+void tst_PropertyFormView::openEditorFollowsCommitOnStepChanges()
+{
+    Property& property = addSpinProperty(f->model, Spin::Int, Commit::Unset);
+    auto* spinBox = f->editor<QSpinBox>(SpinPath);
+    QVERIFY(spinBox);
+    f->window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&f->window));
+    spinBox->setFocus();
+    QTRY_VERIFY(hasFocusWithin(spinBox));
+    QSignalSpy values(&f->model, &PropertyModel::valueChanged);
+
+    QTest::keyClick(spinBox, Qt::Key_Up);
+    QVERIFY(timersDrained());
+    QCOMPARE(values.count(), 0);
+
+    property.setAttribute(Attr::CommitOnStep, true);
+    QVERIFY(timersDrained());
+    const int before = spinBox->value();
+    QTest::keyClick(spinBox, Qt::Key_Up);
+    QTRY_COMPARE(values.count(), 1);
+    QCOMPARE(f->stored(SpinPath), QVariant(spinBox->value()));
+    QCOMPARE(spinBox->value(), before + 5);
+
+    property.setAttribute(Attr::CommitOnStep, false);
+    QVERIFY(timersDrained());
+    const QVariant committedValue = f->stored(SpinPath);
+    QTest::keyClick(spinBox, Qt::Key_Up);
+    QVERIFY(timersDrained());
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(f->stored(SpinPath), committedValue);
+    QCOMPARE(spinBox->value(), committedValue.toInt() + 5);
+}
+
+void tst_PropertyFormView::keepOpenRequestCommitsLikeACommitRequest_data()
+{
+    QTest::addColumn<bool>("keepOpen");
+    QTest::newRow("notifyCommitKeepOpen") << true;
+    QTest::newRow("notifyCommit") << false; // guard: the existing request
+}
+
+// In the form the editors are always there: both requests commit once, and the
+// editor goes on working.
+void tst_PropertyFormView::keepOpenRequestCommitsLikeACommitRequest()
+{
+    QFETCH(bool, keepOpen);
+    registerClicker();
+    if (QTest::currentTestFailed())
+        return;
+    addClicker(f->model, QStringLiteral("counter"), 41, keepOpen);
+    auto* button = f->editor<QPushButton>(QStringLiteral("counter"));
+    QVERIFY(button);
+    f->window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&f->window));
+    button->setFocus();
+    QTRY_VERIFY(hasFocusWithin(button));
+    QSignalSpy values(&f->model, &PropertyModel::valueChanged);
+    QSignalSpy user(&f->model, &PropertyModel::userValueChanged);
+
+    button->click();
+    QTRY_COMPARE(values.count(), 1);
+    QCOMPARE(f->stored(QStringLiteral("counter")), QVariant(42));
+    QCOMPARE(user.count(), 1);
+    QCOMPARE(user.at(0).at(1), QVariant(42));
+    QCOMPARE(user.at(0).at(2), QVariant(41));
+    QCOMPARE(button->text(), QStringLiteral("42"));
+    QCOMPARE(f->view->editor(QStringLiteral("counter")), button);
+
+    button->click();
+    QTRY_COMPARE(values.count(), 2);
+    QCOMPARE(f->stored(QStringLiteral("counter")), QVariant(43));
+
+    // Leaving the editor has nothing left to commit.
+    f->other->setFocus();
+    QVERIFY(timersDrained());
+    QCOMPARE(values.count(), 2);
+    QCOMPARE(f->view->editor(QStringLiteral("counter")), button);
+}
+
+// What the model clamps is shown in the editor, though nothing changed.
+void tst_PropertyFormView::keepOpenRequestShowsTheModelsValue()
+{
+    registerClicker();
+    if (QTest::currentTestFailed())
+        return;
+    Property& counter = addClicker(f->model, QStringLiteral("counter"), 43, true);
+    counter.setAttribute(QStringLiteral("test.cap"), 44);
+    auto* button = f->editor<QPushButton>(QStringLiteral("counter"));
+    QVERIFY(button);
+    f->window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&f->window));
+    button->setFocus();
+    QTRY_VERIFY(hasFocusWithin(button));
+    QSignalSpy values(&f->model, &PropertyModel::valueChanged);
+
+    button->click(); // 44
+    QTRY_COMPARE(values.count(), 1);
+    QCOMPARE(button->text(), QStringLiteral("44"));
+    button->click(); // 45, limited to 44 by the type: the stored value does not change
+    QVERIFY(timersDrained());
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(f->stored(QStringLiteral("counter")), QVariant(44));
+    QTRY_COMPARE(button->text(), QStringLiteral("44"));
+}
+
+// A refused value: the old value stays and is shown again, with the reason.
+void tst_PropertyFormView::keepOpenRequestRejectedValueShowsError()
+{
+    registerClicker();
+    if (QTest::currentTestFailed())
+        return;
+    Property& checked = addClicker(f->model, QStringLiteral("checked"), 9, true);
+    checked.setValidator([](const QVariant& value, const Property&) {
+        return value.toInt() == 10 ? ValidationResult::error(QStringLiteral("Ten is not allowed"))
+                                   : ValidationResult::valid();
+    });
+    auto* button = f->editor<QPushButton>(QStringLiteral("checked"));
+    QVERIFY(button);
+    f->window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&f->window));
+    button->setFocus();
+    QTRY_VERIFY(hasFocusWithin(button));
+    QSignalSpy values(&f->model, &PropertyModel::valueChanged);
+    QSignalSpy failed(&f->model, &PropertyModel::validationFailed);
+
+    button->click(); // 10
+    QTRY_COMPARE(failed.count(), 1);
+    QCOMPARE(failed.at(0).at(1), QVariant(10));
+    QCOMPARE(values.count(), 0);
+    QCOMPARE(f->stored(QStringLiteral("checked")), QVariant(9));
+    QCOMPARE(f->view->editor(QStringLiteral("checked")), button);
+    QTRY_COMPARE(button->text(), QStringLiteral("9"));
+    QTRY_COMPARE(QToolTip::text(), QStringLiteral("Ten is not allowed"));
+}
+
+void tst_PropertyFormView::unchangedDoubleEditorKeepsTheStoredValue_data()
+{
+    QTest::addColumn<int>("how");
+    QTest::newRow("focusOut") << 0;
+    QTest::newRow("enter") << 1;
+    QTest::newRow("refreshThenFocusOut") << 2;
+    QTest::newRow("externalChangeThenFocusOut") << 3;
+    QTest::newRow("attributeChangeThenEnter") << 4;
+}
+
+// An editor that shows a double rounded and was not changed writes nothing
+// when it is left, also after the model refreshed the row.
+void tst_PropertyFormView::unchangedDoubleEditorKeepsTheStoredValue()
+{
+    QFETCH(int, how);
+    MarkProxy* marks = how == 2 ? useProxy() : nullptr;
+    Property& property = addUnroundedDouble(f->model);
+    auto* spinBox = f->editor<QDoubleSpinBox>(UnroundedPath);
+    QVERIFY(spinBox);
+    f->window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&f->window));
+    spinBox->setFocus();
+    QTRY_VERIFY(hasFocusWithin(spinBox));
+    QCOMPARE(spinBox->value(), 0.01); // the display is rounded to the decimals
+    QSignalSpy values(&f->model, &PropertyModel::valueChanged);
+    QSignalSpy user(&f->model, &PropertyModel::userValueChanged);
+    double expected = 0.0125;
+
+    if (how == 2) {
+        marks->setToolTip(UnroundedPath, QStringLiteral("a tip"));
+        marks->refreshAll({});
+        marks->refresh(UnroundedPath, {});
+        QCOMPARE(spinBox->value(), 0.01);
+    } else if (how == 3) {
+        QVERIFY(f->model.setValue(UnroundedPath, 0.0375));
+        expected = 0.0375;
+        QCOMPARE(spinBox->value(), 0.04);
+    } else if (how == 4) {
+        property.setAttribute(Attr::Suffix, QStringLiteral(" mm"));
+        QCOMPARE(spinBox->suffix(), QStringLiteral(" mm"));
+        QCOMPARE(spinBox->value(), 0.01);
+    }
+    const int applicationWrites = values.count();
+
+    if (how == 1 || how == 4)
+        QTest::keyClick(spinBox, Qt::Key_Return);
+    else
+        f->other->setFocus();
+    QVERIFY(timersDrained());
+
+    QCOMPARE(f->stored(UnroundedPath), QVariant(expected));
+    QCOMPARE(values.count(), applicationWrites);
+    QCOMPARE(user.count(), 0);
+    QCOMPARE(f->editor<QDoubleSpinBox>(UnroundedPath), spinBox);
+}
+
+// Guard (passes without the new attribute): what the user does with the spin
+// box is what is stored, rounded to the spin box's decimals.
+void tst_PropertyFormView::changedDoubleEditorStoresTheSpinBoxValue()
+{
+    addUnroundedDouble(f->model);
+    auto* spinBox = f->editor<QDoubleSpinBox>(UnroundedPath);
+    QVERIFY(spinBox);
+    f->window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&f->window));
+    spinBox->setFocus();
+    QTRY_VERIFY(hasFocusWithin(spinBox));
+    QSignalSpy user(&f->model, &PropertyModel::userValueChanged);
+
+    QTest::keyClick(spinBox, Qt::Key_Up); // 0.01 + the step of 1
+    f->other->setFocus();
+    QTRY_COMPARE(user.count(), 1);
+    QCOMPARE(f->stored(UnroundedPath).toDouble(), 1.01);
+
+    spinBox->setFocus();
+    QTRY_VERIFY(hasFocusWithin(spinBox));
+    spinBox->selectAll();
+    QTest::keyClicks(spinBox, QLocale().toString(0.3, 'f', 2));
+    QTest::keyClick(spinBox, Qt::Key_Return);
+    QTRY_COMPARE(user.count(), 2);
+    QCOMPARE(f->stored(UnroundedPath).toDouble(), 0.3);
+}
+
+// Both attributes: a step stores the spin box's value, and the editor keeps
+// showing what the model holds.
+void tst_PropertyFormView::commitOnStepStoresTheSpinBoxValueOfAnUnroundedDouble()
+{
+    Property& property = addUnroundedDouble(f->model);
+    property.setAttribute(Attr::CommitOnStep, true);
+    auto* spinBox = f->editor<QDoubleSpinBox>(UnroundedPath);
+    QVERIFY(spinBox);
+    f->window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&f->window));
+    spinBox->setFocus();
+    QTRY_VERIFY(hasFocusWithin(spinBox));
+    QSignalSpy values(&f->model, &PropertyModel::valueChanged);
+    QSignalSpy user(&f->model, &PropertyModel::userValueChanged);
+    QCOMPARE(f->stored(UnroundedPath), QVariant(0.0125));
+
+    QTest::keyClick(spinBox, Qt::Key_Up);
+    QTRY_COMPARE(values.count(), 1);
+    QCOMPARE(f->stored(UnroundedPath).toDouble(), 1.01); // not 1.0125
+    QCOMPARE(user.at(0).at(2), QVariant(0.0125));
+    QCOMPARE(spinBox->value(), 1.01);
+
+    QTest::keyClick(spinBox, Qt::Key_Down);
+    QTRY_COMPARE(values.count(), 2);
+    QCOMPARE(f->stored(UnroundedPath).toDouble(), 0.01); // what the user chose
+    QCOMPARE(spinBox->value(), 0.01);
+    QCOMPARE(f->editor<QDoubleSpinBox>(UnroundedPath), spinBox);
 }
 
 QTEST_MAIN(tst_PropertyFormView)

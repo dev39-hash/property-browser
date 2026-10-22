@@ -80,6 +80,11 @@ private slots:
     void batchOnModel();
     void treeChangeDuringLoad_data();
     void treeChangeDuringLoad();
+
+    // Doubles stored without rounding.
+    void unroundedDoublesSurviveJson();
+    void unroundedDoublesSurviveSettings_data();
+    void unroundedDoublesSurviveSettings();
 };
 
 void tst_Serialization::initTestCase()
@@ -336,6 +341,83 @@ void tst_Serialization::treeChangeDuringLoad()
         QVERIFY(!model.find(QStringLiteral("General")));
         QCOMPARE(model.find(QStringLiteral("Limits/ratio"))->value(), QVariant(0.25));
     }
+}
+
+namespace {
+
+// Two doubles with more digits than their two decimals; rounding is switched
+// off on both when unrounded is true.
+std::unique_ptr<PropertyGroup> createMeasurements(bool unrounded)
+{
+    auto root = PropertyGroup::create(QStringLiteral("Measurements"));
+    Property& price = root->addDouble(QStringLiteral("price"), 0.0);
+    Property& scale = root->addDouble(QStringLiteral("mmPerPixel"), 0.0);
+    if (unrounded) {
+        price.setAttribute(Attr::RoundToDecimals, false);
+        scale.setAttribute(Attr::RoundToDecimals, false);
+    }
+    return root;
+}
+
+} // namespace
+
+void tst_Serialization::unroundedDoublesSurviveJson()
+{
+    auto saved = createMeasurements(true);
+    QVERIFY(saved->find(QStringLiteral("price"))->setValue(1234.5678));
+    QVERIFY(saved->find(QStringLiteral("mmPerPixel"))->setValue(0.0125));
+
+    const QJsonObject json = serialization::toJson(*saved);
+    QCOMPARE(json.value(QStringLiteral("price")).toDouble(), 1234.5678);
+    QCOMPARE(json.value(QStringLiteral("mmPerPixel")).toDouble(), 0.0125);
+    const QByteArray text = QJsonDocument(json).toJson();
+    QVERIFY(text.contains("1234.5678"));
+    QVERIFY(text.contains("0.0125"));
+
+    auto restored = createMeasurements(true);
+    QVERIFY(serialization::fromJson(*restored, QJsonDocument::fromJson(text).object()));
+    QCOMPARE(restored->find(QStringLiteral("price"))->value(), QVariant(1234.5678));
+    QCOMPARE(restored->find(QStringLiteral("mmPerPixel"))->value(), QVariant(0.0125));
+    QVERIFY(restored->find(QStringLiteral("price"))->isModified());
+
+    // Guard (unchanged behaviour): a tree that rounds takes the same text rounded.
+    auto rounding = createMeasurements(false);
+    QVERIFY(serialization::fromJson(*rounding, QJsonDocument::fromJson(text).object()));
+    QCOMPARE(rounding->find(QStringLiteral("price"))->value(), QVariant(1234.57));
+    QCOMPARE(rounding->find(QStringLiteral("mmPerPixel"))->value(), QVariant(0.01));
+}
+
+void tst_Serialization::unroundedDoublesSurviveSettings_data()
+{
+    settingsRoundTrip_data();
+}
+
+void tst_Serialization::unroundedDoublesSurviveSettings()
+{
+    QFETCH(int, format);
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString file = dir.filePath(QStringLiteral("settings.ini"));
+    auto saved = createMeasurements(true);
+    QVERIFY(saved->find(QStringLiteral("price"))->setValue(1234.5678));
+    QVERIFY(saved->find(QStringLiteral("mmPerPixel"))->setValue(0.0125));
+    {
+        auto settings = openSettings(format, file);
+        settings->clear();
+        serialization::save(*saved, *settings);
+    }
+    auto settings = openSettings(format, file);
+    auto restored = createMeasurements(true);
+    QVERIFY(serialization::load(*restored, *settings));
+    QCOMPARE(restored->find(QStringLiteral("price"))->value(), QVariant(1234.5678));
+    QCOMPARE(restored->find(QStringLiteral("mmPerPixel"))->value(), QVariant(0.0125));
+
+    // Guard (unchanged behaviour): a tree that rounds loads them rounded.
+    auto rounding = createMeasurements(false);
+    QVERIFY(serialization::load(*rounding, *settings));
+    QCOMPARE(rounding->find(QStringLiteral("price"))->value(), QVariant(1234.57));
+    QCOMPARE(rounding->find(QStringLiteral("mmPerPixel"))->value(), QVariant(0.01));
+    settings->clear(); // leave nothing behind in the registry or config directory
 }
 
 QTEST_GUILESS_MAIN(tst_Serialization)
