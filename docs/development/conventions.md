@@ -84,9 +84,10 @@ Match the file you are editing first. This page lists what is common to the whol
 
 ## Commits
 
-- New commits are written as `<type>: <summary>`, with an optional scope as `<type>(<scope>): <summary>`, in the style
+- Commits are written as `<type>: <summary>`, with an optional scope as `<type>(<scope>): <summary>`, in the style
   of Conventional Commits. The type is one of `feat`, `fix`, `docs`, `test`, `refactor`, `build` or `chore`. The summary
-  is in the imperative and in English. Commits made before October 2026 do not follow this form.
+  is in the imperative and in English. A release commit is `chore(release): qpb <version>`; a merge keeps the subject
+  git writes, `Merge branch '<name>'`. A commit whose work is unfinished ends its summary with `(work in progress)`.
 - A new commit that touches `qpb/include` has a line in its body: `API change: none` or
   `API change: additive (<symbols>)`. A breaking change is not made in 1.x (see
   [public-headers.md](../design/public-headers.md)).
