@@ -78,7 +78,8 @@ bool PropertyPrivate::assign(const QVariant& input, Origin origin)
     if (detail::isValidStorageType(handler->storageType)
         && detail::storageTypeOf(candidate) != handler->storageType) {
         if (!detail::convertTo(candidate, handler->storageType)) {
-            // Translated (README.md, "Translations"; D56).
+            // Translated; context and source text are stable within 1.x
+            // (doc/guide/translations.md).
             return reject(
                 QCoreApplication::translate("qpb::Property", "Cannot convert the value to %1")
                     .arg(QLatin1String(detail::typeNameOf(handler->storageType))));

@@ -1,4 +1,4 @@
-// PropertyTreeView + PropertyDelegate interaction (docs/PLAN.md M3.2-M3.7, SPEC §5.4-5.5).
+// PropertyTreeView + PropertyDelegate interaction (see qpb/doc/guide/views.md).
 
 #include <qpb/qpb.h>
 
@@ -270,7 +270,8 @@ void tst_PropertyTreeView::backtabMovesBackwards()
     QTRY_COMPARE(f->view->currentIndex(), f->value(QStringLiteral("Transform/y")));
 }
 
-// Since 1.5 (SPEC §5.5, D49): check boxes join the Tab chain on request.
+// Since 1.5: check boxes join the Tab chain on request only, so the keyboard
+// behaviour of existing applications does not change on upgrade.
 void tst_PropertyTreeView::tabStopsOnCheckBoxes()
 {
     PropertyTreeView* view = f->view;
@@ -375,8 +376,8 @@ void tst_PropertyTreeView::tabStopsOnCheckBoxesThroughProxy()
     view->setModel(&f->model); // before the proxy goes away
 }
 
-// Since 1.6 (SPEC §5.8, D50): colours of what the view paints itself, set
-// from a style sheet with qproperty-.
+// Since 1.6 (qpb/doc/guide/style-sheets.md): colours of what the view paints
+// itself, set from a style sheet with qproperty-.
 void tst_PropertyTreeView::styleSheetColours()
 {
     PropertyTreeView* view = f->view;

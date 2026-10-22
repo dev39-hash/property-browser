@@ -1,4 +1,4 @@
-// Translations (docs/SPEC.md section 4.10, qpb 1.8): qpb's texts and the
+// Translations (qpb/doc/guide/translations.md, qpb 1.8): qpb's texts and the
 // application's own in English, Japanese and Vietnamese, switched at run time.
 //
 // qpb translates what it shows by itself: column titles, context menus,

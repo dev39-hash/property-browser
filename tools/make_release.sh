@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prepares a qpb release locally (docs/RELEASING.md). Creates nothing outside
+# Prepares a qpb release locally (docs/development/releasing.md). Creates nothing outside
 # the repository and dist/: tagging and handing the release over are printed.
 #
 #   tools/make_release.sh 1.0.0-rc1
@@ -48,7 +48,7 @@ echo "updated local branch qpb-release ($(git rev-parse --short qpb-release))"
 
 cat <<MSG
 
-Release artifacts are ready. If the verification of docs/RELEASING.md step 2
+Release artifacts are ready. If the verification of docs/development/releasing.md step 2
 (ctest with Qt 6 and Qt 5.15, 25 Release runs of the widget suites) passed on
 this commit, tag:
 

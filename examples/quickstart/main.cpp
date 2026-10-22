@@ -1,4 +1,5 @@
-// Quickstart: a 10-property panel (docs/SPEC.md S1: at most 30 lines without includes).
+// Quickstart: a 10-property panel, kept at most 30 lines without includes
+// (checked by the size_quickstart_s1 test).
 
 #include <qpb/qpb.h>
 

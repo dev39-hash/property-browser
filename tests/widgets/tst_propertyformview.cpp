@@ -1,4 +1,4 @@
-// PropertyFormView (docs/PLAN.md M5.1, M5.2, SPEC 5.6).
+// PropertyFormView (see qpb/doc/guide/views.md).
 
 #include <qpb/qpb.h>
 
@@ -477,7 +477,7 @@ void tst_PropertyFormView::contextMenuResets()
     QCOMPARE(f->stored(QStringLiteral("Camera/projection")), QVariant(0));
     QCOMPARE(f->editor<QComboBox>(QStringLiteral("Camera/projection"))->currentIndex(), 0);
 
-    // Read-only properties are left alone (D34).
+    // Read-only properties are left alone (the form reacts to the user only).
     QVERIFY(f->model.setValue(QStringLiteral("Transform/locked"), 5.0));
     QVERIFY(f->model.setValue(QStringLiteral("Transform/x"), 5.0));
     QVERIFY(resetFromMenu(f->title(QStringLiteral("Transform"))));
@@ -591,7 +591,7 @@ bool inPart(const QWidget* widget, const QString& name)
 
 } // namespace
 
-// Since 1.6 (SPEC §5.8, D51): stable selectors on the form's widgets.
+// Since 1.6 (qpb/doc/guide/style-sheets.md): stable selectors on the form's widgets.
 void tst_PropertyFormView::styleSheetSelectors()
 {
     QToolButton* title = f->title(QStringLiteral("Transform"));
@@ -626,7 +626,8 @@ void tst_PropertyFormView::styleSheetSelectors()
 void tst_PropertyFormView::styleSheetRulesApply()
 {
     // A style sheet rule for QLabel resets the font of styled labels; the bold font of
-    // modified labels (and of group titles) is applied again afterwards (D52).
+    // modified labels (and of group titles) is applied again afterwards, so the
+    // "modified" cue stays visible under application themes.
     qApp->setStyleSheet(QStringLiteral("QLabel { color: #e0e4ea; }"
                                        "QLabel[qpbModified=\"true\"] { color: #ff0000; }"
                                        "QToolButton[qpbPart=\"groupTitle\"] { color: #00ff00; }"));
@@ -648,9 +649,9 @@ void tst_PropertyFormView::styleSheetRulesApply()
     QCOMPARE(label->palette().color(QPalette::WindowText), QColor(0xe0, 0xe4, 0xea));
 }
 
-// The bold font of modified labels survives an application style sheet (D52,
-// PLAN M10.3) when the sheet is set first and the form is then built for a model
-// that already has modified properties.
+// The bold font of modified labels survives an application style sheet when the
+// sheet is set first and the form is then built for a model that already has
+// modified properties.
 void tst_PropertyFormView::boldSurvivesApplicationStyleSheet()
 {
     qApp->setStyleSheet(QStringLiteral("QWidget { color: #e0e4ea; } QLabel { color: #e0e4ea; }"));

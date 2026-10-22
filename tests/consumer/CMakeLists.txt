@@ -1,4 +1,5 @@
-# Consumer integration tests (docs/SPEC.md §6, §7, PLAN M0.5 / M4.5).
+# Consumer integration tests (see qpb/doc/integration.md and
+# docs/design/component-cmake.md).
 #
 # Each test copies qpb/ into components/qpb/ of a fresh standalone project
 # (tests/consumer/project) and configures, builds and runs it, exactly as a

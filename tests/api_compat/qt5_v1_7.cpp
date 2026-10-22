@@ -1,5 +1,6 @@
-// API compatibility test for the Qt 5 configuration of qpb 1.7 (docs/SPEC.md
-// §9.5, PLAN M11, D53).
+// API compatibility test for the Qt 5 configuration of qpb 1.7: client code
+// written against 1.7 with Qt 5.15 must keep building and behaving the same in
+// every later 1.x; see docs/design/public-headers.md and qpb/doc/compatibility.md.
 //
 // Qt 5.15 is supported since 1.7. Most of the API is the same with Qt 5 and
 // Qt 6, and the files of earlier releases (v1_1 ... v1_6) build with both.

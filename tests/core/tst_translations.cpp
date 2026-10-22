@@ -1,4 +1,4 @@
-// qpb's translations (docs/PLAN.md M12, SPEC 4.10, D54-D57).
+// qpb's translations (see qpb/doc/guide/translations.md).
 
 #include <qpb/qpbcore.h>
 
@@ -244,7 +244,9 @@ void tst_Translations::englishPluralForms()
     QCOMPARE(headers(model), QStringList({QStringLiteral("Property"), QStringLiteral("Value")}));
 }
 
-// D57: installing or removing a translator makes views read the titles again.
+// Installing or removing a translator makes views read the titles again (qpb
+// updates only what it shows by itself; texts given by the application are
+// already translated).
 void tst_Translations::columnTitlesFollowLanguageChanges()
 {
     PropertyModel model(createTree());
@@ -280,7 +282,8 @@ void tst_Translations::qmMatchesTs_data()
     QTest::newRow("vi") << QStringLiteral("vi");
 }
 
-// The embedded .qm files are generated from the committed .ts files (D55):
+// The embedded .qm files are generated from the committed .ts files (a consumer
+// may not have LinguistTools, so nothing is built at configure time):
 // every translation of the .ts file is in the .qm file, none is unfinished.
 void tst_Translations::qmMatchesTs()
 {

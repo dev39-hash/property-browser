@@ -25,7 +25,7 @@ SettingsPage::SettingsPage(QSettings& settings, QWidget* parent)
     general.addInt("autosaveMinutes", 5)
         .range(1, 60)
         .suffix(" min")
-        .enabledWhen("General/autosave"); // round 6 (1.4): no valueChanged code
+        .enabledWhen("General/autosave"); // the model evaluates the dependency
     general.addString("signature", QString())
         .multiline()
         .placeholder(tr("Added to exported files"));
@@ -53,7 +53,7 @@ SettingsPage::SettingsPage(QSettings& settings, QWidget* parent)
         [this](const QVariant& language) { applyLanguage(language.toString()); });
 
     m_view->setModel(&m_model);
-    m_view->setTabStopsOnCheckBoxes(true); // round 7 (1.5): F5
+    m_view->setTabStopsOnCheckBoxes(true); // Tab stops on check boxes too
     m_form->setModel(&m_model);
     m_stack->addWidget(m_view);
     m_stack->addWidget(m_form);
@@ -89,7 +89,7 @@ void SettingsPage::applyLanguage(const QString& language)
 
 void SettingsPage::resetAll()
 {
-    m_model.resetAllToDefault(); // round 7 (1.5): F4, no detour through root()
+    m_model.resetAllToDefault(); // one batch, no detour through root()
 }
 
 void SettingsPage::setFormLayout(bool form)

@@ -7,7 +7,7 @@
 
 class QLineEdit;
 
-// Reference scenario 3: plugin configuration built from manifests at run time.
+// Plugin configuration built from manifests at run time.
 struct PluginManifest
 {
     QString name;
@@ -44,7 +44,7 @@ public:
 
 private:
     qpb::PropertyModel m_model;
-    qpb::PropertyFilterProxyModel m_proxy; // round 4: was a configured QSortFilterProxyModel
+    qpb::PropertyFilterProxyModel m_proxy; // filters the tree for the search box
     qpb::PropertyTreeView* m_view;
     QLineEdit* m_search;
 };

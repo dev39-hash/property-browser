@@ -11,7 +11,7 @@ QT_END_NAMESPACE
 
 namespace qpb {
 
-// qpb's own translations (README.md, "Translations"). Since 1.8.
+// qpb's own translations (doc/guide/translations.md). Since 1.8.
 //
 // Loads qpb's translation for locale into translator, trying the locale's UI
 // languages in order, so "ja-JP" finds Japanese. Returns false when qpb has no

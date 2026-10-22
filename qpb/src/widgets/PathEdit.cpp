@@ -53,7 +53,7 @@ PathEdit::PathEdit(Kind kind, QWidget* parent)
 void PathEdit::changeEvent(QEvent* event)
 {
     if (event->type() == QEvent::LanguageChange)
-        retranslate(); // the form view keeps its editors (D57)
+        retranslate(); // the form view keeps its editors, so they update their own texts
     QWidget::changeEvent(event);
 }
 

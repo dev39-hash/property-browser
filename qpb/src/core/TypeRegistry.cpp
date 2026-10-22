@@ -39,7 +39,8 @@ public:
 namespace {
 
 // The messages below are translated in the context "qpb::TypeRegistry". Their
-// contexts and source texts are stable (README.md, "Translations"; D56).
+// contexts and source texts are stable within 1.x, because applications
+// translate or reword them through these keys (doc/guide/translations.md).
 
 QString affixed(const QString& number, const Property& property)
 {

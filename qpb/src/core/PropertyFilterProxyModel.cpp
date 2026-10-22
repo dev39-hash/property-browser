@@ -9,7 +9,7 @@ namespace qpb {
 
 namespace detail {
 
-// The private part behind the d-pointer of the public class (SPEC section 9.3). It has no
+// The private part behind the d-pointer of the public class. It has no
 // members: the class keeps a d-pointer so state can be added without changing its layout.
 class PropertyFilterProxyModelPrivate
 {

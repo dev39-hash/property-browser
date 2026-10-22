@@ -1,4 +1,4 @@
-// Serialization of property values (docs/PLAN.md M6.2, SPEC 4.8).
+// Serialization of property values (see qpb/doc/guide/serialization.md).
 
 #include <qpb/qpbcore.h>
 

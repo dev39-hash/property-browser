@@ -7,7 +7,8 @@
 #include <QToolButton>
 
 // A custom property type registered entirely outside the library
-// (docs/SPEC.md S2: at most 100 lines for ColorType.h + ColorType.cpp).
+// (kept at most 100 lines for ColorType.h + ColorType.cpp, to show how little a
+// new type needs; checked by the size_custom_type_s2 test).
 
 namespace example {
 

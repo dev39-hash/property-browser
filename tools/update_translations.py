@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Updates qpb's translations (docs/SPEC.md §4.10, PLAN M12.3).
+"""Updates qpb's translations (docs/development/building-and-testing.md, "Translations").
 
   update_translations.py --qt-bin "<Qt prefix>/bin"
   update_translations.py --qt-bin <dir> --check
@@ -13,7 +13,7 @@ Without --check:
    dropped. qpb_en.ts holds the plural forms only (English is the source
    language).
 2. lrelease writes the .qm file next to each .ts. The .qm files are committed;
-   qpb's are embedded in qpb::core (D55), so consumers need no Qt Linguist tools.
+   qpb's are embedded in qpb::core, so consumers need no Qt Linguist tools.
    Translate the unfinished texts (Qt Linguist or an editor) and run it again.
 
 --check changes nothing: it fails when a .ts file misses a text of the sources,
@@ -107,7 +107,7 @@ def check(lupdate):
         print(failure)
     if failures:
         print("Translations out of date: run tools/update_translations.py, translate, commit "
-              "the .ts and .qm files (docs/SPEC.md §4.10).")
+              "the .ts and .qm files (docs/development/building-and-testing.md).")
         return 1
     print(f"Translations OK: {', '.join(names)}")
     return 0

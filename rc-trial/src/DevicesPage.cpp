@@ -66,7 +66,7 @@ DevicesPage::DevicesPage(QWidget* parent)
     , m_source(&m_model)
     , m_form(new qpb::PropertyFormView)
 {
-    m_source.setLiveReadOnlyProperties(true); // round 5 (1.3): F9, "used" is live
+    m_source.setLiveReadOnlyProperties(true); // "used" changes by itself: not shown as modified
     m_form->setModel(&m_model);
     auto* layout = new QVBoxLayout(this);
     layout->addWidget(m_form);

@@ -27,7 +27,7 @@ class PropertyPrivate;
 }
 
 // A node of the property tree: one editable value, or a PropertyGroup
-// (README.md, "Properties").
+// (doc/api-overview.md, "Properties").
 //
 // Properties are created through PropertyGroup::add*() or Property::create()
 // and owned by their parent group; the root group is owned by the

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Public API snapshot for qpb (docs/SPEC.md §9.5, PLAN M4.8).
+"""Public API snapshot for qpb (docs/design/public-headers.md, "What guards compatibility").
 
 Extracts the public declarations of every header under qpb/include/qpb into a
 normalized, sorted list: one line per declaration, prefixed with the header and
@@ -11,7 +11,8 @@ ignored; macros defined by the headers are included.
 
 --check fails when a line of the snapshot is missing from the current headers:
 something public was removed or its declaration changed (a breaking change,
-docs/SPEC.md §9.2). New lines are reported but allowed (additive changes).
+see docs/design/public-headers.md, "What may change within 1.x"). New lines are
+reported but allowed (additive changes).
 This is a textual check: it catches accidental removals and signature changes,
 not every possible source incompatibility.
 """
@@ -212,7 +213,8 @@ def main():
         print(f"REMOVED: {line}")
     if missing:
         print(f"{len(missing)} public declaration(s) removed or changed: breaking change "
-              "(docs/SPEC.md §9.2). If intended before 1.0, regenerate the snapshot with --write.")
+              "(docs/design/public-headers.md). If intended before 1.0, regenerate the "
+              "snapshot with --write.")
         return 1
     print(f"API snapshot OK: {len(baseline)} declarations kept, {len(added)} added")
     return 0

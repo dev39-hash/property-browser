@@ -1,4 +1,4 @@
-// Conditions between properties (docs/PLAN.md M8.3, SPEC 4.2). Since 1.4.
+// Conditions between properties (see qpb/doc/guide/changes-and-conditions.md). Since 1.4.
 
 #include <qpb/qpbcore.h>
 
@@ -151,7 +151,7 @@ void tst_Conditions::userEditsBlockedByCondition()
         = model.indexOf(model.find(QStringLiteral("General/minutes")), PropertyModel::ValueColumn);
     QVERIFY(!minutes.flags().testFlag(Qt::ItemIsEditable));
     QVERIFY(!model.setData(minutes, 30)); // disabled for the user
-    QVERIFY(model.setValue(QStringLiteral("General/minutes"), 30)); // D34: application writes
+    QVERIFY(model.setValue(QStringLiteral("General/minutes"), 30)); // application writes pass
 }
 
 void tst_Conditions::notifiesViews()

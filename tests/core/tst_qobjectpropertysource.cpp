@@ -1,4 +1,4 @@
-// QObjectPropertySource (docs/PLAN.md M6.1, SPEC 4.9).
+// QObjectPropertySource (see qpb/doc/guide/qobject-source.md).
 
 #include <qpb/qpbcore.h>
 

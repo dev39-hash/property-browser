@@ -3,7 +3,7 @@
 # Open this file in Qt Creator (File > Open File or Project...), pick a Qt 6.5+
 # kit, build, and choose the example to start in the run target selector.
 #
-# qpb itself is a CMake component (docs/SPEC.md section 6); CMakeLists.txt next
+# qpb itself is a CMake component (docs/design/component-cmake.md); CMakeLists.txt next
 # to this file is the reference way to build the examples. This project builds
 # the same sources from ../../qpb as one static library (qmake/qpb) for those
 # who work with qmake. qmake builds one executable per .pro file, so every

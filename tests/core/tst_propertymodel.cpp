@@ -1,4 +1,4 @@
-// PropertyModel (docs/PLAN.md M2.5-M2.8, docs/SPEC.md §4.6).
+// PropertyModel.
 
 #include <qpb/qpbcore.h>
 
@@ -304,7 +304,7 @@ void tst_PropertyModel::setDataCheckState()
 }
 
 // Views (setData) respect read-only and disabled; application code does not
-// (SPEC D34, found in the RC trial).
+// (an application can update its own read-only status field).
 void tst_PropertyModel::userVersusApplicationWrites()
 {
     PropertyModel model(createTree());
@@ -511,7 +511,8 @@ void tst_PropertyModel::resetToDefault()
     QCOMPARE(batch.count(), 2);
 }
 
-// Since 1.5: the whole tree, as application code (SPEC §4.6, D48).
+// Since 1.5: the whole tree, as application code (the root has no index, so
+// resetToDefault(QModelIndex()) keeps returning false).
 void tst_PropertyModel::resetAllToDefault()
 {
     PropertyModel model(createTree());
@@ -534,10 +535,10 @@ void tst_PropertyModel::resetAllToDefault()
     QSignalSpy batch(&model, &PropertyModel::batchValueChanged);
     QVERIFY(model.resetAllToDefault());
     QCOMPARE(name->value(), QVariant(QStringLiteral("Main")));
-    QCOMPARE(x->value(), QVariant(0.0)); // read-only: reset by application code (D34)
+    QCOMPARE(x->value(), QVariant(0.0)); // read-only: reset by application code
     QCOMPARE(z->value(), QVariant(0.0)); // disabled ancestor: the same
     QCOMPARE(fov->value(), QVariant(60));
-    QCOMPARE(used.value(), QVariant(5)); // live: left alone (D44)
+    QCOMPARE(used.value(), QVariant(5)); // live values are never user edits: left alone
     QCOMPARE(values.count(), 4);
     QCOMPARE(batch.count(), 1);
     QCOMPARE(batch.at(0).at(0).toStringList().size(), 4);

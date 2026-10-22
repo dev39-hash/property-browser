@@ -7,12 +7,12 @@
 #include <QWidget>
 
 // A recording device of the application, a plain QObject with Q_PROPERTYs
-// (round 4, 1.2: shown through qpb::QObjectPropertySource).
+// (shown through qpb::QObjectPropertySource).
 class Device : public QObject
 {
     Q_OBJECT
     Q_CLASSINFO("qpb:properties", "name,enabled,mode,gain,recordDir,capacity,used,firmware")
-    Q_CLASSINFO("qpb:title", "name") // round 5 (1.3): F8
+    Q_CLASSINFO("qpb:title", "name") // section title is the device name, not the object name
     Q_CLASSINFO("qpb:gain", "min=0;max=24;step=0.5;suffix= dB;displayName=Input gain")
     Q_CLASSINFO("qpb:recordDir", "type=dirpath;displayName=Recording folder")
     Q_CLASSINFO("qpb:capacity", "suffix= B")
@@ -88,7 +88,7 @@ private:
     qint64 m_used = 0;
 };
 
-// Reference scenario 4 (round 4): application objects edited in a form.
+// Application objects edited in a form.
 class DevicesPage : public QWidget
 {
     Q_OBJECT

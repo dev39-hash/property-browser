@@ -1,4 +1,4 @@
-// TypeRegistry and the built-in types (docs/PLAN.md M2.4, docs/SPEC.md §4.4-4.7).
+// TypeRegistry and the built-in types (see qpb/doc/guide/custom-types-and-editors.md).
 
 #include <qpb/qpbcore.h>
 

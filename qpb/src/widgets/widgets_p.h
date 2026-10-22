@@ -44,7 +44,7 @@ inline constexpr char EditorIndexProperty[] = "_qpb_editorIndex";
 // Number of EditorDialogScope objects alive for an editor (dynamic property).
 inline constexpr char DialogDepthProperty[] = "_qpb_dialogDepth";
 
-// Style sheet selectors (README.md, "Style sheets"; public: never rename).
+// Style sheet selectors (doc/guide/style-sheets.md; public: never rename).
 // QWidget[qpbPart="groupTitle"]: the role of one of the views' widgets.
 inline constexpr char StylePartProperty[] = "qpbPart";
 // QLabel[qpbModified="true"]: the label of a modified property.
@@ -65,7 +65,8 @@ bool isResettableByUser(const Property* property);
 
 // Resets property (a group: its leaves) to the default values as a user edit
 // through model->setData(), in one batch, so read-only and disabled
-// properties are left alone (D34).
+// properties are left alone (read-only and disabled block user edits only, not
+// application writes).
 void resetByUser(PropertyModel* model, const Property* property);
 
 // Maps a (possibly proxied) index to its PropertyModel and source index.

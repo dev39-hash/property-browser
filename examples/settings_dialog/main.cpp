@@ -1,7 +1,7 @@
-// Reference scenario 2 (docs/use-cases.md): application settings backed by
-// QSettings, with string-valued enums, read-only entries, a property that is
-// enabled only while another one is on (enabledWhen, 1.4), check boxes in the
-// Tab chain and "Restore Defaults" for the whole tree (1.5).
+// Application settings backed by QSettings, with string-valued enums,
+// read-only entries, a property that is enabled only while another one is on
+// (enabledWhen, 1.4), check boxes in the Tab chain and "Restore Defaults" for
+// the whole tree (1.5).
 
 #include <qpb/qpb.h>
 

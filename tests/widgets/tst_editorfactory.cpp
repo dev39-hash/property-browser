@@ -1,4 +1,5 @@
-// EditorFactory, built-in editors and EditorDialogScope (docs/PLAN.md M3.1, SPEC §5.1-5.3).
+// EditorFactory, built-in editors and EditorDialogScope (see
+// qpb/doc/guide/custom-types-and-editors.md).
 
 #include <qpb/qpb.h>
 

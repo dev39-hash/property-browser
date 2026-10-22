@@ -1,4 +1,4 @@
-// Drives the RC trial application through its UI (docs/PLAN.md RC.1).
+// Drives the RC trial application through its UI.
 
 #include <QApplication>
 #include <QCheckBox>
@@ -35,7 +35,7 @@ Editor* openEditor(qpb::PropertyTreeView* view, const QModelIndex& valueIndex)
 {
     view->setFocus();
     if (view->currentIndex() == valueIndex)
-        view->edit(valueIndex); // already current: open it again, as F2 does
+        view->edit(valueIndex); // already current: open it again, as the edit key does
     else
         view->setCurrentIndex(valueIndex);
     QWidget* editor = view->indexWidget(valueIndex);
@@ -125,7 +125,7 @@ private slots:
     void settingsContextMenuResetsGroup();
     void pluginsRuntimeChangesAndSearch();
     void pluginsEnableAllIsOneBatch();
-    // Round 4 (1.2.0).
+    // Serialization, form layout, filter proxy and QObject sources.
     void settingsStoredWithSerialization();
     void settingsFormLayout();
     void settingsJsonExportImport();
@@ -133,16 +133,16 @@ private slots:
     void devicesFollowObjects();
     void devicesObjectRefusesValue();
     void devicesRemovedObject();
-    // Round 5 (1.3.0).
+    // Device titles and live read-only values.
     void devicesTitlesAndLiveValues();
-    // Round 6 (1.4.0).
+    // Declared dependencies and per-path callbacks.
     void settingsDependencyIsDeclared();
     void inspectorCallbacksFollowSelection();
-    // Round 7 (1.5.0).
+    // Reset all and check boxes in the Tab chain.
     void settingsResetAllButton();
-    // Round 8 (1.6.0).
+    // Application style sheet.
     void settingsUnderApplicationStyleSheet();
-    // Round 9 (1.8.0).
+    // Language switching.
     void settingsLanguageTranslatesQpb();
     void screenshots();
 
@@ -303,9 +303,9 @@ void tst_Trial::settingsResetAll()
 }
 
 // Tab chains the editors: it never stops on the read-only About entries or on
-// autosaveMinutes while autosave is off. Since round 7 (1.5, finding F5) the
-// page calls setTabStopsOnCheckBoxes(true), so Tab also stops on the autosave
-// check box; the arrow keys and Space still work as before.
+// autosaveMinutes while autosave is off. The page calls
+// setTabStopsOnCheckBoxes(true), so Tab also stops on the autosave check box;
+// the arrow keys and Space work as well.
 void tst_Trial::settingsKeyboardNavigation()
 {
     SettingsPage* page = m_window->settingsPage();
@@ -426,7 +426,7 @@ void tst_Trial::pluginsEnableAllIsOneBatch()
     QCOMPARE(page->proxy().index(0, 1, group).data(Qt::EditRole).toBool(), true);
 }
 
-// --- Round 4 (1.2.0) ------------------------------------------------------------
+// --- Serialization, form layout, filter proxy and QObject sources ---------------
 
 // qpb::serialization replaces the hand-written save/load loops: same keys,
 // read-only entries left out, a 64-bit value survives the INI file.
@@ -583,10 +583,10 @@ void tst_Trial::devicesRemovedObject()
     QCOMPARE(page->source().objects().size(), 1);
 }
 
-// --- Round 5 (1.3.0) ------------------------------------------------------------
+// --- Device titles and live read-only values ------------------------------------
 
-// F8: sections are titled with the device name and follow renames; paths keep
-// the object name. F9: the "used" counter is live: never bold, not reset.
+// Sections are titled with the device name and follow renames; paths keep the
+// object name. The "used" counter is live: never bold, not reset.
 void tst_Trial::devicesTitlesAndLiveValues()
 {
     DevicesPage* page = m_window->devices();
@@ -613,9 +613,9 @@ void tst_Trial::devicesTitlesAndLiveValues()
     QCOMPARE(model.find("studio_mic")->displayName(), QString("Studio mic")); // name reset too
 }
 
-// --- Round 6 (1.4.0) ------------------------------------------------------------
+// --- Declared dependencies and per-path callbacks -------------------------------
 
-// F10: the dependency is a condition; the application's own flag is untouched,
+// The dependency is a condition; the application's own flag is untouched,
 // and loading stored values evaluates it without any code.
 void tst_Trial::settingsDependencyIsDeclared()
 {
@@ -628,7 +628,7 @@ void tst_Trial::settingsDependencyIsDeclared()
     QVERIFY(minutes->isEnabled());
 }
 
-// F3: per-path callbacks write edits back to the selected object, also after
+// Per-path callbacks write edits back to the selected object, also after
 // the tree was replaced for another selection.
 void tst_Trial::inspectorCallbacksFollowSelection()
 {
@@ -642,7 +642,7 @@ void tst_Trial::inspectorCallbacksFollowSelection()
     QCOMPARE(page->scene()[2].y, -3.5);
 }
 
-// F4: "Reset all" calls PropertyModel::resetAllToDefault(): one batch, and
+// "Reset all" calls PropertyModel::resetAllToDefault(): one batch, and
 // the read-only status the application maintains is reset as well.
 void tst_Trial::settingsResetAllButton()
 {
@@ -668,7 +668,7 @@ void tst_Trial::settingsResetAllButton()
     QCOMPARE(model.find("About/lastSaved")->value().toString(), QString("never"));
 }
 
-// Round 8 (1.6): the application themes its whole UI with a dark style sheet
+// The application themes its whole UI with a dark style sheet
 // (generic rules as real applications have them) and uses qpb's hooks.
 void tst_Trial::settingsUnderApplicationStyleSheet()
 {
@@ -718,7 +718,7 @@ void tst_Trial::settingsUnderApplicationStyleSheet()
     QCOMPARE(language->palette().color(QPalette::WindowText), QColor("#e0e4ea"));
 }
 
-// Round 9 (1.8): the language setting installs qpb's translation at once. The
+// The language setting installs qpb's translation at once. The
 // column titles, context menus, validation messages and the tool tips of the
 // form's path editors follow it; the application's own texts stay its own.
 void tst_Trial::settingsLanguageTranslatesQpb()
@@ -754,7 +754,7 @@ void tst_Trial::settingsLanguageTranslatesQpb()
     QCOMPARE(title(), QString::fromUtf16(u"Thu\u1ed9c t\u00ednh"));
     QTRY_COMPARE(browse->toolTip(), QString::fromUtf16(u"Ch\u1ecdn th\u01b0 m\u1ee5c"));
 
-    // F13: texts from the objects' class info are fixed English strings.
+    // Texts from the objects' class info are fixed English strings.
     QCOMPARE(m_window->devices()->model().find("studio_mic/gain")->displayName(),
         QString("Input gain"));
 

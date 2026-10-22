@@ -64,8 +64,8 @@ InspectorPage::InspectorPage(QWidget* parent)
     m_view->setNameColumnWidth(130);
 
     connect(m_objects, &QListWidget::currentRowChanged, this, &InspectorPage::showObject);
-    // Round 6 (1.4): one callback per path instead of an if-chain on
-    // valueChanged. The connections follow the paths across setRoot().
+    // One callback per path instead of an if-chain on valueChanged. The
+    // connections follow the paths across setRoot().
     const auto bind = [this](const char* path, auto write) {
         m_model.onValueChanged(QString::fromLatin1(path), this, [this, write](const QVariant& v) {
             if (m_current >= 0)

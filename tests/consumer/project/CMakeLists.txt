@@ -1,5 +1,5 @@
 # A minimal application that uses qpb the way consuming projects are told to:
-# a copied component folder plus two lines of CMake (docs/SPEC.md §6.2).
+# a copied component folder plus two lines of CMake (qpb/doc/integration.md).
 # Its own settings are deliberately strict so problems in qpb's public headers
 # or CMake surface here.
 
@@ -22,7 +22,8 @@ if(CONSUMER_FIND_QT_FIRST)
     find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
 endif()
 
-# Snapshot of the host's settings that qpb must not change (docs/SPEC.md §6.3).
+# Snapshot of the host's settings that qpb must not change
+# (docs/design/component-cmake.md).
 set(_watched_variables
     CMAKE_CXX_STANDARD CMAKE_CXX_STANDARD_REQUIRED CMAKE_CXX_EXTENSIONS CMAKE_CXX_FLAGS
     CMAKE_CXX_FLAGS_DEBUG CMAKE_AUTOMOC CMAKE_AUTOUIC CMAKE_AUTORCC BUILD_SHARED_LIBS

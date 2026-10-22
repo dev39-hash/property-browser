@@ -1,6 +1,5 @@
-// Reference scenario 3 (docs/use-cases.md): configuration built at run time
-// from data (plugin manifests), with groups added and removed on a live model,
-// shown in List mode.
+// Configuration built at run time from data (plugin manifests), with groups
+// added and removed on a live model, shown in List mode.
 
 #include <qpb/qpb.h>
 

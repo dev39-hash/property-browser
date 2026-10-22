@@ -1,5 +1,5 @@
-# Compile-only checks of the public API (docs/PLAN.md M1.3, M1.5). Nothing here
-# is linked or run: a check fails by failing the build.
+# Compile-only checks of the public API (see docs/design/public-headers.md).
+# Nothing here is linked or run: a check fails by failing the build.
 
 # Every public header must compile on its own and be include-guarded. One
 # translation unit per header, compiled with strict warnings.

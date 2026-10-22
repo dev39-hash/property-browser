@@ -1,5 +1,5 @@
 // Translated texts of qpb::widgets and language changes at run time
-// (docs/PLAN.md M12.4, M12.5, SPEC 4.10, D57).
+// (see qpb/doc/guide/translations.md).
 
 #include <qpb/qpb.h>
 
@@ -145,7 +145,7 @@ void tst_WidgetTranslations::formViewTexts()
     QCOMPARE(browseToolTip(view.editor(QStringLiteral("General/file"))), QStringLiteral(u"Chọn tệp"));
 }
 
-// The form view keeps its editors: their tool tips follow the language (D57).
+// The form view keeps its editors: their tool tips follow the language.
 void tst_WidgetTranslations::formViewFollowsLanguageChanges()
 {
     PropertyModel model(createTree());

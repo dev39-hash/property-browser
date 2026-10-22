@@ -75,7 +75,7 @@ public:
         Application,
     };
 
-    // The value pipeline (README.md, "Values and the value pipeline"). Returns false if the value was
+    // The value pipeline (doc/guide/values-and-validation.md). Returns false if the value was
     // rejected; emits notifications through the observer. Read-only and
     // disabled properties only reject values that come from the user.
     bool assign(const QVariant& value, Origin origin);

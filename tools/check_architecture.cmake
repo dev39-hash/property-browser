@@ -1,4 +1,4 @@
-# Script mode (cmake -P): checks the architecture rules of docs/SPEC.md §3.
+# Script mode (cmake -P): checks the architecture rules of docs/design/architecture.md.
 #
 #   cmake -DQPB_DIR=<path to qpb/> -P tools/check_architecture.cmake
 #

@@ -1,5 +1,5 @@
-// A theme for the property browser with a style sheet (docs/SPEC.md section
-// 5.8, qpb 1.6): one template, theme.qss, with @{token} placeholders and a
+// A theme for the property browser with a style sheet (qpb/doc/guide/style-sheets.md,
+// qpb 1.6): one template, theme.qss, with @{token} placeholders and a
 // dark and a light token table, switched at runtime. Standard selectors style
 // Qt's widgets (and with them qpb's views and editors); qpb's hooks style what
 // the property browser paints or builds itself.

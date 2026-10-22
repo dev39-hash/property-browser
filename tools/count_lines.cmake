@@ -1,4 +1,5 @@
-# Script mode (cmake -P): checks the size criteria S1 and S2 (docs/SPEC.md §1.3).
+# Script mode (cmake -P): checks the size limits of the quickstart example (30 lines) and of the
+# custom type example (100 lines).
 #
 #   cmake -DLIMIT=30 -DFILES="a.cpp;b.h" -P tools/count_lines.cmake
 #

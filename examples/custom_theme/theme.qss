@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   qpb custom theme (docs/SPEC.md section 5.8)
+   qpb custom theme (qpb/doc/guide/style-sheets.md)
 
    One template for both themes: @{group.token} placeholders are replaced
    with the values of the active theme (see main.cpp) before the sheet is

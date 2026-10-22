@@ -1,4 +1,4 @@
-# RC trial application (docs/PLAN.md RC.1).
+# RC trial application (see docs/development/building-and-testing.md, "The trial application").
 #
 # A standalone application that integrates qpb exactly as a consuming project
 # does: the released component folder is extracted to components/qpb/ (see

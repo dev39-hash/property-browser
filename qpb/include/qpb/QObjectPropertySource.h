@@ -19,7 +19,7 @@ class QObjectPropertySourcePrivate;
 }
 
 // Shows the Q_PROPERTYs of QObjects in a PropertyModel and keeps both sides in
-// sync (README.md, "QObjects"). Since 1.2.
+// sync (doc/guide/qobject-source.md). Since 1.2.
 //
 // addObject() adds a group with one property per Q_PROPERTY: bool, int,
 // qint64, double/float, QString, enums (Q_ENUM) and any type registered in

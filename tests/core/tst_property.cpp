@@ -1,4 +1,4 @@
-// Property, PropertyGroup and builders without a model (docs/PLAN.md M2.1-M2.3).
+// Property, PropertyGroup and builders without a model.
 
 #include <qpb/qpbcore.h>
 
@@ -345,7 +345,8 @@ void tst_Property::setValueWithoutModel()
 }
 
 // Read-only and disabled restrict the user only; application code can still
-// set values (found in the RC trial, SPEC D34). Validation still applies.
+// set values, so an application can update its own read-only status field.
+// Validation still applies.
 void tst_Property::setValueAllowedWhenReadOnlyOrDisabled()
 {
     auto root = PropertyGroup::create(QStringLiteral("root"));

@@ -1,4 +1,4 @@
-// PropertyFilterProxyModel (docs/PLAN.md M5.3, SPEC 5.7).
+// PropertyFilterProxyModel.
 
 #include <qpb/qpbcore.h>
 

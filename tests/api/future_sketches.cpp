@@ -1,13 +1,15 @@
-// Future-proofing check for the 1.0 API (docs/PLAN.md M1.3).
+// Future-proofing check for the 1.0 API.
 //
 // Rough sketches of the features planned for 1.1 and 1.2, written against the
 // public 1.0 headers only. They are compiled (never linked or run) so the
 // compiler proves that each feature can be added later without changing the
-// 1.0 API. See docs/api-review.md for the conclusions.
+// 1.0 API.
 //
 // The features have since been implemented (1.1, 1.2); the sketches stay as
 // application code that must keep compiling: e.g. their unqualified toJson()
-// and save() calls must not become ambiguous with qpb's functions (D40).
+// and save() calls must not become ambiguous with qpb's functions (new free
+// functions live in a nested namespace so argument-dependent lookup never finds
+// them; see docs/design/public-headers.md).
 
 #include <qpb/qpb.h>
 

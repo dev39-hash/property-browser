@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds and tests the RC trial against a released qpb zip (docs/PLAN.md RC.1).
+# Builds and tests the RC trial against a released qpb zip
+# (docs/development/building-and-testing.md, "The trial application").
 #
 #   rc-trial/run_trial.sh path/to/qpb-1.0.0-rc1.zip [Qt prefix [extra CMake arguments...]]
 #

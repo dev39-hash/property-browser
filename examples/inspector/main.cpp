@@ -1,5 +1,5 @@
-// Reference scenario 1 (docs/use-cases.md): scene object inspector in a tree view,
-// with nested groups, constraints and a custom color type.
+// Scene object inspector in a tree view, with nested groups, constraints and a
+// custom color type.
 
 #include <qpb/qpb.h>
 

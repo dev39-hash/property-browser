@@ -18,7 +18,7 @@ QT_END_NAMESPACE
 namespace qpb::detail {
 
 // Editor for FilePath and DirPath: a line edit plus a "..." button that opens
-// a file or directory dialog (README.md, "Types and attributes").
+// a file or directory dialog (doc/guide/custom-types-and-editors.md, "Built-in editors").
 class QPB_WIDGETS_EXPORT PathEdit : public QWidget
 {
     Q_OBJECT

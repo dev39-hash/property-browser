@@ -1,4 +1,6 @@
-// API compatibility test for qpb 1.6 (docs/SPEC.md §9.5, PLAN M10.4).
+// API compatibility test for qpb 1.6: client code written against 1.6 must keep
+// building and behaving the same in every later 1.x; see
+// docs/design/public-headers.md.
 //
 // Exercises every public API added in 1.6 the way client code would. Once
 // 1.6.0 is released this file is FROZEN: never edit it. Every later 1.x

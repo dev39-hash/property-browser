@@ -8,7 +8,7 @@
 
 class QListWidget;
 
-// Reference scenario 1: inspector for the selected object of a scene.
+// Inspector for the selected object of a scene.
 struct SceneObject
 {
     QString name;

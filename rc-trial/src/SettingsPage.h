@@ -9,8 +9,8 @@
 class QSettings;
 class QStackedWidget;
 
-// Reference scenario 2: application settings stored in QSettings.
-// Round 4 (1.2): stored with qpb::serialization, shown as a tree or a form.
+// Application settings stored in QSettings with qpb::serialization, shown as a
+// tree or a form.
 class SettingsPage : public QWidget
 {
     Q_OBJECT
@@ -41,7 +41,7 @@ public:
     bool importJson(const QJsonObject& json);
 
 private:
-    // Round 9 (1.8): the "language" setting switches qpb's translation at once.
+    // The "language" setting switches qpb's translation at once.
     void applyLanguage(const QString& language);
 
     QSettings& m_settings;

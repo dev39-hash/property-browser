@@ -1,7 +1,11 @@
-// API compatibility test for qpb 1.8 (docs/SPEC.md §9.5, §4.10, PLAN M12.6).
+// API compatibility test for qpb 1.8: client code written against 1.8 must keep
+// building and behaving the same in every later 1.x; see
+// docs/design/public-headers.md.
 //
 // Exercises every public API added in 1.8 the way client code would, and the
-// translatable texts that 1.8 makes stable (D56). Builds with Qt 6 and Qt 5.15.
+// translatable texts that 1.8 makes stable (applications translate qpb or
+// override a wording through their contexts and source texts, so changing one
+// would silently drop their translation). Builds with Qt 6 and Qt 5.15.
 // Once 1.8.0 is released this file is FROZEN: never edit it. Every later 1.x
 // release must compile it (deprecation warnings allowed) and pass it unchanged.
 
