@@ -31,6 +31,7 @@ class PropertyFormViewPrivate;
 class QPB_WIDGETS_EXPORT PropertyFormView : public QScrollArea
 {
     Q_OBJECT
+    Q_PROPERTY(bool showModelForeground READ showModelForeground WRITE setShowModelForeground)
 
 public:
     explicit PropertyFormView(QWidget* parent = nullptr);
@@ -50,6 +51,19 @@ public:
     // The state is kept by path, also for groups that do not exist yet.
     bool isExpanded(const QString& groupPath) const;
     void setExpanded(const QString& groupPath, bool expanded);
+
+    // Since 1.9. Whether labels and section titles show the model's
+    // Qt::ForegroundRole colour: the name cell's, else the value cell's (a valid
+    // QColor, or a QBrush with a single colour; anything else means none). The
+    // colour follows the model and wins over a colour from the application style
+    // sheet, including the qpbModified rule; modified labels and titles stay
+    // bold. A disabled label gets no model colour: it keeps the colour it has
+    // without this property (the style's disabled colour, or the application
+    // sheet's). Off by default, so the form looks as before. Can be set from a
+    // style sheet (for example qpb--PropertyFormView {
+    // qproperty-showModelForeground: true; }; see doc/guide/style-sheets.md).
+    bool showModelForeground() const;
+    void setShowModelForeground(bool show);
 
 private:
     std::unique_ptr<detail::PropertyFormViewPrivate> d;

@@ -38,7 +38,29 @@ QToolButton[qpbPart="groupTitle"], QToolButton[qpbPart="groupTitle"]:checked {
 QLabel[qpbPart="label"][qpbModified="true"] { color: #e87c00; }
 ```
 
-Notes:
+## Model colours in the form view
+
+`PropertyFormView::showModelForeground` (since 1.9, off by default) makes labels and section titles show the
+`Qt::ForegroundRole` colour of the model (the name cell's, else the value cell's). A style sheet can turn it on:
+
+```css
+qpb--PropertyFormView { qproperty-showModelForeground: true; }
+```
+
+The same value is available from code: `setShowModelForeground()`. Precedence differs from the tree view, where a
+matching `::item` rule wins over the colour of the model:
+
+- The model's colour wins over a `color` of the application's style sheet for `QLabel[qpbPart="label"]` and
+  `QToolButton[qpbPart="groupTitle"]`, including the `[qpbModified="true"]` rule. The form sets the colour as the
+  widget's own style sheet, which an application sheet cannot override. To get another colour, return another brush
+  from the model or a proxy instead of writing a rule.
+- Without a colour from the model (none given, or one the model stops giving) the widget follows the style and the
+  application sheet as usual, so the `[qpbModified="true"]` rule applies again.
+- Modified labels and titles stay bold. The form sets no colour on a disabled label (its rule is `QLabel:enabled`), so a
+  disabled label keeps the colour it has without the property: the style's disabled colour, or the application sheet's.
+- With the property off, the form sets nothing, whatever the model returns.
+
+## Notes
 
 - The section title is a checkable tool button (checked while expanded), so cover `:checked` if your sheet styles
   checked tool buttons.

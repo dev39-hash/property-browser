@@ -176,7 +176,8 @@ property is enabled and not read-only and its type is registered. Groups are nev
   `groupForeground`, `modifiedForeground`, `readOnlyForeground`; since 1.6). `mode`, `tabStopsOnCheckBoxes` and the
   colours are `Q_PROPERTY`s.
 - `PropertyFormView` (a `QScrollArea`, since 1.1): `setModel()`, `model()`, `editor(path)`, `isExpanded(groupPath)`,
-  `setExpanded()`.
+  `setExpanded()`, and `showModelForeground()` / `setShowModelForeground()` (since 1.9; a `Q_PROPERTY`, off by
+  default): labels and section titles show the model's `Qt::ForegroundRole` colour.
 - `PropertyDelegate`: the tree view's delegate (Tree and List modes); set it on any `QAbstractItemView` showing a
   `PropertyModel`. `PropertyFormView` has editors of its own.
 - `EditorFactory::global()`: `registerEditor(id, handler)`, `replaceEditor()`, `handler()`, `handlerFor(property)`,

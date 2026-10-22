@@ -38,7 +38,15 @@ every group as a collapsible section with a title button and an indented body.
 - The form follows the model: values, display names, tool tips, visibility, read-only and enabled states, attributes,
   and added or removed properties. Labels of modified properties are bold. Hidden properties hide their label and
   editor, or the whole section for a group; a disabled property has a disabled label and editor, a read-only one a
-  disabled editor and a normal label.
+  disabled editor and a normal label. An editor is rewritten only when the model's value changes (or its attributes
+  are applied again), so text being typed survives other updates such as a new tool tip or colour.
+- `showModelForeground` (a `Q_PROPERTY`, since 1.9, off by default): labels and section titles show the model's
+  `Qt::ForegroundRole` colour, the name cell's or else the value cell's, also while a section is collapsed. A `QColor`
+  or a `QBrush` with a single colour counts; gradient and texture brushes, `Qt::NoBrush` and other values mean no
+  colour. The colour follows `dataChanged()` without a rebuild, wins over the application's style sheet, and leaves the
+  bold weight of modified labels and titles alone; a disabled label gets no model colour and keeps the colour it has
+  without the property (the style's disabled colour, or the application sheet's). With the property off
+  the model's colours are ignored. See [Style sheets](style-sheets.md#model-colours-in-the-form-view).
 - Structural changes in the model (rows added, removed or moved, a model reset, a layout change) rebuild the form once,
   when control returns to the event loop, so a filter that changes many rows at once costs one rebuild. The focused
   editor is committed first and gets the focus back afterwards. `editor(path)`, `setExpanded()`, the constructor and
