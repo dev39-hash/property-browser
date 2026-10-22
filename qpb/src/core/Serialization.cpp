@@ -8,6 +8,8 @@
 
 #include <functional>
 
+#include "Property_p.h"
+
 namespace qpb::serialization {
 
 namespace {
@@ -22,6 +24,12 @@ const TypeHandler* handlerOf(const Property& property)
 bool isStored(const Property& property)
 {
     return !property.isReadOnly() && !property.isLive();
+}
+
+// The observer of the tree group belongs to (the model), or nullptr.
+detail::TreeObserver* holdOf(const PropertyGroup& group)
+{
+    return detail::PropertyPrivate::get(&group)->observer();
 }
 
 // Visits the stored leaves under group with their path relative to it.
@@ -60,6 +68,9 @@ QJsonObject toJson(const PropertyGroup& group)
 
 bool fromJson(PropertyGroup& group, const QJsonObject& json)
 {
+    // A valueChanged handler may replace the tree or remove the group while
+    // the values are being written.
+    const detail::TreeHold hold(holdOf(group));
     bool accepted = true;
     for (auto it = json.begin(); it != json.end(); ++it) {
         Property* child = group.child(it.key());
@@ -89,6 +100,7 @@ void save(const PropertyGroup& group, QSettings& settings)
 
 bool load(PropertyGroup& group, const QSettings& settings)
 {
+    const detail::TreeHold hold(holdOf(group)); // as in fromJson()
     bool accepted = true;
     forEachLeaf(group, QString(), [&](Property& property, const QString& key) {
         if (settings.contains(key))

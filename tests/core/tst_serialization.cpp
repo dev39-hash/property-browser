@@ -2,6 +2,7 @@
 
 #include <qpb/qpbcore.h>
 
+#include <QAbstractItemModelTester>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSettings>
@@ -9,6 +10,8 @@
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
+
+#include <memory>
 
 using namespace qpb;
 
@@ -75,6 +78,8 @@ private slots:
     void settingsRoundTrip();
     void settingsUnderGroupAndMissingKeys();
     void batchOnModel();
+    void treeChangeDuringLoad_data();
+    void treeChangeDuringLoad();
 };
 
 void tst_Serialization::initTestCase()
@@ -261,6 +266,76 @@ void tst_Serialization::batchOnModel()
     model.endBatch();
     QCOMPARE(batch.count(), 1);
     QCOMPARE(batch[0][0].toStringList().size(), 7);
+}
+
+void tst_Serialization::treeChangeDuringLoad_data()
+{
+    QTest::addColumn<bool>("viaJson");
+    QTest::addColumn<bool>("replaceTree");
+    QTest::newRow("fromJson/replaceTree") << true << true;
+    QTest::newRow("fromJson/removeGroup") << true << false;
+    QTest::newRow("load/replaceTree") << false << true;
+    QTest::newRow("load/removeGroup") << false << false;
+}
+
+// A valueChanged handler replaces the tree, or removes the group being loaded,
+// while the values are written: the loop goes on over the part it started with.
+void tst_Serialization::treeChangeDuringLoad()
+{
+    QFETCH(bool, viaJson);
+    QFETCH(bool, replaceTree);
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    auto source = createSettings();
+    modify(*source);
+    const QJsonObject json = serialization::toJson(*source);
+    QSettings settings(dir.filePath(QStringLiteral("settings.ini")), QSettings::IniFormat);
+    serialization::save(*source, settings);
+
+    PropertyModel model(createSettings());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    auto token = std::make_shared<int>(0);
+    const std::weak_ptr<int> life = token;
+    model.find(QStringLiteral("General/minutes"))
+        ->setValidator([token](const QVariant&, const Property&) { return ValidationResult::valid(); });
+    token.reset();
+    bool treeChanged = false;
+    QObject::connect(&model, &PropertyModel::valueChanged, &model, [&](const QString&) {
+        if (treeChanged)
+            return;
+        treeChanged = true;
+        if (replaceTree)
+            model.setRoot(createSettings());
+        else
+            model.root()->remove(QStringLiteral("General"));
+    });
+    // Connected later: sees the detached part still alive while the loop runs.
+    int checks = 0;
+    bool aliveInHandlers = true;
+    QObject::connect(&model, &PropertyModel::valueChanged, &model, [&](const QString&) {
+        if (!treeChanged)
+            return;
+        ++checks;
+        aliveInHandlers = aliveInHandlers && !life.expired();
+    });
+
+    PropertyGroup& root = *model.root();
+    const bool accepted
+        = viaJson ? serialization::fromJson(root, json) : serialization::load(root, settings);
+
+    QVERIFY(accepted);
+    QVERIFY(treeChanged);
+    QVERIFY(checks > 0);
+    QVERIFY(aliveInHandlers);
+    QVERIFY(life.expired());
+    if (replaceTree) {
+        // The new tree was not loaded into.
+        QCOMPARE(model.find(QStringLiteral("General/minutes"))->value(), QVariant(5));
+        QCOMPARE(model.find(QStringLiteral("Limits/ratio"))->value(), QVariant(0.5));
+    } else {
+        QVERIFY(!model.find(QStringLiteral("General")));
+        QCOMPARE(model.find(QStringLiteral("Limits/ratio"))->value(), QVariant(0.25));
+    }
 }
 
 QTEST_GUILESS_MAIN(tst_Serialization)

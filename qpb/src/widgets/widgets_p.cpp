@@ -10,6 +10,7 @@
 #include <QtWidgets/qwidget.h>
 
 #include <algorithm>
+#include <utility>
 
 namespace qpb::detail {
 
@@ -56,14 +57,13 @@ bool isResettableByUser(const Property* property)
 
 namespace {
 
-void resetLeaves(PropertyModel* model, const Property* property)
+void collectLeafPaths(const Property* property, QStringList& paths)
 {
     if (const PropertyGroup* group = property->toGroup()) {
         for (const Property* child : group->children())
-            resetLeaves(model, child);
+            collectLeafPaths(child, paths);
     } else if (property->isModified()) {
-        model->setData(model->indexOf(property, PropertyModel::ValueColumn),
-            property->defaultValue(), Qt::EditRole);
+        paths.append(property->path());
     }
 }
 
@@ -71,8 +71,23 @@ void resetLeaves(PropertyModel* model, const Property* property)
 
 void resetByUser(PropertyModel* model, const Property* property)
 {
+    // A handler of valueChanged may replace the tree or remove properties
+    // while the reset is running: the properties are found again by path
+    // before each write, and the reset stops when the tree was replaced.
+    QStringList paths;
+    collectLeafPaths(property, paths);
+    const PropertyGroup* root = model->root();
+
     model->beginBatch();
-    resetLeaves(model, property);
+    for (const QString& path : std::as_const(paths)) {
+        if (model->root() != root)
+            break;
+        const Property* leaf = model->find(path);
+        if (!leaf || !leaf->isModified())
+            continue;
+        model->setData(model->indexOf(leaf, PropertyModel::ValueColumn), leaf->defaultValue(),
+            Qt::EditRole);
+    }
     model->endBatch();
 }
 

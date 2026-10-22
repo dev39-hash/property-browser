@@ -238,6 +238,9 @@ private slots:
     void titleFromSetting();
     void liveProperties();
     void conditionsFromMetadata();
+
+    void treeReplacedByAnEarlierHandlerStillReachesTheObject();
+    void treeReplacedWhileTheObjectAdjustsTheValue();
 };
 
 void tst_QObjectPropertySource::propertiesAndTypes()
@@ -516,6 +519,71 @@ void tst_QObjectPropertySource::conditionsFromMetadata()
     recorder.m_saveToDisk = false;
     emit recorder.changed();
     QVERIFY(!folder->isVisible());
+}
+
+// A handler connected before the source replaces the tree: the source, which
+// runs after it, still writes the value that was assigned to the object, and
+// the object keeps working with the source afterwards.
+void tst_QObjectPropertySource::treeReplacedByAnEarlierHandlerStillReachesTheObject()
+{
+    PropertyModel model(PropertyGroup::create(QStringLiteral("root")));
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    int replaced = 0;
+    QObject::connect(&model, &PropertyModel::valueChanged, &model,
+        [&model, &replaced](const QString& path) {
+            if (path == QStringLiteral("cam/name") && replaced++ == 0)
+                model.setRoot(PropertyGroup::create(QStringLiteral("root")));
+        });
+    QObjectPropertySource source(&model);
+    Camera camera;
+    camera.setObjectName(QStringLiteral("cam"));
+    QVERIFY(source.addObject(&camera));
+
+    QVERIFY(model.setValue(QStringLiteral("cam/name"), QStringLiteral("Rim")));
+
+    QCOMPARE(replaced, 1);
+    QCOMPARE(camera.name(), QStringLiteral("Rim"));
+    QVERIFY(!model.find(QStringLiteral("cam")));
+    QVERIFY(!source.groupOf(&camera));
+
+    // The object is still bound but has no properties in the new tree.
+    camera.setName(QStringLiteral("Later"));
+    QCOMPARE(camera.name(), QStringLiteral("Later"));
+    QCOMPARE(source.objects(), QList<QObject*>({&camera}));
+    QVERIFY(source.removeObject(&camera));
+}
+
+// The object refuses part of the value, so the source reads it back inside
+// the original write; a handler connected after the source replaces the tree
+// while that nested write is running. The object's notification sets the
+// property again, so the signal is emitted twice for the path; the handler
+// replaces the tree on the first emission only.
+void tst_QObjectPropertySource::treeReplacedWhileTheObjectAdjustsTheValue()
+{
+    PropertyModel model(PropertyGroup::create(QStringLiteral("root")));
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QObjectPropertySource source(&model);
+    Camera camera;
+    camera.setObjectName(QStringLiteral("cam"));
+    QVERIFY(source.addObject(&camera));
+    int replaced = 0;
+    bool done = false;
+    QObject::connect(&model, &PropertyModel::valueChanged, &model,
+        [&model, &replaced, &done](const QString& path) {
+            if (path == QStringLiteral("cam/fov") && !done) {
+                done = true;
+                ++replaced;
+                model.setRoot(PropertyGroup::create(QStringLiteral("root")));
+            }
+        });
+
+    QVERIFY(model.setValue(QStringLiteral("cam/fov"), 75));
+
+    QCOMPARE(replaced, 1);
+    QCOMPARE(camera.fov(), 74); // odd values are refused by the object
+    QVERIFY(!model.find(QStringLiteral("cam")));
+    camera.setFov(90); // no property to follow it any more
+    QCOMPARE(camera.fov(), 90);
 }
 
 QTEST_GUILESS_MAIN(tst_QObjectPropertySource)

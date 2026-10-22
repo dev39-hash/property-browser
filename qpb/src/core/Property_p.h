@@ -36,6 +36,36 @@ public:
     virtual void endBatch() = 0;
     // A condition (enabledWhen / visibleWhen) was set or cleared on property.
     virtual void conditionsChanged(Property* property) = 0;
+    // While at least one hold is active, a subtree detached from the tree is
+    // kept alive: handlers of value signals may replace or remove parts of the
+    // tree while code further up the call stack still uses them.
+    virtual void beginHold() = 0;
+    virtual void endHold() = 0;
+    // Takes over a subtree that was detached from the tree. It is destroyed at
+    // once, or when the outermost hold ends.
+    virtual void retire(std::unique_ptr<Property> detached) = 0;
+};
+
+// Holds the detached subtrees of an observer for the lifetime of the object.
+class TreeHold
+{
+public:
+    explicit TreeHold(TreeObserver* tree)
+        : observer(tree)
+    {
+        if (observer)
+            observer->beginHold();
+    }
+    ~TreeHold()
+    {
+        if (observer)
+            observer->endHold();
+    }
+    TreeHold(const TreeHold&) = delete;
+    TreeHold& operator=(const TreeHold&) = delete;
+
+private:
+    TreeObserver* observer;
 };
 
 // A condition on another property's value (1.4), evaluated by the model.

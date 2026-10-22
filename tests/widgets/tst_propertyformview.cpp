@@ -26,6 +26,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <memory>
 
 #include "widgets/PathEdit_p.h"
 
@@ -238,6 +239,83 @@ bool resetFromMenu(QWidget* widget)
     return enabled;
 }
 
+// Reports when a property is destroyed: its validator owns a token that the
+// returned pointer watches.
+std::weak_ptr<int> trackLifetime(Property& property)
+{
+    auto token = std::make_shared<int>(0);
+    property.setValidator([token](const QVariant&, const Property&) {
+        return *token == 0 ? ValidationResult::valid() : ValidationResult::error(QString());
+    });
+    return token;
+}
+
+enum class TreeChange {
+    ReplaceTree,
+    RemoveGroup,
+    RemoveProperty,
+};
+
+// Changes the tree createTree() made the way an application handler would.
+void changeTree(PropertyModel& model, TreeChange change)
+{
+    switch (change) {
+    case TreeChange::ReplaceTree:
+        model.setRoot(createTree());
+        break;
+    case TreeChange::RemoveGroup:
+        model.root()->remove(QStringLiteral("Camera"));
+        break;
+    case TreeChange::RemoveProperty:
+        model.find(QStringLiteral("Camera"))->toGroup()->remove(QStringLiteral("fov"));
+        break;
+    }
+}
+
+void addTreeChangeRows()
+{
+    QTest::addColumn<int>("change");
+    QTest::newRow("replaceTree") << int(TreeChange::ReplaceTree);
+    QTest::newRow("removeGroup") << int(TreeChange::RemoveGroup);
+    QTest::newRow("removeProperty") << int(TreeChange::RemoveProperty);
+}
+
+// A handler of valueChanged() for "Camera/fov" that changes the tree, and a
+// second handler connected after it that records the first change it sees.
+struct TreeChangingHandlers
+{
+    TreeChangingHandlers(PropertyModel& model, TreeChange change)
+        : lifetime(trackLifetime(*model.find(QStringLiteral("Camera/fov"))))
+    {
+        QObject::connect(&model, &PropertyModel::valueChanged, &model,
+            [this, &model, change](const QString& path) {
+                if (path == QStringLiteral("Camera/fov") && !treeChanged) {
+                    treeChanged = true;
+                    changeTree(model, change);
+                }
+            });
+        QObject::connect(&model, &PropertyModel::valueChanged, &model,
+            [this](const QString& path, const QVariant& newValue, const QVariant& oldValue) {
+                if (calls++ > 0)
+                    return;
+                propertyAlive = !lifetime.expired();
+                if (!propertyAlive)
+                    return; // the values would refer to a destroyed property
+                firstPath = path;
+                firstNewValue = newValue;
+                firstOldValue = oldValue;
+            });
+    }
+
+    std::weak_ptr<int> lifetime;
+    bool treeChanged = false;
+    int calls = 0;
+    bool propertyAlive = false;
+    QString firstPath;
+    QVariant firstNewValue;
+    QVariant firstOldValue;
+};
+
 } // namespace
 
 class tst_PropertyFormView : public QObject
@@ -274,6 +352,13 @@ private slots:
     void valueChangeAndRevertWithTypedText();
     void dataChangedForRangesAndWholeTree();
     void attributeChangeResyncsAdjustedEditor();
+
+    void commitWithHandlerChangingTree_data();
+    void commitWithHandlerChangingTree();
+    void groupResetWithHandlerChangingTree_data();
+    void groupResetWithHandlerChangingTree();
+    void rejectedCommitWithHandlerChangingTree_data();
+    void rejectedCommitWithHandlerChangingTree();
 
     void foregroundIsOffByDefault();
     void turningOnColoursExistingRowsAtOnce();
@@ -1999,6 +2084,135 @@ void tst_PropertyFormView::queuedPolishAfterTurningOnIsHarmless()
         QVERIFY(guard.isNull());
         drainEventLoop();
         QCOMPARE(warnings.count(), 0);
+    }
+}
+
+void tst_PropertyFormView::commitWithHandlerChangingTree_data()
+{
+    addTreeChangeRows();
+}
+
+// A handler of valueChanged() changes the tree while the form is writing the
+// committed value.
+void tst_PropertyFormView::commitWithHandlerChangingTree()
+{
+    QFETCH(int, change);
+    TreeChangingHandlers handlers(f->model, TreeChange(change));
+    auto* spinBox = f->editor<QSpinBox>(QStringLiteral("Camera/fov"));
+    QVERIFY(spinBox);
+    spinBox->setFocus();
+    spinBox->setValue(90);
+
+    QTest::keyClick(spinBox, Qt::Key_Return);
+
+    QTRY_COMPARE(handlers.calls, 1);
+    QVERIFY2(handlers.propertyAlive,
+        "the edited property was destroyed while a later handler of the same change ran");
+    QCOMPARE(handlers.firstPath, QStringLiteral("Camera/fov"));
+    QCOMPARE(handlers.firstNewValue, QVariant(90));
+    QCOMPARE(handlers.firstOldValue, QVariant(60));
+    QTRY_VERIFY(handlers.lifetime.expired());
+    if (TreeChange(change) == TreeChange::ReplaceTree) {
+        QVERIFY(f->editor<QSpinBox>(QStringLiteral("Camera/fov")));
+        QCOMPARE(f->editor<QSpinBox>(QStringLiteral("Camera/fov"))->value(), 60);
+    } else {
+        QVERIFY(!f->view->editor(QStringLiteral("Camera/fov")));
+        QVERIFY(f->view->editor(QStringLiteral("name")));
+    }
+
+    // The form keeps working with the changed tree.
+    auto* name = f->editor<QLineEdit>(QStringLiteral("name"));
+    QVERIFY(name);
+    name->setFocus();
+    name->setText(QStringLiteral("Renamed"));
+    QTest::keyClick(name, Qt::Key_Return);
+    QTRY_COMPARE(f->stored(QStringLiteral("name")), QVariant(QStringLiteral("Renamed")));
+}
+
+void tst_PropertyFormView::groupResetWithHandlerChangingTree_data()
+{
+    addTreeChangeRows();
+}
+
+// "Reset group" writes one value after the other while a handler of
+// valueChanged() changes the tree.
+void tst_PropertyFormView::groupResetWithHandlerChangingTree()
+{
+    QFETCH(int, change);
+    QVERIFY(f->model.setValue(QStringLiteral("Camera/fov"), 100));
+    QVERIFY(f->model.setValue(QStringLiteral("Camera/projection"), 1));
+    TreeChangingHandlers handlers(f->model, TreeChange(change));
+
+    QVERIFY(resetFromMenu(f->title(QStringLiteral("Camera"))));
+
+    QVERIFY(handlers.treeChanged);
+    QVERIFY(handlers.calls >= 1);
+    QVERIFY2(handlers.propertyAlive,
+        "the reset property was destroyed while a later handler of the same change ran");
+    QCOMPARE(handlers.firstPath, QStringLiteral("Camera/fov"));
+    QCOMPARE(handlers.firstNewValue, QVariant(60));
+    QCOMPARE(handlers.firstOldValue, QVariant(100));
+    QVERIFY(handlers.lifetime.expired());
+    if (TreeChange(change) == TreeChange::ReplaceTree) {
+        QCOMPARE(f->stored(QStringLiteral("Camera/fov")), QVariant(60));
+        QCOMPARE(f->stored(QStringLiteral("Camera/projection")), QVariant(0));
+        QVERIFY(f->editor<QSpinBox>(QStringLiteral("Camera/fov")));
+    } else if (TreeChange(change) == TreeChange::RemoveGroup) {
+        QVERIFY(!f->model.find(QStringLiteral("Camera")));
+        QVERIFY(!f->view->editor(QStringLiteral("Camera/fov")));
+    } else {
+        QVERIFY(f->model.find(QStringLiteral("Camera")));
+        QVERIFY(!f->model.find(QStringLiteral("Camera/fov")));
+        QVERIFY(!f->view->editor(QStringLiteral("Camera/fov")));
+    }
+}
+
+void tst_PropertyFormView::rejectedCommitWithHandlerChangingTree_data()
+{
+    QTest::addColumn<bool>("replaceTree");
+    QTest::newRow("replaceTree") << true;
+    QTest::newRow("removeProperty") << false;
+}
+
+// A handler of validationFailed() changes the tree while the form is
+// reacting to a rejected commit.
+void tst_PropertyFormView::rejectedCommitWithHandlerChangingTree()
+{
+    QFETCH(bool, replaceTree);
+    auto token = std::make_shared<int>(0);
+    const std::weak_ptr<int> life = token;
+    f->model.find(QStringLiteral("name"))
+        ->setValidator([token](const QVariant& value, const Property&) {
+            return value.toString() == QStringLiteral("forbidden")
+                ? ValidationResult::error(QStringLiteral("This name is not allowed"))
+                : ValidationResult::valid();
+        });
+    token.reset();
+    int failures = 0;
+    QObject::connect(&f->model, &PropertyModel::validationFailed, &f->model,
+        [this, replaceTree, &failures](const QString&) {
+            if (failures++ > 0)
+                return;
+            if (replaceTree)
+                f->model.setRoot(createTree());
+            else
+                f->model.root()->remove(QStringLiteral("name"));
+        });
+    auto* name = f->editor<QLineEdit>(QStringLiteral("name"));
+    QVERIFY(name);
+    name->setFocus();
+    name->setText(QStringLiteral("forbidden"));
+
+    QTest::keyClick(name, Qt::Key_Return);
+
+    QTRY_VERIFY(failures >= 1);
+    QTRY_VERIFY(life.expired());
+    if (replaceTree) {
+        QTRY_VERIFY(f->view->editor(QStringLiteral("name")));
+        QCOMPARE(f->stored(QStringLiteral("name")), QVariant(QStringLiteral("Main")));
+    } else {
+        QTRY_VERIFY(!f->view->editor(QStringLiteral("name")));
+        QVERIFY(f->view->editor(QStringLiteral("visible")));
     }
 }
 

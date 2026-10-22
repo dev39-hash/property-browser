@@ -8,6 +8,7 @@
 #include <QComboBox>
 #include <QContextMenuEvent>
 #include <QDir>
+#include <QDoubleSpinBox>
 #include <QLineEdit>
 #include <QMenu>
 #include <QPlainTextEdit>
@@ -19,7 +20,10 @@
 #include <QTimer>
 #include <QToolButton>
 #include <QToolTip>
+#include <QTreeView>
 #include <QVBoxLayout>
+
+#include <memory>
 
 #include "widgets/PathEdit_p.h"
 
@@ -142,6 +146,119 @@ bool editorOpen(const PropertyTreeView* view)
     return false;
 }
 
+// True when every editor the delegate has open is for a row that still
+// exists (its remembered index is valid).
+bool openEditorsBelongToLiveRows(const PropertyTreeView* view)
+{
+    const QList<QWidget*> children = view->viewport()->findChildren<QWidget*>();
+    for (const QWidget* child : children) {
+        if (!child->property("_qpb_editorOwner").isValid())
+            continue;
+        const auto index = child->property("_qpb_editorIndex").value<QPersistentModelIndex>();
+        if (!index.isValid())
+            return false;
+    }
+    return true;
+}
+
+// Reports when a property is destroyed: its validator owns a token that the
+// returned pointer watches.
+std::weak_ptr<int> trackLifetime(Property& property)
+{
+    auto token = std::make_shared<int>(0);
+    property.setValidator([token](const QVariant&, const Property&) {
+        return *token == 0 ? ValidationResult::valid() : ValidationResult::error(QString());
+    });
+    return token;
+}
+
+enum class TreeChange {
+    ReplaceTree,
+    RemoveGroup,
+    RemoveProperty,
+};
+
+// Changes the tree createTree() made the way an application handler would.
+void changeTree(PropertyModel& model, TreeChange change)
+{
+    switch (change) {
+    case TreeChange::ReplaceTree:
+        model.setRoot(createTree());
+        break;
+    case TreeChange::RemoveGroup:
+        model.root()->remove(QStringLiteral("Camera"));
+        break;
+    case TreeChange::RemoveProperty:
+        model.find(QStringLiteral("Camera"))->toGroup()->remove(QStringLiteral("fov"));
+        break;
+    }
+}
+
+void addTreeChangeRows()
+{
+    QTest::addColumn<int>("change");
+    QTest::newRow("replaceTree") << int(TreeChange::ReplaceTree);
+    QTest::newRow("removeGroup") << int(TreeChange::RemoveGroup);
+    QTest::newRow("removeProperty") << int(TreeChange::RemoveProperty);
+}
+
+// A handler of valueChanged() for "Camera/fov" that changes the tree, and a
+// second handler connected after it that records the first change it sees.
+struct TreeChangingHandlers
+{
+    TreeChangingHandlers(PropertyModel& model, TreeChange change)
+        : lifetime(trackLifetime(*model.find(QStringLiteral("Camera/fov"))))
+    {
+        QObject::connect(&model, &PropertyModel::valueChanged, &model,
+            [this, &model, change](const QString& path) {
+                if (path == QStringLiteral("Camera/fov") && !treeChanged) {
+                    treeChanged = true;
+                    changeTree(model, change);
+                }
+            });
+        QObject::connect(&model, &PropertyModel::valueChanged, &model,
+            [this](const QString& path, const QVariant& newValue, const QVariant& oldValue) {
+                if (calls++ > 0)
+                    return;
+                propertyAlive = !lifetime.expired();
+                if (!propertyAlive)
+                    return; // the values would refer to a destroyed property
+                firstPath = path;
+                firstNewValue = newValue;
+                firstOldValue = oldValue;
+            });
+    }
+
+    std::weak_ptr<int> lifetime;
+    bool treeChanged = false;
+    int calls = 0;
+    bool propertyAlive = false;
+    QString firstPath;
+    QVariant firstNewValue;
+    QVariant firstOldValue;
+};
+
+// Opens the context menu of the row at index and triggers its only action if
+// enabled. Returns whether the action was enabled.
+bool resetFromContextMenu(PropertyTreeView* view, const QModelIndex& index)
+{
+    bool enabled = false;
+    QTimer::singleShot(0, view, [&enabled] {
+        auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+        if (!menu)
+            return;
+        enabled = menu->actions().value(0) && menu->actions().value(0)->isEnabled();
+        if (enabled)
+            menu->actions().value(0)->trigger();
+        menu->close();
+    });
+    const QPoint position = view->visualRect(index).center();
+    QContextMenuEvent event(
+        QContextMenuEvent::Mouse, position, view->viewport()->mapToGlobal(position));
+    QApplication::sendEvent(view->viewport(), &event);
+    return enabled;
+}
+
 } // namespace
 
 class tst_PropertyTreeView : public QObject
@@ -180,6 +297,20 @@ private slots:
     void worksThroughProxyModel();
     void multilineEditor();
     void screenshot();
+
+    void commitWithHandlerChangingTree_data();
+    void commitWithHandlerChangingTree();
+    void groupResetWithHandlerChangingTree_data();
+    void groupResetWithHandlerChangingTree();
+
+    void openIntEditorFollowsAttributeChanges();
+    void openDoubleEditorFollowsAttributeChanges();
+    void customEditorAppliesAttributesOncePerChange();
+    void plainTreeViewEditorFollowsAttributeChanges();
+    void editorThroughFilterProxyFollowsAttributeChanges();
+    void typedTextSurvivesUnrelatedChanges();
+    void openEditorFollowsAnExternalValueChange();
+    void attributeChangesAfterTheEditorClosedAreHarmless();
 
 private:
     std::unique_ptr<Fixture> f;
@@ -781,6 +912,337 @@ void tst_PropertyTreeView::screenshot()
     QVERIFY(f->window.grab().save(QDir(directory).filePath(QStringLiteral("tree.png"))));
     f->view->setMode(PropertyTreeView::Mode::List);
     QVERIFY(f->window.grab().save(QDir(directory).filePath(QStringLiteral("list.png"))));
+}
+
+namespace {
+
+void checkTreeAfter(Fixture& f, TreeChange change)
+{
+    switch (change) {
+    case TreeChange::ReplaceTree:
+        QCOMPARE(f.stored(QStringLiteral("Camera/fov")), QVariant(60));
+        QCOMPARE(f.stored(QStringLiteral("Camera/projection")), QVariant(0));
+        break;
+    case TreeChange::RemoveGroup:
+        QVERIFY(!f.model.find(QStringLiteral("Camera")));
+        QVERIFY(f.model.find(QStringLiteral("name")));
+        break;
+    case TreeChange::RemoveProperty:
+        QVERIFY(f.model.find(QStringLiteral("Camera")));
+        QVERIFY(!f.model.find(QStringLiteral("Camera/fov")));
+        break;
+    }
+}
+
+} // namespace
+
+void tst_PropertyTreeView::commitWithHandlerChangingTree_data()
+{
+    addTreeChangeRows();
+}
+
+// A handler of valueChanged() changes the tree while the delegate is writing
+// the committed value.
+void tst_PropertyTreeView::commitWithHandlerChangingTree()
+{
+    QFETCH(int, change);
+    TreeChangingHandlers handlers(f->model, TreeChange(change));
+    auto* spinBox = f->edit<QSpinBox>(QStringLiteral("Camera/fov"));
+    QVERIFY(spinBox);
+
+    spinBox->selectAll();
+    QTest::keyClicks(spinBox, QStringLiteral("90"));
+    QTest::keyClick(spinBox, Qt::Key_Return);
+
+    QTRY_COMPARE(handlers.calls, 1);
+    QVERIFY2(handlers.propertyAlive,
+        "the edited property was destroyed while a later handler of the same change ran");
+    QCOMPARE(handlers.firstPath, QStringLiteral("Camera/fov"));
+    QCOMPARE(handlers.firstNewValue, QVariant(90));
+    QCOMPARE(handlers.firstOldValue, QVariant(60));
+    QTRY_VERIFY(handlers.lifetime.expired());
+    if (TreeChange(change) == TreeChange::RemoveProperty) {
+        // Removing the edited row makes the view move to the next row, which
+        // opens an editor there; no open editor may belong to the removed row.
+        QTRY_VERIFY(openEditorsBelongToLiveRows(f->view));
+    } else {
+        QTRY_VERIFY(!editorOpen(f->view));
+    }
+    checkTreeAfter(*f, TreeChange(change));
+
+    // The view keeps working with the changed tree.
+    auto* lineEdit = f->edit<QLineEdit>(QStringLiteral("name"));
+    QVERIFY(lineEdit);
+    lineEdit->setText(QStringLiteral("Renamed"));
+    QTest::keyClick(lineEdit, Qt::Key_Return);
+    QTRY_COMPARE(f->stored(QStringLiteral("name")), QVariant(QStringLiteral("Renamed")));
+}
+
+void tst_PropertyTreeView::groupResetWithHandlerChangingTree_data()
+{
+    addTreeChangeRows();
+}
+
+// "Reset group" from the context menu writes one value after the other while a
+// handler of valueChanged() changes the tree.
+void tst_PropertyTreeView::groupResetWithHandlerChangingTree()
+{
+    QFETCH(int, change);
+    QVERIFY(f->model.setValue(QStringLiteral("Camera/fov"), 100));
+    QVERIFY(f->model.setValue(QStringLiteral("Camera/projection"), 1));
+    TreeChangingHandlers handlers(f->model, TreeChange(change));
+    const QModelIndex camera = f->model.indexOf(f->model.find(QStringLiteral("Camera")));
+
+    QVERIFY(resetFromContextMenu(f->view, camera));
+
+    QVERIFY(handlers.treeChanged);
+    QVERIFY(handlers.calls >= 1);
+    QVERIFY2(handlers.propertyAlive,
+        "the reset property was destroyed while a later handler of the same change ran");
+    QCOMPARE(handlers.firstPath, QStringLiteral("Camera/fov"));
+    QCOMPARE(handlers.firstNewValue, QVariant(60));
+    QCOMPARE(handlers.firstOldValue, QVariant(100));
+    QVERIFY(handlers.lifetime.expired());
+    checkTreeAfter(*f, TreeChange(change));
+}
+
+// An editor that is open while its property's range, precision or suffix
+// changes follows the change.
+void tst_PropertyTreeView::openIntEditorFollowsAttributeChanges()
+{
+    auto* spinBox = f->edit<QSpinBox>(QStringLiteral("Camera/fov"));
+    QVERIFY(spinBox);
+    QCOMPARE(spinBox->maximum(), 170);
+    Property* fov = f->model.find(QStringLiteral("Camera/fov"));
+
+    fov->setAttribute(Attr::Maximum, 100);
+    QTRY_COMPARE(spinBox->maximum(), 100);
+    fov->setAttribute(Attr::Minimum, 20);
+    QTRY_COMPARE(spinBox->minimum(), 20);
+    fov->setAttribute(Attr::Suffix, QStringLiteral(" deg"));
+    QTRY_COMPARE(spinBox->suffix(), QStringLiteral(" deg"));
+    QVERIFY(editorOpen(f->view));
+
+    spinBox->setValue(150);
+    QCOMPARE(spinBox->value(), 100);
+    QTest::keyClick(spinBox, Qt::Key_Return);
+    QTRY_COMPARE(f->stored(QStringLiteral("Camera/fov")), QVariant(100));
+    QTRY_VERIFY(!editorOpen(f->view));
+}
+
+void tst_PropertyTreeView::openDoubleEditorFollowsAttributeChanges()
+{
+    auto* spinBox = f->edit<QDoubleSpinBox>(QStringLiteral("Transform/x"));
+    QVERIFY(spinBox);
+    QCOMPARE(spinBox->decimals(), 2);
+    Property* x = f->model.find(QStringLiteral("Transform/x"));
+
+    x->setAttribute(Attr::Decimals, 4);
+    QTRY_COMPARE(spinBox->decimals(), 4);
+    x->setAttribute(Attr::Minimum, -5.0);
+    QTRY_COMPARE(spinBox->minimum(), -5.0);
+    x->setAttribute(Attr::Maximum, 5.0);
+    QTRY_COMPARE(spinBox->maximum(), 5.0);
+    x->setAttribute(Attr::Suffix, QStringLiteral(" m"));
+    QTRY_COMPARE(spinBox->suffix(), QStringLiteral(" m"));
+    QVERIFY(editorOpen(f->view));
+
+    x->removeAttribute(Attr::Suffix);
+    QTRY_COMPARE(spinBox->suffix(), QString());
+}
+
+// A custom handler's applyAttributes runs once per actual attribute change of
+// the edited property, and its setEditorData does not run for unrelated changes.
+void tst_PropertyTreeView::customEditorAppliesAttributesOncePerChange()
+{
+    struct Counters
+    {
+        int applied = 0;
+        int shown = 0;
+    };
+    auto counters = std::make_shared<Counters>();
+    const TypeId type = QStringLiteral("test.tree.attributes");
+    TypeRegistry::global().registerType<int>(type, TypeHandler());
+    EditorHandler handler;
+    handler.createEditor = [](QWidget* parent, const Property&) { return new QPushButton(parent); };
+    handler.setEditorData = [counters](QWidget* editor, const QVariant& value, const Property&) {
+        ++counters->shown;
+        static_cast<QPushButton*>(editor)->setText(value.toString());
+    };
+    handler.editorData = [](QWidget* editor, const Property&) {
+        return QVariant(static_cast<QPushButton*>(editor)->text().toInt());
+    };
+    handler.applyAttributes = [counters](QWidget* editor, const Property& property) {
+        ++counters->applied;
+        editor->setProperty("seen", property.attribute(QStringLiteral("test.key")));
+    };
+    QVERIFY(EditorFactory::global().registerEditor(type, handler));
+
+    Property& counter = f->model.root()->add(type, QStringLiteral("counter"), 41);
+    auto* button = f->edit<QPushButton>(QStringLiteral("counter"));
+    QVERIFY(button);
+    const int applied = counters->applied;
+    const auto settle = [] {
+        QCoreApplication::processEvents();
+        QCoreApplication::processEvents();
+    };
+
+    counter.setAttribute(QStringLiteral("test.key"), 1);
+    QTRY_COMPARE(counters->applied, applied + 1);
+    QCOMPARE(button->property("seen"), QVariant(1));
+    counter.setAttribute(QStringLiteral("test.key"), 2);
+    QTRY_COMPARE(counters->applied, applied + 2);
+    QCOMPARE(button->property("seen"), QVariant(2));
+    counter.removeAttribute(QStringLiteral("test.key"));
+    QTRY_COMPARE(counters->applied, applied + 3);
+    QVERIFY(!button->property("seen").isValid() || button->property("seen").isNull());
+
+    counter.setAttribute(QStringLiteral("test.key"), 2);
+    QTRY_COMPARE(counters->applied, applied + 4);
+
+    // Nothing changes for the edited property: not run again.
+    const int shown = counters->shown;
+    counter.setAttribute(QStringLiteral("test.key"), 2); // unchanged
+    settle();
+    QCOMPARE(counters->applied, applied + 4);
+    counter.setToolTip(QStringLiteral("Tip"));
+    counter.setDisplayName(QStringLiteral("Counter"));
+    const QModelIndex index = f->value(QStringLiteral("counter"));
+    emit f->model.dataChanged(index, index, {Qt::ToolTipRole});
+    emit f->model.dataChanged(index, index, {PropertyModel::AttributesRole}); // same attributes
+    settle();
+    QCOMPARE(counters->applied, applied + 4);
+    QCOMPARE(counters->shown, shown); // the editor is not reloaded either
+
+    // Another row's attributes are not the editor's.
+    f->model.find(QStringLiteral("Camera/fov"))->setAttribute(Attr::Maximum, 100);
+    f->model.find(QStringLiteral("Transform/x"))->setToolTip(QStringLiteral("x"));
+    settle();
+    QCOMPARE(counters->applied, applied + 4);
+    QVERIFY(editorOpen(f->view));
+}
+
+// A QTreeView that only uses the delegate gets the same behaviour.
+void tst_PropertyTreeView::plainTreeViewEditorFollowsAttributeChanges()
+{
+    QTreeView view;
+    view.setItemDelegate(new PropertyDelegate(&view));
+    view.setModel(&f->model);
+    view.expandAll();
+    view.resize(420, 420);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+    view.setCurrentIndex(f->value(QStringLiteral("Camera/fov")));
+    view.edit(f->value(QStringLiteral("Camera/fov")));
+    QSpinBox* spinBox = nullptr;
+    const QList<QSpinBox*> spinBoxes = view.viewport()->findChildren<QSpinBox*>();
+    for (QSpinBox* candidate : spinBoxes) {
+        if (candidate->isVisible())
+            spinBox = candidate;
+    }
+    QVERIFY(spinBox);
+    QCOMPARE(spinBox->maximum(), 170);
+
+    Property* fov = f->model.find(QStringLiteral("Camera/fov"));
+    fov->setAttribute(Attr::Maximum, 100);
+    QTRY_COMPARE(spinBox->maximum(), 100);
+    fov->setAttribute(Attr::Suffix, QStringLiteral(" deg"));
+    QTRY_COMPARE(spinBox->suffix(), QStringLiteral(" deg"));
+}
+
+void tst_PropertyTreeView::editorThroughFilterProxyFollowsAttributeChanges()
+{
+    PropertyFilterProxyModel proxy;
+    proxy.setSourceModel(&f->model);
+    f->view->setModel(&proxy);
+
+    f->view->setFocus();
+    f->view->setCurrentIndex(proxy.mapFromSource(f->value(QStringLiteral("Camera/fov"))));
+    auto* spinBox = f->editor<QSpinBox>();
+    QVERIFY(spinBox);
+    QCOMPARE(spinBox->maximum(), 170);
+
+    Property* fov = f->model.find(QStringLiteral("Camera/fov"));
+    fov->setAttribute(Attr::Maximum, 100);
+    QTRY_COMPARE(spinBox->maximum(), 100);
+    fov->setAttribute(Attr::Suffix, QStringLiteral(" deg"));
+    QTRY_COMPARE(spinBox->suffix(), QStringLiteral(" deg"));
+    QVERIFY(editorOpen(f->view));
+
+    spinBox->setValue(150);
+    QTest::keyClick(spinBox, Qt::Key_Return);
+    QTRY_COMPARE(f->stored(QStringLiteral("Camera/fov")), QVariant(100));
+}
+
+// Text typed into an open editor stays when other data of the row changes.
+void tst_PropertyTreeView::typedTextSurvivesUnrelatedChanges()
+{
+    auto* lineEdit = f->edit<QLineEdit>(QStringLiteral("name"));
+    QVERIFY(lineEdit);
+    lineEdit->setText(QStringLiteral("Rena"));
+    Property* name = f->model.find(QStringLiteral("name"));
+
+    name->setToolTip(QStringLiteral("The name"));
+    QCoreApplication::processEvents();
+    QCOMPARE(lineEdit->text(), QStringLiteral("Rena"));
+    name->setDisplayName(QStringLiteral("Title"));
+    QCoreApplication::processEvents();
+    QCOMPARE(lineEdit->text(), QStringLiteral("Rena"));
+    const QModelIndex index = f->value(QStringLiteral("name"));
+    emit f->model.dataChanged(index, index, {Qt::ToolTipRole});
+    QCoreApplication::processEvents();
+    QCOMPARE(lineEdit->text(), QStringLiteral("Rena"));
+    QVERIFY(editorOpen(f->view));
+
+    QTest::keyClick(lineEdit, Qt::Key_Return);
+    QTRY_COMPARE(f->stored(QStringLiteral("name")), QVariant(QStringLiteral("Rena")));
+}
+
+// The value of the edited property still reaches the open editor when the
+// application changes it, also after an attribute change reloaded the editor.
+void tst_PropertyTreeView::openEditorFollowsAnExternalValueChange()
+{
+    auto* spinBox = f->edit<QSpinBox>(QStringLiteral("Camera/fov"));
+    QVERIFY(spinBox);
+    Property* fov = f->model.find(QStringLiteral("Camera/fov"));
+
+    QVERIFY(f->model.setValue(QStringLiteral("Camera/fov"), 80));
+    QTRY_COMPARE(spinBox->value(), 80);
+    fov->setAttribute(Attr::Maximum, 90);
+    QTRY_COMPARE(spinBox->maximum(), 90);
+    QCOMPARE(spinBox->value(), 80);
+    QVERIFY(f->model.setValue(QStringLiteral("Camera/fov"), 85));
+    QTRY_COMPARE(spinBox->value(), 85);
+    // Back to a value written earlier: the editor shows it again.
+    QVERIFY(f->model.setValue(QStringLiteral("Camera/fov"), 80));
+    QTRY_COMPARE(spinBox->value(), 80);
+}
+
+// Attribute changes of a row whose editor is closed (committed, cancelled)
+// neither crash nor reopen anything.
+void tst_PropertyTreeView::attributeChangesAfterTheEditorClosedAreHarmless()
+{
+    auto* spinBox = f->edit<QSpinBox>(QStringLiteral("Camera/fov"));
+    QVERIFY(spinBox);
+    QTest::keyClick(spinBox, Qt::Key_Escape);
+    QTRY_VERIFY(!editorOpen(f->view));
+
+    Property* fov = f->model.find(QStringLiteral("Camera/fov"));
+    fov->setAttribute(Attr::Maximum, 100);
+    fov->setAttribute(Attr::Suffix, QStringLiteral(" deg"));
+    QCoreApplication::processEvents();
+    QVERIFY(!editorOpen(f->view));
+
+    // A new editor starts with the current attributes.
+    f->view->setCurrentIndex(f->value(QStringLiteral("name")));
+    QTRY_VERIFY(editorOpen(f->view));
+    f->view->setCurrentIndex(QModelIndex());
+    QTRY_VERIFY(!editorOpen(f->view));
+    spinBox = f->edit<QSpinBox>(QStringLiteral("Camera/fov"));
+    QVERIFY(spinBox);
+    QCOMPARE(spinBox->maximum(), 100);
+    QCOMPARE(spinBox->suffix(), QStringLiteral(" deg"));
 }
 
 QTEST_MAIN(tst_PropertyTreeView)

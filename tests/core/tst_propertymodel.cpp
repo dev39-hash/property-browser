@@ -4,9 +4,14 @@
 
 #include <QAbstractItemModelTester>
 #include <QLocale>
+#include <QPointer>
 #include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTest>
+
+#include <functional>
+#include <memory>
+#include <string>
 
 using namespace qpb;
 
@@ -39,6 +44,153 @@ QModelIndex valueIndex(const PropertyModel& model, const QString& path)
 {
     return model.indexOf(model.find(path), PropertyModel::ValueColumn);
 }
+
+// Reports when a property is destroyed: its validator owns a token that the
+// returned pointer watches.
+std::weak_ptr<int> trackLifetime(Property& property)
+{
+    auto token = std::make_shared<int>(0);
+    property.setValidator([token](const QVariant&, const Property&) {
+        return *token == 0 ? ValidationResult::valid() : ValidationResult::error(QString());
+    });
+    return token;
+}
+
+enum class TreeChange {
+    ReplaceTree,
+    RemoveGroup,
+    RemoveProperty,
+};
+
+enum class Write {
+    ModelSetValue,
+    PropertySetValue,
+    ModelSetData,
+    ModelGroupReset,
+    PropertyGroupReset,
+    ResetAll,
+    ExplicitBatch,
+};
+
+const QString XPath = QStringLiteral("Transform/x");
+
+// Changes the tree createTree() made the way an application handler would.
+void changeTree(PropertyModel& model, TreeChange change)
+{
+    switch (change) {
+    case TreeChange::ReplaceTree:
+        model.setRoot(createTree());
+        break;
+    case TreeChange::RemoveGroup:
+        model.root()->remove(QStringLiteral("Transform"));
+        break;
+    case TreeChange::RemoveProperty:
+        model.find(QStringLiteral("Transform"))->toGroup()->remove(QStringLiteral("x"));
+        break;
+    }
+}
+
+// A model over createTree() with "Transform/x" at 1.0 and "Transform/Pivot/z"
+// at 2.0, and a handler that changes the tree when "Transform/x" changes (or
+// when a batch ends). A second handler, connected after it, records what it
+// receives.
+struct HandlerScenario
+{
+    HandlerScenario()
+        : model(createTree())
+        , tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal)
+    {
+        model.find(XPath)->setValue(1.0);
+        model.find(QStringLiteral("Transform/Pivot/z"))->setValue(2.0);
+        lifetime = trackLifetime(*model.find(XPath));
+    }
+
+    // The tree changes once, from the first valueChanged() of "Transform/x".
+    void armValueHandlers(TreeChange change)
+    {
+        QObject::connect(&model, &PropertyModel::valueChanged, &model,
+            [this, change](const QString& path) {
+                if (path == XPath && !treeChanged) {
+                    treeChanged = true;
+                    changeTree(model, change);
+                }
+            });
+        QObject::connect(&model, &PropertyModel::valueChanged, &model,
+            [this](const QString& path, const QVariant& newValue, const QVariant& oldValue) {
+                if (calls++ > 0)
+                    return;
+                propertyAlive = !lifetime.expired();
+                if (!propertyAlive)
+                    return; // the values would refer to a destroyed property
+                firstPath = path;
+                firstNewValue = newValue;
+                firstOldValue = oldValue;
+            });
+        model.onValueChanged(XPath, &model, [this](const QVariant& value) {
+            if (callbackCalls++ == 0 && !lifetime.expired())
+                callbackValue = value;
+        });
+    }
+
+    // The tree changes once, from the first batchValueChanged().
+    void armBatchHandlers(TreeChange change)
+    {
+        QObject::connect(&model, &PropertyModel::batchValueChanged, &model,
+            [this, change](const QStringList&) {
+                if (!treeChanged) {
+                    treeChanged = true;
+                    changeTree(model, change);
+                }
+            });
+        QObject::connect(&model, &PropertyModel::batchValueChanged, &model,
+            [this](const QStringList& paths) {
+                ++batchCalls;
+                batchPaths = paths;
+            });
+    }
+
+    bool write(Write how)
+    {
+        Property* x = model.find(XPath);
+        switch (how) {
+        case Write::ModelSetValue:
+            return model.setValue(XPath, 5.0);
+        case Write::PropertySetValue:
+            return x->setValue(5.0);
+        case Write::ModelSetData:
+            return model.setData(model.indexOf(x, PropertyModel::ValueColumn), 5.0);
+        case Write::ModelGroupReset:
+            return model.resetToDefault(model.indexOf(model.find(QStringLiteral("Transform"))));
+        case Write::PropertyGroupReset:
+            return model.find(QStringLiteral("Transform"))->resetToDefault();
+        case Write::ResetAll:
+            return model.resetAllToDefault();
+        case Write::ExplicitBatch: {
+            model.beginBatch();
+            const bool ok = model.setValue(XPath, 5.0) && model.setValue(QStringLiteral("fov"), 90);
+            model.endBatch();
+            return ok;
+        }
+        }
+        return false;
+    }
+
+    PropertyModel model;
+    QAbstractItemModelTester tester;
+    std::weak_ptr<int> lifetime;
+    bool treeChanged = false;
+
+    int calls = 0;
+    bool propertyAlive = false;
+    QString firstPath;
+    QVariant firstNewValue;
+    QVariant firstOldValue;
+    int callbackCalls = 0;
+    QVariant callbackValue;
+
+    int batchCalls = 0;
+    QStringList batchPaths;
+};
 
 } // namespace
 
@@ -78,6 +230,21 @@ private slots:
     void onValueChangedForGroups();
 
     void modelTesterWholeLifecycle();
+
+    void treeChangeFromValueHandler_data();
+    void treeChangeFromValueHandler();
+    void treeChangeFromBatchHandler_data();
+    void treeChangeFromBatchHandler();
+    void signalSpyAfterTreeChange();
+    void detachedTreeLivesUntilTheOutermostAssignmentReturns();
+    void detachedPartsLiveUntilTheAssignmentReturns_data();
+    void detachedPartsLiveUntilTheAssignmentReturns();
+    void detachedTreeIsDestroyedAtOnceOutsideHandlers();
+    void treeChangeFromRejectionHandler();
+    void repeatedTreeChangesInOneWrite();
+    void modelDeletedByAValueHandler_data();
+    void modelDeletedByAValueHandler();
+    void destroyingADetachedPropertyDetachesMore();
 };
 
 void tst_PropertyModel::initTestCase()
@@ -677,6 +844,394 @@ void tst_PropertyModel::onValueChangedForGroups()
     QVERIFY(model.setValue(QStringLiteral("tx"), 3));
     QCOMPARE(underT, QStringList({"t/x", "t/deep/y"}));
     QCOMPARE(all, QStringList({"t/x", "t/deep/y", "tx"}));
+}
+
+namespace {
+
+struct ChangeRow
+{
+    const char* name;
+    TreeChange change;
+};
+
+struct WriteRow
+{
+    const char* name;
+    Write write;
+};
+
+const ChangeRow changeRows[] = {
+    {"replaceTree", TreeChange::ReplaceTree},
+    {"removeGroup", TreeChange::RemoveGroup},
+    {"removeProperty", TreeChange::RemoveProperty},
+};
+
+void checkTreeAfter(PropertyModel& model, TreeChange change)
+{
+    switch (change) {
+    case TreeChange::ReplaceTree:
+        QVERIFY(model.find(XPath));
+        QCOMPARE(model.find(XPath)->value(), QVariant(0.0));
+        QCOMPARE(model.find(QStringLiteral("Transform/Pivot/z"))->value(), QVariant(0.0));
+        QCOMPARE(model.find(QStringLiteral("fov"))->value(), QVariant(60));
+        break;
+    case TreeChange::RemoveGroup:
+        QVERIFY(!model.find(QStringLiteral("Transform")));
+        QVERIFY(model.find(QStringLiteral("fov")));
+        break;
+    case TreeChange::RemoveProperty:
+        QVERIFY(model.find(QStringLiteral("Transform")));
+        QVERIFY(!model.find(XPath));
+        break;
+    }
+}
+
+} // namespace
+
+void tst_PropertyModel::treeChangeFromValueHandler_data()
+{
+    QTest::addColumn<int>("change");
+    QTest::addColumn<int>("write");
+    const WriteRow writes[] = {
+        {"modelSetValue", Write::ModelSetValue},
+        {"propertySetValue", Write::PropertySetValue},
+        {"modelSetData", Write::ModelSetData},
+        {"modelGroupReset", Write::ModelGroupReset},
+        {"propertyGroupReset", Write::PropertyGroupReset},
+        {"resetAll", Write::ResetAll},
+    };
+    for (const ChangeRow& change : changeRows) {
+        for (const WriteRow& write : writes) {
+            const std::string name = std::string(change.name) + "/" + write.name;
+            QTest::newRow(name.c_str()) << int(change.change) << int(write.write);
+        }
+    }
+}
+
+// A handler of valueChanged() may replace the tree or remove the assigned
+// property's group (or the property): handlers connected after it, and the
+// write that triggered the change, carry on with intact values.
+void tst_PropertyModel::treeChangeFromValueHandler()
+{
+    QFETCH(int, change);
+    QFETCH(int, write);
+    HandlerScenario s;
+    s.armValueHandlers(TreeChange(change));
+
+    QVERIFY(s.write(Write(write)));
+
+    QVERIFY(s.treeChanged);
+    QVERIFY(s.calls >= 1);
+    QVERIFY2(s.propertyAlive,
+        "the assigned property was destroyed while a later handler of the same change ran");
+    const bool isReset = Write(write) == Write::ModelGroupReset
+        || Write(write) == Write::PropertyGroupReset || Write(write) == Write::ResetAll;
+    QCOMPARE(s.firstPath, XPath);
+    QCOMPARE(s.firstNewValue, QVariant(isReset ? 0.0 : 5.0));
+    QCOMPARE(s.firstOldValue, QVariant(1.0));
+    QCOMPARE(s.callbackValue, QVariant(isReset ? 0.0 : 5.0));
+    QVERIFY2(s.lifetime.expired(), "the detached property is destroyed once the write returned");
+    checkTreeAfter(s.model, TreeChange(change));
+}
+
+void tst_PropertyModel::treeChangeFromBatchHandler_data()
+{
+    QTest::addColumn<int>("change");
+    QTest::addColumn<int>("write");
+    const WriteRow writes[] = {
+        {"modelGroupReset", Write::ModelGroupReset},
+        {"propertyGroupReset", Write::PropertyGroupReset},
+        {"resetAll", Write::ResetAll},
+        {"explicitBatch", Write::ExplicitBatch},
+    };
+    for (const ChangeRow& change : changeRows) {
+        for (const WriteRow& write : writes) {
+            const std::string name = std::string(change.name) + "/" + write.name;
+            QTest::newRow(name.c_str()) << int(change.change) << int(write.write);
+        }
+    }
+}
+
+// The same for a handler of batchValueChanged().
+void tst_PropertyModel::treeChangeFromBatchHandler()
+{
+    QFETCH(int, change);
+    QFETCH(int, write);
+    HandlerScenario s;
+    s.armBatchHandlers(TreeChange(change));
+
+    QVERIFY(s.write(Write(write)));
+
+    QVERIFY(s.treeChanged);
+    QCOMPARE(s.batchCalls, 1);
+    const QStringList expected = Write(write) == Write::ExplicitBatch
+        ? QStringList {XPath, QStringLiteral("fov")}
+        : QStringList {XPath, QStringLiteral("Transform/Pivot/z")};
+    QCOMPARE(s.batchPaths, expected);
+    QVERIFY2(s.lifetime.expired(), "the detached property is destroyed once the write returned");
+    checkTreeAfter(s.model, TreeChange(change));
+}
+
+// A signal spy connected after the handler that replaces the tree stores the
+// signal's arguments.
+void tst_PropertyModel::signalSpyAfterTreeChange()
+{
+    PropertyModel model(createTree());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QObject::connect(&model, &PropertyModel::valueChanged, &model, [&model](const QString& path) {
+        if (path == XPath)
+            model.setRoot(createTree());
+    });
+    QSignalSpy spy(&model, &PropertyModel::valueChanged);
+
+    QVERIFY(model.setValue(XPath, 5.0));
+
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.at(0).at(0).toString(), XPath);
+    QCOMPARE(spy.at(0).at(1), QVariant(5.0));
+    QCOMPARE(spy.at(0).at(2), QVariant(0.0));
+}
+
+// A tree detached by a handler stays alive until the outermost write returns,
+// even when the handler runs inside a nested write.
+void tst_PropertyModel::detachedTreeLivesUntilTheOutermostAssignmentReturns()
+{
+    PropertyModel model(createTree());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    const std::weak_ptr<int> fovLife = trackLifetime(*model.find(QStringLiteral("fov")));
+    const std::weak_ptr<int> groupLife = trackLifetime(*model.find(QStringLiteral("Transform")));
+    const std::weak_ptr<int> xLife = trackLifetime(*model.find(XPath));
+
+    bool aliveAfterReplace = false;
+    bool aliveAfterNestedWrite = false;
+    QObject::connect(&model, &PropertyModel::valueChanged, &model,
+        [&](const QString& path) {
+            if (path == QStringLiteral("fov")) {
+                model.setValue(XPath, 5.0); // nested: its handler replaces the tree
+                aliveAfterNestedWrite
+                    = !fovLife.expired() && !groupLife.expired() && !xLife.expired();
+            } else if (path == XPath) {
+                model.setRoot(createTree());
+                aliveAfterReplace = !fovLife.expired() && !xLife.expired();
+            }
+        });
+
+    QVERIFY(model.setValue(QStringLiteral("fov"), 90));
+
+    QVERIFY2(aliveAfterReplace, "the old tree was destroyed inside the nested write");
+    QVERIFY2(aliveAfterNestedWrite, "the old tree was destroyed before the outer write returned");
+    QVERIFY(fovLife.expired());
+    QVERIFY(groupLife.expired());
+    QVERIFY(xLife.expired());
+    QCOMPARE(model.find(QStringLiteral("fov"))->value(), QVariant(60));
+
+    // The model is back to destroying at once.
+    const std::weak_ptr<int> later = trackLifetime(*model.find(QStringLiteral("fov")));
+    model.setRoot(createTree());
+    QVERIFY(later.expired());
+}
+
+void tst_PropertyModel::detachedPartsLiveUntilTheAssignmentReturns_data()
+{
+    QTest::addColumn<int>("change");
+    for (const ChangeRow& change : changeRows)
+        QTest::newRow(change.name) << int(change.change);
+}
+
+void tst_PropertyModel::detachedPartsLiveUntilTheAssignmentReturns()
+{
+    QFETCH(int, change);
+    PropertyModel model(createTree());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    const std::weak_ptr<int> xLife = trackLifetime(*model.find(XPath));
+    const std::weak_ptr<int> groupLife = trackLifetime(*model.find(QStringLiteral("Transform")));
+    const PropertyGroup* oldRoot = model.root();
+
+    bool structureChangedAtOnce = false;
+    bool aliveInHandler = false;
+    QObject::connect(&model, &PropertyModel::valueChanged, &model, [&](const QString& path) {
+        if (path != XPath)
+            return;
+        changeTree(model, TreeChange(change));
+        structureChangedAtOnce = TreeChange(change) == TreeChange::ReplaceTree
+            ? model.root() != oldRoot
+            : model.find(XPath) == nullptr;
+        aliveInHandler = !xLife.expired() && !groupLife.expired();
+    });
+
+    QVERIFY(model.setValue(XPath, 5.0));
+
+    QVERIFY2(structureChangedAtOnce, "the tree change is visible to the handler at once");
+    QVERIFY2(aliveInHandler, "the detached part was destroyed inside the handler");
+    QVERIFY(xLife.expired());
+    QVERIFY2(groupLife.expired() == (TreeChange(change) != TreeChange::RemoveProperty),
+        "the detached group is destroyed with the write; a group that stays is not");
+}
+
+void tst_PropertyModel::detachedTreeIsDestroyedAtOnceOutsideHandlers()
+{
+    PropertyModel model(createTree());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+
+    std::weak_ptr<int> life = trackLifetime(*model.find(XPath));
+    model.setRoot(createTree());
+    QVERIFY(life.expired());
+
+    life = trackLifetime(*model.find(QStringLiteral("Transform")));
+    QVERIFY(model.root()->remove(QStringLiteral("Transform")));
+    QVERIFY(life.expired());
+
+    // Handlers that do not change the tree do not delay later removals.
+    QObject::connect(&model, &PropertyModel::valueChanged, &model, [](const QString&) { });
+    QVERIFY(model.setValue(QStringLiteral("fov"), 70));
+    life = trackLifetime(*model.find(QStringLiteral("fov")));
+    QVERIFY(model.root()->remove(QStringLiteral("fov")));
+    QVERIFY(life.expired());
+}
+
+// A handler of validationFailed() may replace the tree as well; the rejected
+// property stays alive until the write returns.
+void tst_PropertyModel::treeChangeFromRejectionHandler()
+{
+    PropertyModel model(createTree());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    auto token = std::make_shared<int>(0);
+    const std::weak_ptr<int> life = token;
+    model.find(XPath)->setValidator([token](const QVariant& value, const Property&) {
+        return *token == 0 && value.toDouble() > 5.0
+            ? ValidationResult::error(QStringLiteral("too big"))
+                                        : ValidationResult::valid();
+    });
+    token.reset();
+    bool aliveInLaterHandler = false;
+    QString message;
+    QObject::connect(&model, &PropertyModel::validationFailed, &model,
+        [&model](const QString&) { model.setRoot(createTree()); });
+    QObject::connect(&model, &PropertyModel::validationFailed, &model,
+        [&](const QString&, const QVariant&, const QString& text) {
+            aliveInLaterHandler = !life.expired();
+            message = text;
+        });
+
+    QVERIFY(!model.setValue(XPath, 8.0));
+
+    QVERIFY2(aliveInLaterHandler, "the rejected property was destroyed inside the signal");
+    QCOMPARE(message, QStringLiteral("too big"));
+    QVERIFY(life.expired());
+    QVERIFY(model.find(XPath));
+}
+
+// Several tree changes in one write, from different handlers and a handler
+// that removes a part of the group a reset is walking.
+void tst_PropertyModel::repeatedTreeChangesInOneWrite()
+{
+    PropertyModel model(createTree());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    model.find(XPath)->setValue(1.0);
+    model.find(QStringLiteral("fov"))->setValue(90);
+    const std::weak_ptr<int> life = trackLifetime(*model.find(XPath));
+    int replacements = 0;
+    const auto replace = [&](const QString& path) {
+        if (path == XPath) {
+            ++replacements;
+            model.setRoot(createTree());
+        }
+    };
+    QObject::connect(&model, &PropertyModel::valueChanged, &model, replace);
+    QObject::connect(&model, &PropertyModel::valueChanged, &model, replace);
+
+    QVERIFY(model.setValue(XPath, 5.0));
+    QCOMPARE(replacements, 2);
+    QVERIFY(life.expired());
+    QCOMPARE(model.find(XPath)->value(), QVariant(0.0));
+
+    // A reset walking a group while a handler removes a sibling subtree.
+    PropertyModel other(createTree());
+    QAbstractItemModelTester otherTester(
+        &other, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    other.find(XPath)->setValue(1.0);
+    other.find(QStringLiteral("Transform/Pivot/z"))->setValue(2.0);
+    other.find(QStringLiteral("fov"))->setValue(90);
+    QObject::connect(&other, &PropertyModel::valueChanged, &other, [&other](const QString& path) {
+        if (path == XPath)
+            other.find(QStringLiteral("Transform"))->toGroup()->remove(QStringLiteral("Pivot"));
+    });
+    QVERIFY(other.resetAllToDefault());
+    QVERIFY(!other.find(QStringLiteral("Transform/Pivot")));
+    QCOMPARE(other.find(XPath)->value(), QVariant(0.0));
+    QCOMPARE(other.find(QStringLiteral("fov"))->value(), QVariant(60));
+}
+
+void tst_PropertyModel::modelDeletedByAValueHandler_data()
+{
+    QTest::addColumn<bool>("throughSetData");
+    QTest::newRow("setValue") << false;
+    QTest::newRow("setData") << true;
+}
+
+// A slot may delete the model that is notifying it; the write returns without
+// touching the model again.
+void tst_PropertyModel::modelDeletedByAValueHandler()
+{
+    QFETCH(bool, throughSetData);
+    auto* model = new PropertyModel(createTree());
+    const QPointer<PropertyModel> guard(model);
+    int calls = 0;
+    QObject::connect(model, &PropertyModel::valueChanged, [&calls, model] {
+        ++calls;
+        delete model;
+    });
+    bool ok = false;
+    if (throughSetData)
+        ok = model->setData(valueIndex(*model, XPath), 5.0, Qt::EditRole);
+    else
+        ok = model->setValue(XPath, 5.0);
+
+    QVERIFY(ok);
+    QCOMPARE(calls, 1);
+    QVERIFY(guard.isNull());
+}
+
+namespace {
+
+// Runs an action when it is destroyed.
+struct DestructorAction
+{
+    ~DestructorAction()
+    {
+        if (action)
+            action();
+    }
+    std::function<void()> action;
+};
+
+} // namespace
+
+// A detached property is destroyed when the outermost write returns; its
+// destructor may detach more of the tree, which is destroyed at once.
+void tst_PropertyModel::destroyingADetachedPropertyDetachesMore()
+{
+    PropertyModel model(createTree());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    const std::weak_ptr<int> fovLife = trackLifetime(*model.find(QStringLiteral("fov")));
+    {
+        auto remover = std::make_shared<DestructorAction>();
+        remover->action = [&model] { model.root()->remove(QStringLiteral("fov")); };
+        model.find(XPath)->setValidator([remover](const QVariant&, const Property&) {
+            return ValidationResult::valid();
+        });
+    }
+    QObject::connect(&model, &PropertyModel::valueChanged, &model, [&model](const QString& path) {
+        if (path == XPath)
+            model.root()->remove(QStringLiteral("Transform"));
+    });
+
+    QVERIFY(model.setValue(XPath, 5.0));
+
+    QVERIFY(!model.find(QStringLiteral("Transform")));
+    QVERIFY(!model.find(QStringLiteral("fov")));
+    QVERIFY(fovLife.expired());
+    QVERIFY(model.find(QStringLiteral("name")));
 }
 
 QTEST_APPLESS_MAIN(tst_PropertyModel)

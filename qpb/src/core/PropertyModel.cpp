@@ -2,9 +2,11 @@
 #include <qpb/TypeRegistry.h>
 
 #include <QtCore/qhash.h>
+#include <QtCore/qpointer.h>
 #include <QtCore/qset.h>
 
 #include <utility>
+#include <vector>
 
 #include "LanguageChange_p.h"
 #include "Property_p.h"
@@ -86,6 +88,31 @@ public:
         }
     }
 
+    // A hold for the duration of a notification. A handler may delete the model,
+    // which destroys this object and the detached subtrees with it: the hold is
+    // then not ended.
+    class NotificationHold
+    {
+    public:
+        explicit NotificationHold(PropertyModelPrivate* owner)
+            : d(owner)
+            , model(owner->q)
+        {
+            d->beginHold();
+        }
+        ~NotificationHold()
+        {
+            if (model)
+                d->endHold();
+        }
+        NotificationHold(const NotificationHold&) = delete;
+        NotificationHold& operator=(const NotificationHold&) = delete;
+
+    private:
+        PropertyModelPrivate* d;
+        QPointer<PropertyModel> model;
+    };
+
     // --- TreeObserver ------------------------------------------------------------
 
     void aboutToInsert(PropertyGroup* parent, int row) override
@@ -128,6 +155,9 @@ public:
     void valueChanged(
         Property* property, const QVariant& newValue, const QVariant& oldValue) override
     {
+        // Handlers may replace the tree or remove the property; it stays alive
+        // until the outermost notification has returned.
+        const NotificationHold hold(this);
         changed(property, false);
         const QString path = property->path();
         // Dependent states first, so valueChanged() handlers see them updated.
@@ -140,7 +170,30 @@ public:
     void validationFailed(
         Property* property, const QVariant& rejectedValue, const QString& message) override
     {
+        const NotificationHold hold(this);
         emit q->validationFailed(property->path(), rejectedValue, message);
+    }
+
+    void beginHold() override
+    {
+        ++holdDepth;
+    }
+
+    void endHold() override
+    {
+        if (--holdDepth > 0)
+            return;
+        // Destroying a property runs user code (custom types); it may detach
+        // more subtrees, which are destroyed at once (no hold is active).
+        std::vector<std::unique_ptr<Property>> detached = std::exchange(retired, {});
+        detached.clear();
+    }
+
+    void retire(std::unique_ptr<Property> detached) override
+    {
+        if (holdDepth > 0)
+            retired.push_back(std::move(detached));
+        // else destroyed here
     }
 
     void beginBatch() override
@@ -259,6 +312,9 @@ public:
     bool dependentsDirty = true;
     int batchDepth = 0;
     QStringList batchPaths;
+    // Subtrees detached while a value notification or a group reset is running.
+    int holdDepth = 0;
+    std::vector<std::unique_ptr<Property>> retired;
     mutable QSet<TypeId> warnedTypes;
 };
 
@@ -293,7 +349,9 @@ void PropertyModel::setRoot(std::unique_ptr<PropertyGroup> root)
     d->attach(std::move(root));
     d->evaluateAllConditions(false); // before views read the new tree
     endResetModel();
-    // old is destroyed here, once views no longer refer to it.
+    // old is destroyed once views no longer refer to it, and not before the
+    // value handlers running further up the call stack have returned.
+    d->retire(std::move(old));
 }
 
 PropertyGroup* PropertyModel::root() const

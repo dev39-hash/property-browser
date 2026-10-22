@@ -79,7 +79,10 @@ anyView->setItemDelegate(new qpb::PropertyDelegate(anyView));
 ```
 
 The delegate creates editors with the `EditorFactory`, paints values (check boxes, modified, read-only) and handles the
-keys below. Rejected values keep the old value and show the message as a tool tip.
+keys below. Rejected values keep the old value and show the message as a tool tip. An open editor follows the model: when
+the property's attributes change (a range, a suffix, ...) they are applied to the editor again, and the editor is
+rewritten only when the model's value changes (or after its attributes were applied again), so text being typed survives
+other updates such as a new tool tip. This holds in every view that uses the delegate.
 
 ## Keyboard
 

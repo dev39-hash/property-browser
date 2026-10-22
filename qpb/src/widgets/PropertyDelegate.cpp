@@ -4,6 +4,7 @@
 #include <qpb/widgets/PropertyDelegate.h>
 #include <qpb/widgets/PropertyTreeView.h>
 
+#include <QtCore/qhash.h>
 #include <QtCore/qpointer.h>
 #include <QtCore/qtimer.h>
 #include <QtGui/qevent.h>
@@ -85,7 +86,19 @@ public:
         return false;
     }
 
+    // What the delegate last gave an open editor. The view calls setEditorData()
+    // for every dataChanged() that covers the editor's cell, whatever changed:
+    // the editor is only touched when the attributes or the value differ from
+    // these, so text being typed survives changes of other roles.
+    struct EditorState
+    {
+        QVariant attributes; // applied to the editor
+        QVariant shown; // the model's value last written into the editor
+        bool hasShown = false; // shown holds a value (it may be a null variant)
+    };
+
     PropertyDelegate* q;
+    QHash<const QWidget*, EditorState> editors;
     // Message of the last validation failure during setModelData().
     QString lastError;
 };
@@ -140,6 +153,12 @@ QWidget* PropertyDelegate::createEditor(
     const QList<QWidget*> children = editor->findChildren<QWidget*>();
     for (QWidget* child : children)
         child->installEventFilter(d->q);
+
+    // The factory has applied the attributes of the property.
+    detail::PropertyDelegatePrivate::EditorState state;
+    state.attributes = index.data(PropertyModel::AttributesRole);
+    d->editors.insert(editor, state);
+    connect(editor, &QObject::destroyed, d->q, [this, editor] { d->editors.remove(editor); });
     return editor;
 }
 
@@ -148,8 +167,31 @@ void PropertyDelegate::setEditorData(QWidget* editor, const QModelIndex& index) 
     const Property* property = propertyOf(index);
     const EditorHandler* handler
         = property ? EditorFactory::global().handlerFor(*property) : nullptr;
-    if (handler)
-        handler->setEditorData(editor, index.data(Qt::EditRole), *property);
+    if (!handler)
+        return;
+
+    // An editor this delegate did not create starts with a fresh state.
+    const auto known = d->editors.find(editor);
+    detail::PropertyDelegatePrivate::EditorState fresh;
+    detail::PropertyDelegatePrivate::EditorState& state
+        = known != d->editors.end() ? *known : fresh;
+    // Attributes that changed while the editor is open (a range, a suffix, ...).
+    const QVariant attributes = index.data(PropertyModel::AttributesRole);
+    bool attributesApplied = false;
+    if (handler->applyAttributes && attributes != state.attributes) {
+        state.attributes = attributes;
+        handler->applyAttributes(editor, *property);
+        attributesApplied = true; // the editor may have adjusted its value
+    }
+    // Only a change of the value itself (or of the attributes) replaces the
+    // editor's content; any other dataChanged must not wipe the text the user is
+    // typing. The first call after createEditor always writes.
+    const QVariant current = index.data(Qt::EditRole);
+    if (attributesApplied || !state.hasShown || current != state.shown) {
+        state.shown = current;
+        state.hasShown = true;
+        handler->setEditorData(editor, current, *property);
+    }
 }
 
 void PropertyDelegate::setModelData(
