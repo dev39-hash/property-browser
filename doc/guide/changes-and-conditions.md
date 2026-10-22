@@ -11,6 +11,7 @@ path you store stays meaningful when the tree changes; use `model.find(path)` to
 | Signal | When |
 |---|---|
 | `valueChanged(path, newValue, oldValue)` | A value changed, from any source: the user, `setValue()`, a reset, loading |
+| `userValueChanged(path, newValue, oldValue)` (since 1.9) | A value changed because the user edited it; emitted right after `valueChanged` with the same arguments |
 | `validationFailed(path, rejectedValue, message)` | A value was rejected; the old value is kept |
 | `batchValueChanged(paths)` | The outermost `endBatch()`, once, with the paths of everything that changed in the batch |
 
@@ -30,6 +31,30 @@ model.onValueChanged("Output", this, [](const QString& path, const QVariant& v) 
 - It is called after `valueChanged`, and after the conditions below have been evaluated, so the handler sees the new
   enabled and visible states.
 
+**Edits of the user.** To write what the user typed to a device or a file, and not what your own code stored,
+use `userValueChanged` (since 1.9). The views write through `PropertyModel::setData()`, so every editor, check box and
+the "Reset to default" and "Reset group" commands count as the user, whenever the value changes. `setValue()`,
+`Property::setValue()`, `resetToDefault()`, `resetAllToDefault()`, `normalizeValue()`, loading, and a
+`QObjectPropertySource` following its object are application writes: they emit `valueChanged` only. Your own refreshes and
+rollbacks therefore do not come back to your handler, and you never have to block the model's signals (the views listen
+to them).
+
+```cpp
+model.onUserValueChanged("Transform/x", this, [this](const QVariant& v) { m_device.setX(v.toDouble()); });
+model.onUserValueChanged("Output", this, [](const QString& path, const QVariant& v) { /* any child */ });
+```
+
+`onUserValueChanged()` has the two forms of `onValueChanged()` and the same rules (context, disconnecting, following the
+path). Inside a batch, `userValueChanged` is emitted for every change, as `valueChanged` is. A handler that rolls an
+edit back with `setValue()` makes an application write, which does not reach `userValueChanged` again. Validators
+run for both kinds of write.
+
+The arguments of `userValueChanged` are the user's write as it was made. When other code adjusts the value in between -
+a `valueChanged` handler that rolls it back or clamps it, or a `QObjectPropertySource` whose object adjusts it (a
+nested application write, delivered first) - the property already holds another value when `userValueChanged` arrives.
+A handler that writes to a device should therefore read the property's current value (`model.find(path)->value()`)
+instead of using the value it was given.
+
 **Batches.** `valueChanged` is emitted for every change. To react once to a bulk update, such as loading settings or a
 group reset, wrap it in `beginBatch()` / `endBatch()`; the outermost `endBatch()` emits `batchValueChanged` with all
 paths. Batches nest.
@@ -44,8 +69,8 @@ model.endBatch();
 model; the views follow. Raw `Property*` pointers die with the removal of the property or with `setRoot()`; keep paths
 instead if you need to refer to a property later.
 
-Handlers of `valueChanged` and `batchValueChanged` may change the tree: call `setRoot()` to rebuild it, or remove the
-group or the property that was just written. The call that wrote the value returns normally, and handlers connected
+Handlers of `valueChanged`, `userValueChanged` and `batchValueChanged` may change the tree: call `setRoot()` to
+rebuild it, or remove the group or the property that was just written. The call that wrote the value returns normally, and handlers connected
 later still receive the values of that change. A part of the tree that a handler detaches stays alive until the
 outermost value change has been delivered; outside such a handler `setRoot()` and `remove()` destroy at once. This also
 holds while a reset or `qpb::serialization::load()` / `fromJson()` is writing values. The "Reset to default" and "Reset

@@ -84,6 +84,15 @@ public:
     // and disabled properties too, live ones not; one batchValueChanged().
     // Returns false if any reset was rejected, true for a model without a root.
     bool resetAllToDefault();
+    // Since 1.9. Normalizes the whole tree like root()->normalizeValue(): every
+    // value runs through the value pipeline again, read-only and disabled
+    // properties too, live ones not; one batchValueChanged(). Returns false if
+    // any value was rejected, true for a model without a root.
+    bool normalizeAllValues();
+    // Since 1.9. Makes every current value the default value of its property
+    // like root()->makeValueDefault() (live properties excepted): nothing is
+    // modified afterwards.
+    void makeAllValuesDefault();
 
     // Groups value changes: valueChanged() is still emitted for every change,
     // and batchValueChanged() is emitted once, by the outermost endBatch(),
@@ -102,6 +111,12 @@ public:
     // The same for the property at path and all its descendants (path of a
     // group; empty for the whole tree); handler also receives the path.
     QMetaObject::Connection onValueChanged(const QString& path, const QObject* context,
+        std::function<void(const QString& path, const QVariant& value)> handler);
+    // Since 1.9. The same two forms for userValueChanged(): handler runs only
+    // when the user changed the value, not for writes made by application code.
+    QMetaObject::Connection onUserValueChanged(const QString& path, const QObject* context,
+        std::function<void(const QVariant& value)> handler);
+    QMetaObject::Connection onUserValueChanged(const QString& path, const QObject* context,
         std::function<void(const QString& path, const QVariant& value)> handler);
 
     // --- QAbstractItemModel ------------------------------------------------------
@@ -127,6 +142,15 @@ signals:
         const QString& path, const QVariant& rejectedValue, const QString& message);
     // Emitted by the outermost endBatch() if any value changed during the batch.
     void batchValueChanged(const QStringList& paths);
+    // Since 1.9. A value was changed by the user, i.e. through setData() (an
+    // editor, a check box, the reset commands of the views). Emitted right after
+    // valueChanged() with the same arguments, also inside a batch. Writes made
+    // by application code (setValue(), resets, normalizeValue(), an object
+    // source following its object) emit valueChanged() only. A slot that writes
+    // the value back is an application write and does not come back here. The
+    // arguments are the user's write as made: if a valueChanged() slot or an
+    // object source adjusted the value meanwhile, read the current value.
+    void userValueChanged(const QString& path, const QVariant& newValue, const QVariant& oldValue);
 
 private:
     std::unique_ptr<detail::PropertyModelPrivate> d;

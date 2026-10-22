@@ -9,6 +9,19 @@ Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC tria
 ## Unreleased
 
 ### Added
+- `PropertyModel::userValueChanged(path, newValue, oldValue)`: emitted right after `valueChanged` when the value
+  changed through `setData()`, i.e. an edit of the user (editors, check boxes, the "Reset to default" and "Reset group"
+  commands of the views). `setValue()`, `Property::setValue()`, resets in code, `normalizeValue()` and
+  `QObjectPropertySource` following its object emit `valueChanged` only. `PropertyModel::onUserValueChanged(path,
+  context, handler)` has the two forms of `onValueChanged()` (`doc/guide/changes-and-conditions.md`).
+- `Property::normalizeValue()` and `PropertyModel::normalizeAllValues()`: run the current values through the value
+  pipeline again (range, decimals, validation) as application code, for example after a range changed; `valueChanged`
+  follows for each value that moved, and the result is `false` if a value was refused. Groups and the model act on all
+  descendants except live ones, in one batch. Changing an attribute still never moves a value by itself
+  (`doc/guide/values-and-validation.md`).
+- `Property::makeValueDefault()` and `PropertyModel::makeAllValuesDefault()`: make the current value the default value,
+  so nothing is modified afterwards; live properties are skipped by groups and by the model, no `valueChanged` is
+  emitted.
 - `PropertyFormView::showModelForeground` (a `Q_PROPERTY`, off by default; `qproperty-showModelForeground` in a style
   sheet): labels and section titles show the model's `Qt::ForegroundRole` colour, also while a section is collapsed.
   The colour is taken from the name cell, else the value cell; it follows `dataChanged()` and wins over a `color` of
