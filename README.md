@@ -9,14 +9,15 @@ replacing the folder: within a major version (1.x) your code and CMake never nee
 [Compatibility](#compatibility)).
 
 Contents: [Requirements](#requirements) - [Integration](#integration) - [Features](#features) -
-[Quick start](#quick-start) - [API](#api) - [Developer guide](#developer-guide) - [Style sheets](#style-sheets) -
-[Translations](#translations) - [Qt 5](#qt-5) - [Compatibility](#compatibility) - [Version history](#version-history)
+[Quick start](#quick-start) - [Documentation](#documentation) - [Compatibility](#compatibility) -
+[Version history](#version-history)
 
 ## Requirements
 
 - C++17 or newer, Qt 6.5 or newer or (since 1.7) Qt 5.15 (Core, Widgets), CMake 3.21 or newer.
 - Windows (MSVC) and Linux (GCC, Clang) with a Qt that supports them. Windows is verified for every release, Linux is
-  supported; see [Qt 5](#qt-5) for the compilers Qt 5.15 accepts.
+  supported; see [Platforms](doc/integration.md#platforms) and [Qt 5](doc/integration.md#qt-5) for the details and the
+  compilers Qt 5.15 accepts.
 
 ## Integration
 
@@ -32,18 +33,8 @@ target_link_libraries(my_app PRIVATE qpb::widgets)   # or qpb::core without widg
 #include <qpb/qpb.h>       // everything; <qpb/qpbcore.h> for qpb::core only
 ```
 
-| Target | Contains | Depends on |
-|---|---|---|
-| `qpb::core` | properties, model, types, validation, serialization, QObject source, filter proxy, translations | Qt6::Core |
-| `qpb::widgets` | tree view, form view, delegate, editors | `qpb::core`, Qt6::Widgets |
-
-- Static libraries by default. `-DQPB_BUILD_SHARED=ON` builds shared ones; then deploy the qpb libraries next to your
-  executable.
-- The folder changes none of your project's CMake settings (standard, flags, output directories, AUTOMOC are set on
-  qpb's own targets only). If your project has already found Qt (6 or 5), that Qt is used; otherwise Qt 6 is preferred to Qt 5.
-- To update: delete the folder, put the new version in its place, rebuild, and read the new version's *Upgrade notes*
-  in `CHANGELOG.md`. Never extract a new version over the old folder: files removed by the new version would remain.
-- The version of the folder is in `VERSION`, at compile time in `QPB_VERSION` and at run time from `qpb::version()`.
+The folder changes none of your project's CMake settings. Getting the folder (release zip, git subtree, git submodule),
+the CMake options, static and shared builds, Qt 5 and upgrading are in [doc/integration.md](doc/integration.md).
 
 ## Features
 
@@ -98,319 +89,27 @@ int main(int argc, char* argv[])
 }
 ```
 
-## API
+## Documentation
 
-All names are in namespace `qpb`. Header per class: `<qpb/Name.h>`, widgets in `<qpb/widgets/Name.h>`.
-
-### Types and attributes (`Types.h`, `Attributes.h`)
-
-| Type id (`Types::...`) | Stored as | Builder | Default editor |
-|---|---|---|---|
-| `Bool` | `bool` | `addBool` | check box (in the tree: the cell's check indicator) |
-| `Int` | `int` | `addInt` -> `IntBuilder` | spin box |
-| `Int64` | `qint64` | `addInt64` -> `Int64Builder` | 64-bit spin box |
-| `Double` | `double` | `addDouble` -> `DoubleBuilder` | double spin box |
-| `String` | `QString` | `addString` -> `StringBuilder` | line edit; multi-line text edit with `multiline()` |
-| `Enum` | `int` index, or the option's value | `addEnum` -> `EnumBuilder` | combo box |
-| `FilePath`, `DirPath` | `QString` | `addFilePath`, `addDirPath` | line edit with a "..." button opening a dialog |
-| `Group` | - | `addGroup` | - |
-
-`TypeId` is a `QString`; your own types use their own ids. Attribute keys are in `Attr::` (`Minimum`, `Maximum`,
-`Step`, `Decimals`, `Prefix`, `Suffix`, `MaxLength`, `Placeholder`, `RegularExpression`, `Multiline`, `Options`,
-`Filter`, `DialogMode`, `DefaultDir`, `MustExist`, `EditorId`). Enum options are `EnumOption { label, value }`;
-`addEnum(id, QStringList labels, index)` stores the index, `addEnum(id, QList<EnumOption>, value)` stores the value.
-
-### Properties (`Property.h`, `PropertyGroup.h`, `PropertyBuilders.h`)
-
-- `PropertyGroup::create(id)` makes a root. `add*()` add children and return a builder (or the group for
-  `addGroup`). `add(typeId, id, value)` and `add(std::unique_ptr<Property>)` add any type. `remove(id)`, `child(id)`,
-  `child(index)`, `children()`, `childCount()`, `indexOf()`, `find("A/b")`.
-- Builders (all chainable): `displayName`, `toolTip`, `readOnly`, `enabled`, `visible`, `live`, `validator`,
-  `attribute`, `editor(editorId)`, `enabledWhen`, `visibleWhen`, plus the typed ones (`range`, `minimum`, `maximum`,
-  `step`, `decimals`, `prefix`, `suffix`, `maxLength`, `multiline`, `placeholder`, `regularExpression`, `filter`,
-  `dialogMode`, `defaultDir`, `mustExist`). A builder converts to `Property&`.
-- `Property`: `id()`, `path()`, `parent()`, `isGroup()`, `toGroup()`, `typeId()`, `displayName()` / `toolTip()` and
-  setters, `value()`, `setValue()`, `defaultValue()`, `setDefaultValue()`, `isModified()`, `resetToDefault()`,
-  `attribute()` / `setAttribute()` / `removeAttribute()`, `flags()` / `setFlag()` (`ReadOnly`, `Disabled`, `Hidden`,
-  `Live`), `isReadOnly()`, `isEnabled()`, `isVisible()`, `isLive()` (effective: own flag and ancestors), `setValidator()`,
-  `setEnabledWhen()` / `setVisibleWhen()` / `clear...When()`.
-- `Property::create(typeId, id, value)` makes a detached property of any type, to attach with `add()`.
-
-### Model (`PropertyModel.h`)
-
-- `PropertyModel(std::unique_ptr<PropertyGroup> root)`; `setRoot()` replaces the tree; `root()`, `find(path)`,
-  `propertyAt(index)`, `indexOf(property, column)`.
-- Columns `NameColumn`, `ValueColumn`. Roles `PropertyRole`, `TypeIdRole`, `PathRole`, `IsGroupRole`,
-  `IsModifiedRole`, `AttributesRole`, `IsVisibleRole`; your own roles start at `PropertyModel::UserRole`.
-- `setValue(path, value)` (application code), `setData()` (views: refuses read-only and disabled properties),
-  `resetToDefault(index)`, `resetAllToDefault()`.
-- `beginBatch()` / `endBatch()` (nestable): `batchValueChanged(paths)` once at the end.
-- Signals `valueChanged(path, new, old)`, `validationFailed(path, rejected, message)`, `batchValueChanged(paths)`.
-- `onValueChanged(path, context, handler)`: a callback for one path, or for a group and its descendants (the handler
-  then also gets the path). Ends with `context`; follows the path, so it survives `setRoot()`.
-
-### Other core classes
-
-- `ValidationResult`: `ValidationResult::valid()`, `ValidationResult::error(message)`, `ok`, `message`.
-- `TypeRegistry::global()`: `registerType(id, handler)`, `registerType<T>(id, handler)` (storage type `T`),
-  `replaceType()`, `handler()`, `contains()`, `types()`. `TypeHandler` fields (all optional): `storageType`,
-  `displayText`, `normalize`, `validate`, `toJson`, `fromJson`.
-- `PropertyFilterProxyModel`: filters by display name (`setFilterFixedString()`), case-insensitive; a group is shown
-  when a descendant matches, and all its content when its own name matches.
-- `QObjectPropertySource(model)`: `addObject(object, parentGroup, id)`, `removeObject()`, `groupOf()`, `objects()`,
-  `refresh()`, `setTitleProperty()`, `setLiveReadOnlyProperties()`.
-- `qpb::serialization`: `toJson(group)`, `fromJson(group, json)`, `save(group, settings)`, `load(group, settings)`.
-- `Translations.h`: `loadTranslation(translator, locale)` (see [Translations](#translations)).
-- `qpbglobal.h`: `QPB_VERSION`, `QPB_VERSION_CHECK(major, minor, patch)`, `QPB_VERSION_STR`, `qpb::version()`,
-  `QPB_DEPRECATED_X(text)`.
-
-### Widgets
-
-- `PropertyTreeView` (a `QTreeView`): `setModel()` (a `PropertyModel` or a proxy of one), `setMode(Mode::Tree |
-  Mode::List)`, `setNameColumnWidth()`, `propertyDelegate()`, `setTabStopsOnCheckBoxes()`, colour properties for style
-  sheets (`groupBackground`, `groupForeground`, `modifiedForeground`, `readOnlyForeground`).
-- `PropertyFormView` (a `QScrollArea`): `setModel()`, `model()`, `editor(path)`, `isExpanded(groupPath)`,
-  `setExpanded()`.
-- `PropertyDelegate`: the delegate both views use; set it on any `QAbstractItemView` showing a `PropertyModel`.
-- `EditorFactory::global()`: `registerEditor(id, handler)`, `replaceEditor()`, `handler()`, `handlerFor(property)`,
-  `createEditor()`, `contains()`, `editors()`, `notifyCommit(editor)`. `EditorHandler` fields: `createEditor`,
-  `setEditorData`, `editorData` (required), `applyAttributes`, `paint` (optional).
-- `EditorDialogScope`: keeps an editor open while it shows a dialog.
-
-## Developer guide
-
-### Values and the value pipeline
-
-Every change, from a view or from code, goes through the same steps: conversion to the type's storage type,
-normalization (e.g. clamping to the range), the type's validation, the property's validator. A rejected value keeps
-the old one and emits `validationFailed` (views show the message as a tool tip). An equal value changes nothing and
-emits nothing. Read-only and disabled only stop the user: application code (`setValue`, `resetToDefault`) can still
-change such properties.
-
-```cpp
-root->addString("name", "Main").validator([&scene](const QVariant& v, const qpb::Property&) {
-    return scene.contains(v.toString()) ? qpb::ValidationResult::error("Name already used")
-                                        : qpb::ValidationResult::valid();
-});
-```
-
-### Reacting to changes
-
-Prefer `onValueChanged()` over comparing paths in `valueChanged`. Wrap bulk updates in `beginBatch()` /
-`endBatch()` to get one `batchValueChanged`:
-
-```cpp
-model.onValueChanged("Transform/x", this, [this](const QVariant& v) { m_object.x = v.toDouble(); });
-model.onValueChanged("Output", this, [](const QString& path, const QVariant& v) { /* any child */ });
-```
-
-### Dependencies between properties
-
-```cpp
-general.addBool("autosave", true);
-general.addInt("autosaveMinutes", 5).enabledWhen("General/autosave");              // true / non-empty
-camera.addDouble("orthoScale", 1.0).visibleWhen("Camera/projection", 1);            // equals a value
-limits.addInt64("quota", 0).enabledWhen("Limits/mode", [](const QVariant& v) { return v != "unlimited"; });
-```
-
-Conditions are evaluated by the model and combined with the property's own flags. A condition whose source path does
-not exist (or a property outside a model) counts as met.
-
-### Live values
-
-A property maintained by the application (a counter, a status) should be `live()`: it is never shown as modified,
-group resets skip it, and serialization ignores it.
-
-### Saving and loading
-
-```cpp
-qpb::serialization::save(*model.root(), settings);   // keys are paths: "General/language"
-model.beginBatch();
-qpb::serialization::load(*model.root(), settings);   // values go through validation
-model.endBatch();
-```
-
-Only values are stored; the application builds the tree first. Read-only and live properties are neither written nor
-read. Call the functions qualified (`qpb::serialization::save`).
-
-### Your own type
-
-```cpp
-qpb::TypeHandler color;
-color.displayText = [](const QVariant& v, const qpb::Property&) { return v.value<QColor>().name(); };
-color.toJson = [](const QVariant& v, const qpb::Property&) { return QJsonValue(v.value<QColor>().name()); };
-qpb::TypeRegistry::global().registerType<QColor>("color", color);
-root->add("color", "tint", QColor(Qt::red));
-```
-
-Give it an editor with `EditorFactory::global().registerEditor("color", handler)`. To use another editor for one
-property of a built-in type, register it under its own id and set it with the builder's `editor("slider")`.
-
-### Custom editors
-
-`createEditor` builds the widget, `setEditorData` shows a value, `editorData` returns the entered value,
-`applyAttributes` applies ranges and the like, `paint` draws the cell when not editing. Call
-`EditorFactory::notifyCommit(editor)` when the user has picked a value (no need to wait for focus out). While an
-editor shows a dialog, keep a `qpb::EditorDialogScope scope(this);` alive so the view does not close the editor.
-
-### QObjects
-
-```cpp
-class Light : public QObject {
-    Q_OBJECT
-    Q_CLASSINFO("qpb:title", "name")                         // group title follows this Q_PROPERTY
-    Q_CLASSINFO("qpb:intensity", "min=0;max=100;suffix= %")
-    Q_CLASSINFO("qpb:used", "live")
-    Q_PROPERTY(QString name READ name WRITE setName NOTIFY changed)
-    ...
-};
-qpb::QObjectPropertySource source(&model);
-source.addObject(&light);
-```
-
-Class info keys per property: `type`, `displayName`, `toolTip`, `readOnly`, `hidden`, `disabled`, `exclude`, `live`,
-`enabledWhen`, `visibleWhen`, and any attribute (`min`, `max` stand for minimum and maximum); `qpb:properties` lists
-and orders the properties. Changes of the object are read back when the `Q_PROPERTY` has a NOTIFY signal (otherwise
-call `refresh()`). A destroyed object's group is removed.
-
-### Views and keyboard
-
-- Tree view: Enter commits, Esc cancels, Tab / Shift+Tab move to the next / previous editable value (skipping groups,
-  read-only and hidden rows, and check boxes unless `setTabStopsOnCheckBoxes(true)`); Space toggles a check box. The
-  context menu offers "Reset to default" and "Reset group".
-- Form view: editors stay open and commit on focus out, on Enter (Ctrl+Enter in multi-line text) or at once for check
-  boxes, combo boxes and paths; Esc restores the model's value.
-- Both work through a proxy model, e.g. `PropertyFilterProxyModel` for a search box.
-
-### Threads
-
-Use the model, the views and the registries from the GUI thread.
-
-## Style sheets
-
-Standard selectors cover the views and every editor: `qpb--PropertyTreeView`, `qpb--PropertyFormView`, `::item`
-(`:hover`, `:selected`, `:alternate`), `QHeaderView::section`, and the editors by their Qt classes
-(`qpb--PropertyTreeView QLineEdit` for editors in cells, `qpb--PropertyFormView QLineEdit` in the form). For what qpb
-paints or builds itself:
-
-**Tree view**: colour properties, settable with `qproperty-`. Invalid values keep the defaults; a matching `::item`
-rule with a `color` or `background` takes precedence. Fonts are fixed (group and modified names stay bold).
-
-| Property | Default |
+| Page | What it covers |
 |---|---|
-| `groupBackground` (brush) | the palette's Button |
-| `groupForeground` | the item text colour |
-| `modifiedForeground` | the item text colour |
-| `readOnlyForeground` | the palette's PlaceholderText |
-
-**Form view and path editors**: dynamic properties on their widgets.
-
-| Widget | Selector |
-|---|---|
-| a group's section, title button, body | `QWidget[qpbPart="group"]`, `QToolButton[qpbPart="groupTitle"]`, `QWidget[qpbPart="groupBody"]` |
-| a property's label | `QLabel[qpbPart="label"]`, and `[qpbModified="true"]` while modified |
-| read-only text of a type without editor | `QLabel[qpbPart="value"]` |
-| "..." button of file and directory editors | `QToolButton[qpbPart="browse"]` |
-
-```css
-qpb--PropertyTreeView { qproperty-groupBackground: #2c3038; qproperty-modifiedForeground: #e87c00; }
-QToolButton[qpbPart="groupTitle"], QToolButton[qpbPart="groupTitle"]:checked {
-    background: #2c3038; color: #e87c00; border: none; border-bottom: 1px solid #e87c00;
-}
-QLabel[qpbPart="label"][qpbModified="true"] { color: #e87c00; }
-```
-
-Notes: the section title is a checkable tool button (checked while expanded), so cover `:checked` if your sheet styles
-checked tool buttons. `qproperty-` values stay when a sheet is removed; set them back to invalid values when switching
-to a theme without them. A `::branch` rule replaces the tree's expand arrows and then needs `image:` for `:closed` and
-`:open`. Only these property names and values are part of the API, not the class names of internal widgets.
-
-## Translations
-
-Since 1.8 qpb ships translations of its own texts for English, Japanese and Vietnamese. They are embedded in
-`qpb::core`: there is nothing to deploy, and building needs no Qt Linguist tools. Load and install them like Qt's own:
-
-```cpp
-#include <qpb/Translations.h>
-
-QTranslator qpbTranslator;                          // keep it as long as it is installed
-if (qpb::loadTranslation(qpbTranslator, QLocale())) // the locale's UI languages: "ja-JP" finds Japanese
-    app.installTranslator(&qpbTranslator);
-```
-
-`loadTranslation()` returns false when qpb has no translation for the locale; qpb's texts then stay English. Without a
-qpb translation installed, every text is the English one of earlier versions.
-
-qpb translates what it shows by itself: the column titles, the context menus, the tool tips of the file and directory
-editors, and the messages of the built-in validation. Everything else is text you give qpb (display names, tool tips,
-enum labels, placeholders, messages of your validators): pass it translated, e.g. with `tr()`. Compare
-`ValidationResult::ok`, never the wording of a message. Texts that `QObjectPropertySource` takes from class info
-(`displayName=`, `toolTip=`) and from `Q_ENUM` keys are used as written; to translate them, set them again with
-`setDisplayName()` / `setToolTip()` / the `options` attribute after `addObject()`.
-
-**Changing the language at run time**: install and remove translators as usual. qpb updates the column titles and the
-editors it keeps open; context menus are built when they open; messages already shown keep their language. Set your
-own texts again when your window gets `QEvent::LanguageChange`:
-
-```cpp
-void Window::changeEvent(QEvent* event)
-{
-    if (event->type() == QEvent::LanguageChange) {
-        model.find("general/name")->setDisplayName(tr("Name"));
-        // ... tool tips, group titles, enum labels (setAttribute(qpb::Attr::Options, ...))
-    }
-    QWidget::changeEvent(event);
-}
-```
-
-Texts that come from Qt itself inside qpb's editors (the context menu of a line edit or spin box, a non-native file
-dialog) are translated by Qt's `qtbase_<lang>.qm`, which your application loads. Qt has Japanese, but not Vietnamese.
-
-**Other languages, other wording**: the contexts and source texts below are stable within 1.x. Translate them in a
-`.ts` file of your own (`lupdate components/qpb/src -ts myapp_qpb_de.ts` lists them) and install that translator after
-qpb's: the translator installed last wins.
-
-| Context | Source texts |
-|---|---|
-| `qpb::PropertyModel` | `Property`, `Value` |
-| `qpb::PropertyTreeView`, `qpb::PropertyFormView` | `Reset to default`, `Reset group` |
-| `qpb::detail::PathEdit` | `Choose a file`, `Choose a directory` |
-| `qpb::TypeRegistry` | `The value is not a number`, `At most %n characters are allowed` (plural), `The value does not match the pattern %1`, `"%1" is not one of the options`, `The file %1 does not exist`, `The directory %1 does not exist` |
-| `qpb::Property` | `Cannot convert the value to %1` |
-
-qpb's own translations are in `translations/qpb_<lang>.ts` (the embedded `.qm` files are generated from them).
-
-## Qt 5
-
-Since 1.7 the folder also builds with Qt 5.15. CMake uses the Qt your project has already found (Qt 6 first), and
-otherwise looks for Qt 6, then Qt 5.15. Everything in this README applies to both, with two differences where Qt 5
-has no equivalent:
-
-- `Types::*` and `Attr::*` are `QLatin1String` constants (with Qt 6: `QLatin1StringView`). Both convert to `QString`,
-  so code that uses them as type ids or attribute keys is the same.
-- `TypeHandler::storageType` is an `int` type id, `QMetaType::UnknownType` by default (with Qt 6: a `QMetaType`).
-  `registerType<T>(id, handler)` sets it in both; with Qt 5 you can also write `handler.storageType =
-  qMetaTypeId<T>();`.
-
-Compilers: Qt 5.15's own headers do not compile with MSVC 2026 (they use `stdext::checked_array_iterator`, which its
-standard library no longer has). Use MSVC 2019 or 2022, GCC or Clang with Qt 5.15.
-
-The compatibility promise below holds for each Qt major: an application built with Qt 5 keeps building with Qt 5 when
-the folder is updated, and the same for Qt 6.
+| [Integration](doc/integration.md) | Getting the folder, CMake, options, static and shared builds, Qt 5, platforms, upgrading |
+| [API overview](doc/api-overview.md) | The public classes by header |
+| [Values and validation](doc/guide/values-and-validation.md) | The value pipeline, built-in checks, validators, defaults and reset |
+| [Changes and conditions](doc/guide/changes-and-conditions.md) | Reacting to changes, batches, dependencies between properties, live values |
+| [Saving and loading](doc/guide/serialization.md) | JSON and `QSettings` |
+| [Custom types and editors](doc/guide/custom-types-and-editors.md) | Your own property types, replacing or writing editors |
+| [QObject properties](doc/guide/qobject-source.md) | Showing `Q_PROPERTY`s of your objects with `Q_CLASSINFO` metadata |
+| [Views](doc/guide/views.md) | Tree view, form view, filter proxy, keyboard, threads |
+| [Style sheets](doc/guide/style-sheets.md) | Theming the views and editors |
+| [Translations](doc/guide/translations.md) | qpb's own languages, your texts, switching at run time |
+| [Compatibility](doc/compatibility.md) | The 1.x promise, deprecation, Qt 5 and Qt 6 differences, version checks |
 
 ## Compatibility
 
-Within 1.x, updating the folder never requires changes to your code or CMake (with the same Qt major):
-
-- Nothing public is removed or changed, only added. Enum values and model roles keep their numbers; new ones are
-  appended.
-- Superseded API is marked deprecated (`QPB_DEPRECATED_X`) and kept until 2.0; define `QPB_DISABLE_DEPRECATED` to find
-  remaining uses at compile time.
-- Documented behaviour and defaults stay; new behaviour is opt-in.
-- The minimum C++, Qt and CMake versions only rise in a new major version.
-- Free functions are in nested namespaces (`qpb::serialization`), so they never clash with your own unqualified calls.
-- Configuration structs (`TypeHandler`, `EditorHandler`, `EnumOption`, `ValidationResult`) may gain fields at the end:
-  assign fields by name, never with positional `{a, b, c}` initialization.
+Within 1.x, updating the folder never requires changes to your code or CMake (with the same Qt major): nothing public is
+removed or changed, only added. What may and may not change, and what you should do in return, is in
+[doc/compatibility.md](doc/compatibility.md).
 
 ## Version history
 
