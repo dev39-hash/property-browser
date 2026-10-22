@@ -44,6 +44,15 @@ model.endBatch();
 model; the views follow. Raw `Property*` pointers die with the removal of the property or with `setRoot()`; keep paths
 instead if you need to refer to a property later.
 
+Handlers of `valueChanged` and `batchValueChanged` may change the tree: call `setRoot()` to rebuild it, or remove the
+group or the property that was just written. The call that wrote the value returns normally, and handlers connected
+later still receive the values of that change. A part of the tree that a handler detaches stays alive until the
+outermost value change has been delivered; outside such a handler `setRoot()` and `remove()` destroy at once. This also
+holds while a reset or `qpb::serialization::load()` / `fromJson()` is writing values. The "Reset to default" and "Reset
+group" commands of the views stop writing when a handler replaced the tree and skip properties that were removed. A
+reset in code (`resetToDefault()` of a group, `PropertyModel::resetAllToDefault()`) and the loading functions continue
+over the properties they started with; the ones a handler detached are still written, but without notifications.
+
 ## Dependencies between properties
 
 A property can be enabled or shown depending on the value of another one, identified by its path from the root:

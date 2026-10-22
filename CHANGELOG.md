@@ -19,6 +19,17 @@ Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC tria
   value as it was: another role such as the tool tip, a `dataChanged()` without roles, or a whole range. An editor
   is written only when the model's value changed, or after its attributes were applied again. A value the user
   commits that the model normalises to the value it already held (no signal follows) is shown as the model holds it.
+- `PropertyModel::setRoot()` and `PropertyGroup::remove()` can be called from a handler of `valueChanged` or
+  `batchValueChanged`, also while a group or the whole tree is being reset, or while `qpb::serialization::load()` /
+  `fromJson()` writes values: the changed property and the detached
+  part of the tree stay alive until the outermost value change has been delivered, so handlers connected later (and
+  `QObjectPropertySource`) receive the correct values instead of reading freed memory. `valueChanged` carries copies of
+  the values. Outside such a handler both calls still destroy at once. "Reset to default" and "Reset group" of the views
+  stop writing properties that a handler removed or replaced.
+- Editors that `PropertyDelegate` opens (`PropertyTreeView`, or any view that uses the delegate, also through a proxy
+  model) follow changes of the property's attributes, such as a range, `decimals` or a suffix, while they are open. They
+  keep the text being typed when the model reports a change that leaves the value as it was (another role such as the
+  tool tip, a `dataChanged()` without roles, or a whole range).
 
 ## 1.8.0 - 2026-10-21
 

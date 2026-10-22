@@ -101,10 +101,11 @@ bool PropertyPrivate::assign(const QVariant& input, Origin origin)
     if (candidate == value)
         return true;
 
+    // The signal carries copies: a handler may write the property again.
     const QVariant oldValue = value;
     value = candidate;
     if (tree)
-        tree->valueChanged(q, value, oldValue);
+        tree->valueChanged(q, candidate, oldValue);
     return true;
 }
 
@@ -237,6 +238,8 @@ bool Property::resetToDefault()
 {
     if (const PropertyGroup* group = toGroup()) {
         detail::TreeObserver* observer = d->observer();
+        // A handler may replace the tree while the children are being reset.
+        const detail::TreeHold hold(observer);
         if (observer)
             observer->beginBatch();
         bool ok = true;

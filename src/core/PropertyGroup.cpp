@@ -129,9 +129,13 @@ bool PropertyGroup::remove(const QString& id)
     std::unique_ptr<Property> removed = std::move(children[size_t(row)]);
     children.erase(children.begin() + row);
     PropertyPrivate::get(removed.get())->parent = nullptr;
-    if (observer)
+    if (observer) {
         observer->removed(this, row);
-    return true; // removed is destroyed here, after the model has been updated
+        // Destroyed after the model has been updated, and not before the value
+        // handlers running further up the call stack have returned.
+        observer->retire(std::move(removed));
+    }
+    return true; // without a model, removed is destroyed here
 }
 
 int PropertyGroup::childCount() const

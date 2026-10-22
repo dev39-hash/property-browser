@@ -516,6 +516,8 @@ public:
             return;
         }
 
+        if (dirty || !row->index.isValid())
+            return; // a handler changed the tree: a rebuild reads the model again
         {
             const QSignalBlocker blocker(editor);
             row->shown = value.data(Qt::EditRole);
