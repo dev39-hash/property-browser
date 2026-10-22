@@ -122,6 +122,21 @@ public:
     // setValue(). For a group, resets all descendants except live ones (since
     // 1.3). Returns false if any reset was rejected.
     bool resetToDefault();
+    // Since 1.9. Runs the current value through the value pipeline again, like
+    // setValue(value()): conversion, normalization (range, decimals), type
+    // validation and the validator. Changing an attribute never moves a value
+    // by itself; call this afterwards to bring the value inside the new range.
+    // Application origin, so read-only and disabled properties are normalized
+    // too. A changed value is announced by valueChanged() only. Returns false
+    // and keeps the value if the pipeline rejects it or the type is not
+    // registered. For a group, normalizes all descendants except live ones in
+    // one batch and returns false if any was rejected.
+    bool normalizeValue();
+    // Since 1.9. Makes the current value the default: defaultValue() becomes
+    // value() and isModified() false. Only the row is announced (data changed),
+    // never a value change. For a group, applies to all descendants except
+    // live ones; called on a live property itself, it applies.
+    void makeValueDefault();
 
     // Optional extra validation, run after the type's validation.
     Validator validator() const;

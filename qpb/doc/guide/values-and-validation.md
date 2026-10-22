@@ -22,6 +22,25 @@ that a value set from code behaves like one typed by the user.
 
 Setting a value on a group, or on a property whose type is not registered, returns `false` and emits nothing.
 
+**Changing an attribute never moves a value.** After `setAttribute()` lowers a maximum or a number of decimals, the
+stored value stays as it was, even when it is now outside the range. To bring values inside the current attributes, run
+them through the pipeline again (since 1.9):
+
+- `Property::normalizeValue()` does for the current value what `setValue(value())` does: conversion, normalization,
+  type validation and the validator, as application code (read-only and disabled properties included). It emits
+  `valueChanged` (and no `userValueChanged`) only if the value moved, and returns `false`, keeping the value and emitting
+  `validationFailed`, if a check now refuses it; it also returns `false`, silently, for a type that is not registered.
+  On a group it normalizes all descendants except [live ones](changes-and-conditions.md#live-values) in one batch and
+  returns `false` if any was refused.
+- `PropertyModel::normalizeAllValues()` does the same for the whole tree, like `root()->normalizeValue()`; it returns
+  `true` for a model without a root.
+
+```cpp
+property->setAttribute(qpb::Attr::Maximum, 100);
+property->normalizeValue();     // 150 becomes 100
+model.normalizeAllValues();     // after rebuilding all the ranges
+```
+
 ## Who may change what
 
 `readOnly` and `disabled` stop the user only: edits made through a view are refused. Application code can still change
@@ -75,3 +94,8 @@ bold. Groups are never modified, and neither are [live properties](changes-and-c
   disabled properties too, live ones not, one `batchValueChanged`. It returns `false` if a reset was rejected, and
   `true` for a model without a root.
 - The views offer "Reset to default" for a property and "Reset group" for a group in their context menus.
+- `Property::makeValueDefault()` (since 1.9) makes the current value the default: `defaultValue()` becomes `value()`
+  and the property is no longer modified, for example after loading settings, to show later edits as modified relative
+  to that load. It changes no value, so it emits no `valueChanged`; the views only repaint the rows whose default
+  changed. On a group it applies to all descendants except live ones.
+- `PropertyModel::makeAllValuesDefault()` (since 1.9) does this for the whole tree, like `root()->makeValueDefault()`.

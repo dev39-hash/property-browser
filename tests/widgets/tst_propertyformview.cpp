@@ -381,6 +381,17 @@ private slots:
     void turningOnWhileRebuildIsPendingColoursEveryRow();
     void queuedPolishAfterTurningOnIsHarmless();
 
+    void editorCommitsEmitUserValueChanged();
+    void rejectedCommitEmitsNoUserValueChanged();
+    void applicationWriteBeforeACommitEmitsNoUserValueChanged();
+    void contextMenuResetEmitsUserValueChanged();
+    void groupResetEmitsUserValueChangedForChangedRowsOnly();
+    void rollbackInUserValueChangedSlotIsShown();
+    void commitWithUserHandlerChangingTree_data();
+    void commitWithUserHandlerChangingTree();
+    void groupResetWithUserHandlerChangingTree_data();
+    void groupResetWithUserHandlerChangingTree();
+
 private:
     // Shows the form through a MarkProxy over the fixture's model.
     MarkProxy* useProxy();
@@ -2213,6 +2224,300 @@ void tst_PropertyFormView::rejectedCommitWithHandlerChangingTree()
     } else {
         QTRY_VERIFY(!f->view->editor(QStringLiteral("name")));
         QVERIFY(f->view->editor(QStringLiteral("visible")));
+    }
+}
+
+// --- User edits are announced by userValueChanged() ---------------------------------------
+
+namespace {
+
+// A handler of userValueChanged() for "Camera/fov" that changes the tree, and
+// a second handler connected after it that records the first change it sees.
+struct TreeChangingUserHandlers
+{
+    TreeChangingUserHandlers(PropertyModel& model, TreeChange change)
+        : lifetime(trackLifetime(*model.find(QStringLiteral("Camera/fov"))))
+    {
+        QObject::connect(&model, &PropertyModel::userValueChanged, &model,
+            [this, &model, change](const QString& path) {
+                if (path == QStringLiteral("Camera/fov") && !treeChanged) {
+                    treeChanged = true;
+                    changeTree(model, change);
+                }
+            });
+        QObject::connect(&model, &PropertyModel::userValueChanged, &model,
+            [this](const QString& path, const QVariant& newValue, const QVariant& oldValue) {
+                if (calls++ > 0)
+                    return;
+                propertyAlive = !lifetime.expired();
+                if (!propertyAlive)
+                    return; // the values would refer to a destroyed property
+                firstPath = path;
+                firstNewValue = newValue;
+                firstOldValue = oldValue;
+            });
+    }
+
+    std::weak_ptr<int> lifetime;
+    bool treeChanged = false;
+    int calls = 0;
+    bool propertyAlive = false;
+    QString firstPath;
+    QVariant firstNewValue;
+    QVariant firstOldValue;
+};
+
+QStringList pathsOf(const QSignalSpy& spy)
+{
+    QStringList paths;
+    for (const QList<QVariant>& arguments : spy)
+        paths << arguments.at(0).toString();
+    return paths;
+}
+
+} // namespace
+
+// Every editor reports a finished edit as a user edit: Enter, losing the
+// focus, a check box click and a choice in a combo box.
+void tst_PropertyFormView::editorCommitsEmitUserValueChanged()
+{
+    QSignalSpy values(&f->model, &PropertyModel::valueChanged);
+    QSignalSpy user(&f->model, &PropertyModel::userValueChanged);
+
+    auto* fov = f->editor<QSpinBox>(QStringLiteral("Camera/fov"));
+    fov->setFocus();
+    fov->setValue(90);
+    QCOMPARE(user.count(), 0); // nothing until the edit is finished
+    QTest::keyClick(fov, Qt::Key_Return);
+    QTRY_COMPARE(user.count(), 1);
+    QCOMPARE(user.at(0).at(0).toString(), QStringLiteral("Camera/fov"));
+    QCOMPARE(user.at(0).at(1), QVariant(90));
+    QCOMPARE(user.at(0).at(2), QVariant(60));
+
+    auto* x = f->editor<QDoubleSpinBox>(QStringLiteral("Transform/x"));
+    x->setFocus();
+    x->setValue(12.5);
+    f->other->setFocus();
+    QTRY_COMPARE(user.count(), 2);
+    QCOMPARE(user.at(1).at(0).toString(), QStringLiteral("Transform/x"));
+    QCOMPARE(user.at(1).at(1), QVariant(12.5));
+    QCOMPARE(user.at(1).at(2), QVariant(0.0));
+
+    auto* visible = f->editor<QCheckBox>(QStringLiteral("visible"));
+    QTest::mouseClick(visible, Qt::LeftButton, {}, QPoint(6, visible->height() / 2));
+    QCOMPARE(user.count(), 3);
+    QCOMPARE(user.at(2).at(0).toString(), QStringLiteral("visible"));
+    QCOMPARE(user.at(2).at(1), QVariant(false));
+    QCOMPARE(user.at(2).at(2), QVariant(true));
+
+    auto* projection = f->editor<QComboBox>(QStringLiteral("Camera/projection"));
+    projection->setFocus();
+    QTest::keyClick(projection, Qt::Key_Down);
+    QCOMPARE(user.count(), 4);
+    QCOMPARE(user.at(3).at(0).toString(), QStringLiteral("Camera/projection"));
+    QCOMPARE(user.at(3).at(1), QVariant(1));
+    QCOMPARE(user.at(3).at(2), QVariant(0));
+
+    QCOMPARE(values.count(), 4);
+}
+
+// A rejected commit announces nothing; the commit that follows does.
+void tst_PropertyFormView::rejectedCommitEmitsNoUserValueChanged()
+{
+    QSignalSpy failed(&f->model, &PropertyModel::validationFailed);
+    QSignalSpy user(&f->model, &PropertyModel::userValueChanged);
+    auto* name = f->editor<QLineEdit>(QStringLiteral("name"));
+    name->setFocus();
+    name->setText(QStringLiteral("forbidden"));
+    QTest::keyClick(name, Qt::Key_Return);
+    QTRY_COMPARE(failed.count(), 1);
+    QCOMPARE(user.count(), 0);
+
+    name->setText(QStringLiteral("Renamed"));
+    QTest::keyClick(name, Qt::Key_Return);
+    QTRY_COMPARE(user.count(), 1);
+    QCOMPARE(user.at(0).at(0).toString(), QStringLiteral("name"));
+    QCOMPARE(user.at(0).at(1), QVariant(QStringLiteral("Renamed")));
+    QCOMPARE(user.at(0).at(2), QVariant(QStringLiteral("Main")));
+}
+
+// The application writes to a property the form shows: not a user edit. The
+// commit that follows is.
+void tst_PropertyFormView::applicationWriteBeforeACommitEmitsNoUserValueChanged()
+{
+    QSignalSpy user(&f->model, &PropertyModel::userValueChanged);
+    auto* fov = f->editor<QSpinBox>(QStringLiteral("Camera/fov"));
+
+    QVERIFY(f->model.setValue(QStringLiteral("Camera/fov"), 90));
+    QCOMPARE(fov->value(), 90);
+    QVERIFY(f->model.setValue(QStringLiteral("visible"), false));
+    QCOMPARE(user.count(), 0);
+
+    fov->setFocus();
+    fov->setValue(100);
+    QTest::keyClick(fov, Qt::Key_Return);
+    QTRY_COMPARE(user.count(), 1);
+    QCOMPARE(user.at(0).at(1), QVariant(100));
+    QCOMPARE(user.at(0).at(2), QVariant(90));
+}
+
+// "Reset to default" of a modified property is a user action that changes the
+// value.
+void tst_PropertyFormView::contextMenuResetEmitsUserValueChanged()
+{
+    QVERIFY(f->model.setValue(QStringLiteral("Camera/fov"), 100));
+    QSignalSpy user(&f->model, &PropertyModel::userValueChanged);
+
+    QVERIFY(resetFromMenu(f->label(QStringLiteral("Camera/fov"))));
+
+    QCOMPARE(f->stored(QStringLiteral("Camera/fov")), QVariant(60));
+    QCOMPARE(user.count(), 1);
+    QCOMPARE(user.at(0).at(0).toString(), QStringLiteral("Camera/fov"));
+    QCOMPARE(user.at(0).at(1), QVariant(60));
+    QCOMPARE(user.at(0).at(2), QVariant(100));
+
+    // Nothing to reset: the menu entry is disabled and nothing is announced.
+    QVERIFY(!resetFromMenu(f->label(QStringLiteral("Camera/fov"))));
+    QCOMPARE(user.count(), 1);
+}
+
+// "Reset group" announces each property it changes: not the ones that already
+// have their default, and not read-only or live ones it leaves alone.
+void tst_PropertyFormView::groupResetEmitsUserValueChangedForChangedRowsOnly()
+{
+    QVERIFY(f->model.setValue(QStringLiteral("Camera/fov"), 100));
+    QVERIFY(f->model.setValue(QStringLiteral("Camera/projection"), 1));
+    QSignalSpy user(&f->model, &PropertyModel::userValueChanged);
+    QSignalSpy values(&f->model, &PropertyModel::valueChanged);
+
+    QVERIFY(resetFromMenu(f->title(QStringLiteral("Camera"))));
+
+    QCOMPARE(values.count(), 2);
+    QCOMPARE(pathsOf(user),
+        (QStringList {QStringLiteral("Camera/fov"), QStringLiteral("Camera/projection")}));
+    QCOMPARE(user.at(0).at(1), QVariant(60));
+    QCOMPARE(user.at(0).at(2), QVariant(100));
+    QCOMPARE(user.at(1).at(1), QVariant(0));
+    QCOMPARE(user.at(1).at(2), QVariant(1));
+
+    // Read-only and live rows keep their values and announce nothing.
+    Property* x = f->model.find(QStringLiteral("Transform/x"));
+    Property* locked = f->model.find(QStringLiteral("Transform/locked"));
+    Property* y = f->model.find(QStringLiteral("Transform/y"));
+    y->setLive(true);
+    QVERIFY(x->setValue(5.0));
+    QVERIFY(locked->setValue(7.0));
+    QVERIFY(y->setValue(9.0));
+    user.clear();
+
+    QVERIFY(resetFromMenu(f->title(QStringLiteral("Transform"))));
+
+    QCOMPARE(x->value(), QVariant(0.0));
+    QCOMPARE(locked->value(), QVariant(7.0));
+    QCOMPARE(y->value(), QVariant(9.0));
+    QCOMPARE(pathsOf(user), QStringList {QStringLiteral("Transform/x")});
+    QCOMPARE(user.at(0).at(1), QVariant(0.0));
+    QCOMPARE(user.at(0).at(2), QVariant(5.0));
+}
+
+// An application that vetoes an edit writes the old value back from its
+// userValueChanged() slot; the editor shows the value the model holds.
+void tst_PropertyFormView::rollbackInUserValueChangedSlotIsShown()
+{
+    connect(&f->model, &PropertyModel::userValueChanged, this,
+        [this](const QString& path, const QVariant&, const QVariant& oldValue) {
+            f->model.setValue(path, oldValue);
+        });
+    QSignalSpy user(&f->model, &PropertyModel::userValueChanged);
+    auto* fov = f->editor<QSpinBox>(QStringLiteral("Camera/fov"));
+    fov->setFocus();
+    fov->setValue(90);
+
+    QTest::keyClick(fov, Qt::Key_Return);
+
+    QTRY_COMPARE(user.count(), 1);
+    QCOMPARE(f->stored(QStringLiteral("Camera/fov")), QVariant(60));
+    QTRY_COMPARE(f->editor<QSpinBox>(QStringLiteral("Camera/fov"))->value(), 60);
+    QCOMPARE(user.count(), 1); // the rollback is an application write
+}
+
+void tst_PropertyFormView::commitWithUserHandlerChangingTree_data()
+{
+    addTreeChangeRows();
+}
+
+// A slot of userValueChanged() changes the tree while the form is writing the
+// committed value.
+void tst_PropertyFormView::commitWithUserHandlerChangingTree()
+{
+    QFETCH(int, change);
+    TreeChangingUserHandlers handlers(f->model, TreeChange(change));
+    auto* spinBox = f->editor<QSpinBox>(QStringLiteral("Camera/fov"));
+    QVERIFY(spinBox);
+    spinBox->setFocus();
+    spinBox->setValue(90);
+
+    QTest::keyClick(spinBox, Qt::Key_Return);
+
+    QTRY_COMPARE(handlers.calls, 1);
+    QVERIFY2(handlers.propertyAlive,
+        "the edited property was destroyed while a later slot of the same change ran");
+    QCOMPARE(handlers.firstPath, QStringLiteral("Camera/fov"));
+    QCOMPARE(handlers.firstNewValue, QVariant(90));
+    QCOMPARE(handlers.firstOldValue, QVariant(60));
+    QTRY_VERIFY(handlers.lifetime.expired());
+    if (TreeChange(change) == TreeChange::ReplaceTree) {
+        QVERIFY(f->editor<QSpinBox>(QStringLiteral("Camera/fov")));
+        QCOMPARE(f->editor<QSpinBox>(QStringLiteral("Camera/fov"))->value(), 60);
+    } else {
+        QVERIFY(!f->view->editor(QStringLiteral("Camera/fov")));
+        QVERIFY(f->view->editor(QStringLiteral("name")));
+    }
+
+    // The form keeps working with the changed tree.
+    auto* name = f->editor<QLineEdit>(QStringLiteral("name"));
+    QVERIFY(name);
+    name->setFocus();
+    name->setText(QStringLiteral("Renamed"));
+    QTest::keyClick(name, Qt::Key_Return);
+    QTRY_COMPARE(f->stored(QStringLiteral("name")), QVariant(QStringLiteral("Renamed")));
+}
+
+void tst_PropertyFormView::groupResetWithUserHandlerChangingTree_data()
+{
+    addTreeChangeRows();
+}
+
+// "Reset group" writes one value after the other while a slot of
+// userValueChanged() changes the tree.
+void tst_PropertyFormView::groupResetWithUserHandlerChangingTree()
+{
+    QFETCH(int, change);
+    QVERIFY(f->model.setValue(QStringLiteral("Camera/fov"), 100));
+    QVERIFY(f->model.setValue(QStringLiteral("Camera/projection"), 1));
+    TreeChangingUserHandlers handlers(f->model, TreeChange(change));
+
+    QVERIFY(resetFromMenu(f->title(QStringLiteral("Camera"))));
+
+    QVERIFY(handlers.treeChanged);
+    QVERIFY(handlers.calls >= 1);
+    QVERIFY2(handlers.propertyAlive,
+        "the reset property was destroyed while a later slot of the same change ran");
+    QCOMPARE(handlers.firstPath, QStringLiteral("Camera/fov"));
+    QCOMPARE(handlers.firstNewValue, QVariant(60));
+    QCOMPARE(handlers.firstOldValue, QVariant(100));
+    QVERIFY(handlers.lifetime.expired());
+    if (TreeChange(change) == TreeChange::ReplaceTree) {
+        QCOMPARE(f->stored(QStringLiteral("Camera/fov")), QVariant(60));
+        QCOMPARE(f->stored(QStringLiteral("Camera/projection")), QVariant(0));
+        QVERIFY(f->editor<QSpinBox>(QStringLiteral("Camera/fov")));
+    } else if (TreeChange(change) == TreeChange::RemoveGroup) {
+        QVERIFY(!f->model.find(QStringLiteral("Camera")));
+        QVERIFY(!f->view->editor(QStringLiteral("Camera/fov")));
+    } else {
+        QVERIFY(f->model.find(QStringLiteral("Camera")));
+        QVERIFY(!f->model.find(QStringLiteral("Camera/fov")));
+        QVERIFY(!f->view->editor(QStringLiteral("Camera/fov")));
     }
 }
 

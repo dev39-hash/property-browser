@@ -26,8 +26,10 @@ public:
     // Presentation, attributes or flags of property changed. With recursive,
     // the effective state of all descendants may have changed too.
     virtual void changed(Property* property, bool recursive) = 0;
+    // byUser: the value was written through PropertyModel::setData (the user),
+    // not by application code; the model then also announces it as a user edit.
     virtual void valueChanged(
-        Property* property, const QVariant& newValue, const QVariant& oldValue)
+        Property* property, const QVariant& newValue, const QVariant& oldValue, bool byUser)
         = 0;
     virtual void validationFailed(
         Property* property, const QVariant& rejectedValue, const QString& message)

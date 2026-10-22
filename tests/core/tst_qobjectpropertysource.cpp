@@ -241,6 +241,11 @@ private slots:
 
     void treeReplacedByAnEarlierHandlerStillReachesTheObject();
     void treeReplacedWhileTheObjectAdjustsTheValue();
+
+    void objectChangesAreApplicationWrites();
+    void userEditsOfSourcedPropertiesEmitUserValueChanged();
+    void treeReplacedByAUserValueHandlerStillReachesTheObject();
+    void treeReplacedByAUserValueHandlerWhileTheObjectAdjustsTheValue();
 };
 
 void tst_QObjectPropertySource::propertiesAndTypes()
@@ -580,6 +585,148 @@ void tst_QObjectPropertySource::treeReplacedWhileTheObjectAdjustsTheValue()
     QVERIFY(model.setValue(QStringLiteral("cam/fov"), 75));
 
     QCOMPARE(replaced, 1);
+    QCOMPARE(camera.fov(), 74); // odd values are refused by the object
+    QVERIFY(!model.find(QStringLiteral("cam")));
+    camera.setFov(90); // no property to follow it any more
+    QCOMPARE(camera.fov(), 90);
+}
+
+// Guard: what the source copies from the object, by notification or by
+// refresh(), and what an application writes to the model is not a user edit.
+void tst_QObjectPropertySource::objectChangesAreApplicationWrites()
+{
+    PropertyModel model;
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QObjectPropertySource source(&model);
+    Camera camera;
+    camera.setObjectName(QStringLiteral("cam"));
+    source.addObject(&camera);
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    QSignalSpy user(&model, &PropertyModel::userValueChanged);
+
+    camera.setName(QStringLiteral("Top")); // notification
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(values.at(0).at(0).toString(), QStringLiteral("cam/name"));
+    camera.setFrames(42); // no notification: refresh() reads it
+    source.refresh();
+    QCOMPARE(model.find(QStringLiteral("cam/frames"))->value(), QVariant(qint64(42)));
+    QCOMPARE(values.count(), 2);
+
+    QVERIFY(model.setValue(QStringLiteral("cam/name"), QStringLiteral("Rim")));
+    QCOMPARE(camera.name(), QStringLiteral("Rim"));
+    QCOMPARE(values.count(), 3);
+    QCOMPARE(user.count(), 0);
+}
+
+// A user edit of a sourced property reaches the object and announces both
+// signals; the value the source reads back from the object is a separate,
+// application, write.
+void tst_QObjectPropertySource::userEditsOfSourcedPropertiesEmitUserValueChanged()
+{
+    PropertyModel model;
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QObjectPropertySource source(&model);
+    Camera camera;
+    camera.setObjectName(QStringLiteral("cam"));
+    source.addObject(&camera);
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    QSignalSpy user(&model, &PropertyModel::userValueChanged);
+
+    const QModelIndex name
+        = model.indexOf(model.find(QStringLiteral("cam/name")), PropertyModel::ValueColumn);
+    QVERIFY(model.setData(name, QStringLiteral("Rim")));
+    QCOMPARE(camera.name(), QStringLiteral("Rim"));
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(user.count(), 1);
+    QCOMPARE(user.at(0).at(0).toString(), QStringLiteral("cam/name"));
+    QCOMPARE(user.at(0).at(1), QVariant(QStringLiteral("Rim")));
+    QCOMPARE(user.at(0).at(2), QVariant(QStringLiteral("Main")));
+
+    const QModelIndex active
+        = model.indexOf(model.find(QStringLiteral("cam/active")), PropertyModel::ValueColumn);
+    QVERIFY(model.setData(active, Qt::Unchecked, Qt::CheckStateRole));
+    QVERIFY(!camera.active());
+    QCOMPARE(values.count(), 2);
+    QCOMPARE(user.count(), 2);
+    QCOMPARE(user.at(1).at(0).toString(), QStringLiteral("cam/active"));
+    QCOMPARE(user.at(1).at(1), QVariant(false));
+
+    // The object adjusts the value: the model shows the object's value (a
+    // second, application, valueChanged) and the edit is announced once.
+    const QModelIndex fov
+        = model.indexOf(model.find(QStringLiteral("cam/fov")), PropertyModel::ValueColumn);
+    QVERIFY(model.setData(fov, 75));
+    QCOMPARE(camera.fov(), 74);
+    QCOMPARE(model.find(QStringLiteral("cam/fov"))->value(), QVariant(74));
+    QCOMPARE(values.count(), 4);
+    QCOMPARE(user.count(), 3);
+    QCOMPARE(user.at(2).at(0).toString(), QStringLiteral("cam/fov"));
+    QCOMPARE(user.at(2).at(1), QVariant(75));
+    QCOMPARE(user.at(2).at(2), QVariant(60));
+
+    // What the object does on its own afterwards is not an edit.
+    camera.setName(QStringLiteral("Top"));
+    QCOMPARE(values.count(), 5);
+    QCOMPARE(user.count(), 3);
+}
+
+// A slot of userValueChanged() replaces the tree: the object already holds the
+// edited value and keeps working with the source.
+void tst_QObjectPropertySource::treeReplacedByAUserValueHandlerStillReachesTheObject()
+{
+    PropertyModel model(PropertyGroup::create(QStringLiteral("root")));
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    int replaced = 0;
+    QObject::connect(&model, &PropertyModel::userValueChanged, &model,
+        [&model, &replaced](const QString& path) {
+            if (path == QStringLiteral("cam/name") && replaced++ == 0)
+                model.setRoot(PropertyGroup::create(QStringLiteral("root")));
+        });
+    QObjectPropertySource source(&model);
+    Camera camera;
+    camera.setObjectName(QStringLiteral("cam"));
+    QVERIFY(source.addObject(&camera));
+
+    QVERIFY(model.setData(
+        model.indexOf(model.find(QStringLiteral("cam/name")), PropertyModel::ValueColumn),
+        QStringLiteral("Rim")));
+
+    QCOMPARE(replaced, 1);
+    QCOMPARE(camera.name(), QStringLiteral("Rim"));
+    QVERIFY(!model.find(QStringLiteral("cam")));
+    QVERIFY(!source.groupOf(&camera));
+
+    // The object is still bound but has no properties in the new tree.
+    camera.setName(QStringLiteral("Later"));
+    QCOMPARE(camera.name(), QStringLiteral("Later"));
+    QCOMPARE(source.objects(), QList<QObject*>({&camera}));
+    QVERIFY(source.removeObject(&camera));
+}
+
+// The object refuses part of the value, so the source reads it back inside
+// the original write; a slot of userValueChanged() replaces the tree after
+// that nested write.
+void tst_QObjectPropertySource::treeReplacedByAUserValueHandlerWhileTheObjectAdjustsTheValue()
+{
+    PropertyModel model(PropertyGroup::create(QStringLiteral("root")));
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QObjectPropertySource source(&model);
+    Camera camera;
+    camera.setObjectName(QStringLiteral("cam"));
+    QVERIFY(source.addObject(&camera));
+    int replaced = 0;
+    QObject::connect(&model, &PropertyModel::userValueChanged, &model,
+        [&model, &replaced](const QString& path) {
+            if (path == QStringLiteral("cam/fov") && replaced++ == 0)
+                model.setRoot(PropertyGroup::create(QStringLiteral("root")));
+        });
+    QSignalSpy user(&model, &PropertyModel::userValueChanged);
+
+    QVERIFY(model.setData(
+        model.indexOf(model.find(QStringLiteral("cam/fov")), PropertyModel::ValueColumn), 75));
+
+    QCOMPARE(replaced, 1);
+    QCOMPARE(user.count(), 1);
     QCOMPARE(camera.fov(), 74); // odd values are refused by the object
     QVERIFY(!model.find(QStringLiteral("cam")));
     camera.setFov(90); // no property to follow it any more

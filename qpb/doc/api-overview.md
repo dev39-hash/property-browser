@@ -107,7 +107,8 @@ compile.
   root or detached property), `toGroup()` (null when not a group).
 - Presentation: `displayName()` (defaults to the id), `toolTip()` and their setters.
 - Value: `value()` (invalid for groups), `setValue()`, `defaultValue()`, `setDefaultValue()`, `isModified()`,
-  `resetToDefault()`, `validator()` / `setValidator()`. See [Values and validation](guide/values-and-validation.md).
+  `resetToDefault()`, `normalizeValue()` and `makeValueDefault()` (both since 1.9), `validator()` / `setValidator()`.
+  See [Values and validation](guide/values-and-validation.md).
 - Attributes: `attributes()`, `attribute(key, default)`, `hasAttribute()`, `setAttribute()`, `removeAttribute()`.
 - State: `flags()`, `setFlags()`, `setFlag(flag, on)` with `Property::Flag::ReadOnly`, `Disabled`, `Hidden`, `Live`; the
   setters `setReadOnly`, `setEnabled`, `setVisible`, `setLive`. These are the property's own flags. The effective state
@@ -127,12 +128,15 @@ own views add editors and property-specific painting. The model owns the root gr
   `setRoot()` replaces the tree (pointers into the old tree become invalid); `root()`, `find(path)`,
   `propertyAt(index)`, `indexOf(property, column)`.
 - Values: `setValue(path, value)` for application code; `setData()` for views, which also refuses read-only and
-  disabled properties; `resetToDefault(index)`; `resetAllToDefault()` (since 1.5).
+  disabled properties; `resetToDefault(index)`; `resetAllToDefault()` (since 1.5); `normalizeAllValues()` and
+  `makeAllValuesDefault()` (since 1.9).
 - Batches: `beginBatch()` / `endBatch()`, nestable.
-- Signals: `valueChanged(path, newValue, oldValue)`, `validationFailed(path, rejectedValue, message)`,
-  `batchValueChanged(paths)`. They carry paths, not `Property` references.
+- Signals: `valueChanged(path, newValue, oldValue)`, `userValueChanged(path, newValue, oldValue)` (since 1.9, only for
+  edits of the user), `validationFailed(path, rejectedValue, message)`, `batchValueChanged(paths)`. They carry paths, not
+  `Property` references.
 - `onValueChanged(path, context, handler)` (since 1.4): a callback for one path, or for a group and its descendants (the
-  handler then also receives the path).
+  handler then also receives the path). `onUserValueChanged()` (since 1.9) has the same two forms for
+  `userValueChanged`.
 - Roles: `PropertyRole` (`const Property*`), `TypeIdRole`, `PathRole`, `IsGroupRole`, `IsModifiedRole`,
   `AttributesRole`, `IsVisibleRole`. They work on both columns. Roles from `Qt::UserRole + 1` to `Qt::UserRole + 99` are
   reserved for qpb; your own roles start at `PropertyModel::UserRole`.

@@ -152,8 +152,8 @@ public:
         }
     }
 
-    void valueChanged(
-        Property* property, const QVariant& newValue, const QVariant& oldValue) override
+    void valueChanged(Property* property, const QVariant& newValue, const QVariant& oldValue,
+        bool byUser) override
     {
         // Handlers may replace the tree or remove the property; it stays alive
         // until the outermost notification has returned.
@@ -164,7 +164,13 @@ public:
         evaluateDependents(path);
         if (batchDepth > 0 && !batchPaths.contains(path))
             batchPaths.append(path);
-        emit q->valueChanged(path, newValue, oldValue);
+        // A handler may delete the model, which destroys this object: nothing
+        // of it is used after the first signal except through the guard.
+        PropertyModel* const model = q;
+        const QPointer<PropertyModel> guard(model);
+        emit model->valueChanged(path, newValue, oldValue);
+        if (byUser && guard)
+            emit model->userValueChanged(path, newValue, oldValue);
     }
 
     void validationFailed(
@@ -408,6 +414,17 @@ bool PropertyModel::resetAllToDefault()
     return !d->root || d->root->resetToDefault(); // a group reset is one batch
 }
 
+bool PropertyModel::normalizeAllValues()
+{
+    return !d->root || d->root->normalizeValue(); // a group is one batch
+}
+
+void PropertyModel::makeAllValuesDefault()
+{
+    if (d->root)
+        d->root->makeValueDefault();
+}
+
 void PropertyModel::beginBatch()
 {
     d->beginBatch();
@@ -597,6 +614,33 @@ QMetaObject::Connection PropertyModel::onValueChanged(const QString& path, const
         return {};
     const QString prefix = path.isEmpty() ? QString() : path + QLatin1Char('/');
     return connect(this, &PropertyModel::valueChanged, context ? context : this,
+        [path, prefix, handler = std::move(handler)](
+            const QString& changed, const QVariant& value) {
+            if (path.isEmpty() || changed == path || changed.startsWith(prefix))
+                handler(changed, value);
+        });
+}
+
+QMetaObject::Connection PropertyModel::onUserValueChanged(
+    const QString& path, const QObject* context, std::function<void(const QVariant& value)> handler)
+{
+    if (!handler)
+        return {};
+    return connect(this, &PropertyModel::userValueChanged, context ? context : this,
+        [path, handler = std::move(handler)](const QString& changed, const QVariant& value) {
+            if (changed == path)
+                handler(value);
+        });
+}
+
+QMetaObject::Connection PropertyModel::onUserValueChanged(const QString& path,
+    const QObject* context,
+    std::function<void(const QString& path, const QVariant& value)> handler)
+{
+    if (!handler)
+        return {};
+    const QString prefix = path.isEmpty() ? QString() : path + QLatin1Char('/');
+    return connect(this, &PropertyModel::userValueChanged, context ? context : this,
         [path, prefix, handler = std::move(handler)](
             const QString& changed, const QVariant& value) {
             if (path.isEmpty() || changed == path || changed.startsWith(prefix))

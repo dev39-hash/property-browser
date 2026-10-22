@@ -105,7 +105,7 @@ bool PropertyPrivate::assign(const QVariant& input, Origin origin)
     const QVariant oldValue = value;
     value = candidate;
     if (tree)
-        tree->valueChanged(q, candidate, oldValue);
+        tree->valueChanged(q, candidate, oldValue, origin == Origin::User);
     return true;
 }
 
@@ -252,6 +252,52 @@ bool Property::resetToDefault()
         return ok;
     }
     return d->assign(d->defaultValue, PropertyPrivate::Origin::Application);
+}
+
+namespace {
+
+// Calls op(child) for every child of group that is not live, in one batch of
+// the group's model; the result is false if any op returned false. A handler
+// may replace the tree meanwhile: the hold keeps the part being walked alive.
+template <typename Op>
+bool forEachChangeableChild(const PropertyGroup* group, Op op)
+{
+    detail::TreeObserver* observer = PropertyPrivate::get(group)->observer();
+    const detail::TreeHold hold(observer);
+    if (observer)
+        observer->beginBatch();
+    bool ok = true;
+    for (Property* child : group->children()) {
+        if (!child->isLive())
+            ok = op(child) && ok;
+    }
+    if (observer)
+        observer->endBatch();
+    return ok;
+}
+
+} // namespace
+
+bool Property::normalizeValue()
+{
+    if (const PropertyGroup* group = toGroup()) {
+        return forEachChangeableChild(
+            group, [](Property* child) { return child->normalizeValue(); });
+    }
+    // The value is copied: the pipeline replaces it.
+    return d->assign(QVariant(d->value), PropertyPrivate::Origin::Application);
+}
+
+void Property::makeValueDefault()
+{
+    if (const PropertyGroup* group = toGroup()) {
+        forEachChangeableChild(group, [](Property* child) {
+            child->makeValueDefault();
+            return true;
+        });
+        return;
+    }
+    setDefaultValue(d->value);
 }
 
 Property::Validator Property::validator() const

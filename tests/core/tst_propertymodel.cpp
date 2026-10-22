@@ -245,6 +245,31 @@ private slots:
     void modelDeletedByAValueHandler_data();
     void modelDeletedByAValueHandler();
     void destroyingADetachedPropertyDetachesMore();
+
+    // Edits made by the user are announced apart from application writes.
+    void setDataEmitsUserValueChanged();
+    void checkStateEmitsUserValueChanged();
+    void applicationWritesEmitNoUserValueChanged();
+    void rejectedAndUnchangedSetDataEmitNoUserValueChanged();
+    void userValueChangedInsideABatch();
+    void userValueChangedSlotMayWriteBack();
+    void onUserValueChangedByPath();
+    void onUserValueChangedForGroups();
+    void treeChangeFromUserValueHandler_data();
+    void treeChangeFromUserValueHandler();
+    void userValueChangedFollowsATreeChangeInValueChanged_data();
+    void userValueChangedFollowsATreeChangeInValueChanged();
+    void signalSpyAfterTreeChangeInUserValueChanged();
+    void modelDeletedByAUserValueHandler();
+
+    // Normalising values and making them the defaults.
+    void normalizeValueBringsAValueInsideItsRange();
+    void normalizeValueRoundsAndReportsRejections();
+    void normalizeValueOnAGroupRunsInOneBatch();
+    void normalizeAllValuesCoversTheWholeTree();
+    void makeValueDefaultNotifiesTheRow();
+    void makeValueDefaultOnGroupsAndTheModel();
+    void attributeChangesNeverMoveValues();
 };
 
 void tst_PropertyModel::initTestCase()
@@ -1232,6 +1257,809 @@ void tst_PropertyModel::destroyingADetachedPropertyDetachesMore()
     QVERIFY(!model.find(QStringLiteral("fov")));
     QVERIFY(fovLife.expired());
     QVERIFY(model.find(QStringLiteral("name")));
+}
+
+// --- User edits ----------------------------------------------------------------------
+
+namespace {
+
+// Records, in order, which value signals of a model arrive.
+struct SignalLog
+{
+    explicit SignalLog(PropertyModel& model)
+    {
+        QObject::connect(&model, &PropertyModel::valueChanged, &model,
+            [this](const QString& path) { events << QStringLiteral("value:") + path; });
+        QObject::connect(&model, &PropertyModel::userValueChanged, &model,
+            [this](const QString& path) { events << QStringLiteral("user:") + path; });
+    }
+
+    QStringList events;
+};
+
+} // namespace
+
+// An edit through setData() is announced by valueChanged() and then by
+// userValueChanged(), with the stored (converted, clamped) values.
+void tst_PropertyModel::setDataEmitsUserValueChanged()
+{
+    PropertyModel model(createTree());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    SignalLog log(model);
+    QSignalSpy user(&model, &PropertyModel::userValueChanged);
+
+    const QModelIndex x = valueIndex(model, QStringLiteral("Transform/x"));
+    QVERIFY(model.setData(x, 3.5));
+    QCOMPARE(log.events,
+        QStringList({QStringLiteral("value:Transform/x"), QStringLiteral("user:Transform/x")}));
+    QCOMPARE(user.count(), 1);
+    QCOMPARE(user.at(0).at(0).toString(), QStringLiteral("Transform/x"));
+    QCOMPARE(user.at(0).at(1), QVariant(3.5));
+    QCOMPARE(user.at(0).at(2), QVariant(0.0));
+
+    // The value after normalisation, and the value before the edit.
+    QVERIFY(model.setData(x, 99.0));
+    QCOMPARE(user.count(), 2);
+    QCOMPARE(user.at(1).at(1), QVariant(10.0));
+    QCOMPARE(user.at(1).at(2), QVariant(3.5));
+
+    // The value after conversion.
+    QVERIFY(model.setData(valueIndex(model, QStringLiteral("fov")), QStringLiteral("75")));
+    QCOMPARE(user.count(), 3);
+    QCOMPARE(user.at(2).at(0).toString(), QStringLiteral("fov"));
+    QCOMPARE(user.at(2).at(1), QVariant(75));
+    QCOMPARE(user.at(2).at(2), QVariant(60));
+
+    QVERIFY(model.setData(valueIndex(model, QStringLiteral("name")), QStringLiteral("Rim")));
+    QCOMPARE(user.count(), 4);
+    QCOMPARE(user.at(3).at(1), QVariant(QStringLiteral("Rim")));
+    QCOMPARE(user.at(3).at(2), QVariant(QStringLiteral("Main")));
+    QCOMPARE(log.events.size(), 8);
+}
+
+void tst_PropertyModel::checkStateEmitsUserValueChanged()
+{
+    PropertyModel model(createTree());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    SignalLog log(model);
+    QSignalSpy user(&model, &PropertyModel::userValueChanged);
+    const QModelIndex visible = valueIndex(model, QStringLiteral("visible"));
+
+    QVERIFY(model.setData(visible, Qt::Unchecked, Qt::CheckStateRole));
+    QCOMPARE(log.events,
+        QStringList({QStringLiteral("value:visible"), QStringLiteral("user:visible")}));
+    QCOMPARE(user.count(), 1);
+    QCOMPARE(user.at(0).at(0).toString(), QStringLiteral("visible"));
+    QCOMPARE(user.at(0).at(1), QVariant(false));
+    QCOMPARE(user.at(0).at(2), QVariant(true));
+
+    // The same state again is not an edit.
+    QVERIFY(model.setData(visible, Qt::Unchecked, Qt::CheckStateRole));
+    QCOMPARE(user.count(), 1);
+
+    QVERIFY(model.setData(visible, Qt::Checked, Qt::CheckStateRole));
+    QCOMPARE(user.count(), 2);
+    QCOMPARE(user.at(1).at(1), QVariant(true));
+    QCOMPARE(user.at(1).at(2), QVariant(false));
+}
+
+// Guard: application code writes through setValue(), the reset functions and
+// Property::setValue(); none of them is a user edit. The value count proves
+// the writes happened.
+void tst_PropertyModel::applicationWritesEmitNoUserValueChanged()
+{
+    PropertyModel model(createTree());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    QSignalSpy user(&model, &PropertyModel::userValueChanged);
+
+    QVERIFY(model.setValue(QStringLiteral("fov"), 90)); // 1
+    QVERIFY(model.find(QStringLiteral("name"))->setValue(QStringLiteral("Other"))); // 2
+    QVERIFY(model.find(QStringLiteral("Transform/x"))->setValue(1.0)); // 3
+    QVERIFY(model.find(QStringLiteral("Transform/Pivot/z"))->setValue(2.0)); // 4
+    QVERIFY(model.resetToDefault(valueIndex(model, QStringLiteral("fov")))); // 5
+    QVERIFY(model.resetToDefault(model.indexOf(model.find(QStringLiteral("Transform"))))); // 6, 7
+    QVERIFY(model.resetAllToDefault()); // 8: the name
+    QVERIFY(model.find(QStringLiteral("Transform"))->resetToDefault()); // nothing left to reset
+
+    // Read-only and disabled properties accept application writes as well.
+    model.find(QStringLiteral("visible"))->setReadOnly(true);
+    QVERIFY(model.setValue(QStringLiteral("visible"), false)); // 9
+
+    QCOMPARE(values.count(), 9);
+    QCOMPARE(user.count(), 0);
+}
+
+// A rejected edit, an unchanged edit and an edit refused as read-only or
+// disabled change nothing and announce nothing; the edit that follows does.
+void tst_PropertyModel::rejectedAndUnchangedSetDataEmitNoUserValueChanged()
+{
+    PropertyModel model(createTree());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    QSignalSpy user(&model, &PropertyModel::userValueChanged);
+    const QModelIndex fov = valueIndex(model, QStringLiteral("fov"));
+
+    QVERIFY(model.setData(fov, 60));
+    QVERIFY(model.setData(fov, QStringLiteral("60")));
+    QVERIFY(model.setData(valueIndex(model, QStringLiteral("Transform/x")), 0.0));
+    QVERIFY(!model.setData(fov, QStringLiteral("wide")));
+    QVERIFY(!model.setData(fov, 90, Qt::DisplayRole));
+    QVERIFY(!model.setData(fov.siblingAtColumn(0), 90));
+    QVERIFY(!model.setData(model.index(2, 1), 1)); // a group
+    model.find(QStringLiteral("name"))->setReadOnly(true);
+    QVERIFY(!model.setData(valueIndex(model, QStringLiteral("name")), QStringLiteral("Rim")));
+    model.find(QStringLiteral("visible"))->setEnabled(false);
+    QVERIFY(!model.setData(
+        valueIndex(model, QStringLiteral("visible")), Qt::Unchecked, Qt::CheckStateRole));
+    QCOMPARE(values.count(), 0);
+    QCOMPARE(user.count(), 0);
+
+    QVERIFY(model.setData(fov, 70));
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(user.count(), 1);
+    QCOMPARE(user.at(0).at(0).toString(), QStringLiteral("fov"));
+}
+
+// Inside a batch, valueChanged() and userValueChanged() still come per change;
+// batchValueChanged() lists every written path once the batch ends.
+void tst_PropertyModel::userValueChangedInsideABatch()
+{
+    PropertyModel model(createTree());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    QSignalSpy user(&model, &PropertyModel::userValueChanged);
+    QSignalSpy batch(&model, &PropertyModel::batchValueChanged);
+
+    model.beginBatch();
+    QVERIFY(model.setData(valueIndex(model, QStringLiteral("fov")), 90));
+    QVERIFY(model.setValue(QStringLiteral("Transform/y"), 2.0));
+    QVERIFY(model.setData(valueIndex(model, QStringLiteral("Transform/x")), 1.0));
+    QCOMPARE(user.count(), 2); // already delivered, not held back until the end
+    QCOMPARE(batch.count(), 0);
+    model.endBatch();
+
+    QCOMPARE(values.count(), 3);
+    QCOMPARE(user.count(), 2);
+    QCOMPARE(user.at(0).at(0).toString(), QStringLiteral("fov"));
+    QCOMPARE(user.at(0).at(1), QVariant(90));
+    QCOMPARE(user.at(0).at(2), QVariant(60));
+    QCOMPARE(user.at(1).at(0).toString(), QStringLiteral("Transform/x"));
+    QCOMPARE(user.at(1).at(1), QVariant(1.0));
+    QCOMPARE(user.at(1).at(2), QVariant(0.0));
+    QCOMPARE(batch.count(), 1);
+    QCOMPARE(batch.at(0).at(0).toStringList(),
+        (QStringList {QStringLiteral("fov"), QStringLiteral("Transform/y"),
+            QStringLiteral("Transform/x")}));
+}
+
+// The typical use: an application vetoes a user edit by writing the old value
+// back. The rollback is an application write, so it does not echo.
+void tst_PropertyModel::userValueChangedSlotMayWriteBack()
+{
+    PropertyModel model(createTree());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    QSignalSpy user(&model, &PropertyModel::userValueChanged);
+    int slotCalls = 0;
+    QObject::connect(&model, &PropertyModel::userValueChanged, &model,
+        [&model, &slotCalls](const QString& path, const QVariant&, const QVariant& oldValue) {
+            ++slotCalls;
+            model.setValue(path, oldValue);
+        });
+
+    QVERIFY(model.setData(valueIndex(model, QStringLiteral("fov")), 90));
+
+    QCOMPARE(slotCalls, 1);
+    QCOMPARE(user.count(), 1);
+    QCOMPARE(values.count(), 2); // the edit and the rollback
+    QCOMPARE(values.at(1).at(1), QVariant(60));
+    QCOMPARE(values.at(1).at(2), QVariant(90));
+    QCOMPARE(model.find(QStringLiteral("fov"))->value(), QVariant(60));
+}
+
+// A callback per path for user edits only.
+void tst_PropertyModel::onUserValueChangedByPath()
+{
+    auto makeTree = [](int x) {
+        auto root = PropertyGroup::create(QStringLiteral("root"));
+        root->addGroup(QStringLiteral("t")).addInt(QStringLiteral("x"), x);
+        root->addInt(QStringLiteral("other"), 0);
+        return root;
+    };
+    PropertyModel model(makeTree(0));
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    const auto x = [&model] {
+        return model.indexOf(model.find(QStringLiteral("t/x")), PropertyModel::ValueColumn);
+    };
+    QVariantList received;
+    const QMetaObject::Connection connection = model.onUserValueChanged(
+        QStringLiteral("t/x"), this, [&received](const QVariant& value) { received << value; });
+    QVERIFY(connection);
+
+    QVERIFY(model.setValue(QStringLiteral("t/x"), 3)); // application: ignored
+    QVERIFY(model.find(QStringLiteral("t/x"))->setValue(4)); // application: ignored
+    QVERIFY(model.setData(valueIndex(model, QStringLiteral("other")), 9)); // another path
+    QVERIFY(model.setData(x(), 5)); // user
+    QVERIFY(model.setData(x(), 5)); // unchanged: nothing
+    QCOMPARE(received, (QVariantList {5}));
+
+    // Follows the path across setRoot() and remove/add.
+    model.setRoot(makeTree(0));
+    QVERIFY(model.setData(x(), 6));
+    model.find(QStringLiteral("t"))->toGroup()->remove(QStringLiteral("x"));
+    model.find(QStringLiteral("t"))->toGroup()->addInt(QStringLiteral("x"), 0);
+    QVERIFY(model.setData(x(), 7));
+    QCOMPARE(received, QVariantList({5, 6, 7}));
+
+    // Disconnect, and the context ends the connection.
+    QVERIFY(QObject::disconnect(connection));
+    QVERIFY(model.setData(x(), 8));
+    QCOMPARE(received.size(), 3);
+
+    auto context = std::make_unique<QObject>();
+    int calls = 0;
+    QVERIFY(model.onUserValueChanged(
+        QStringLiteral("t/x"), context.get(), [&calls](const QVariant&) { ++calls; }));
+    QVERIFY(model.setData(x(), 9));
+    context.reset();
+    QVERIFY(model.setData(x(), 10));
+    QCOMPARE(calls, 1);
+
+    // No context: lives as long as the model. An empty handler does nothing.
+    int modelCalls = 0;
+    QVERIFY(model.onUserValueChanged(
+        QStringLiteral("other"), nullptr, [&modelCalls](const QVariant&) { ++modelCalls; }));
+    QVERIFY(model.setData(valueIndex(model, QStringLiteral("other")), 1));
+    QVERIFY(model.setValue(QStringLiteral("other"), 2));
+    QCOMPARE(modelCalls, 1);
+    QVERIFY(!model.onUserValueChanged(
+        QStringLiteral("other"), this, std::function<void(const QVariant&)>()));
+    QVERIFY(!model.onUserValueChanged(
+        QStringLiteral("other"), this, std::function<void(const QString&, const QVariant&)>()));
+}
+
+// The (path, value) form covers a path and its descendants.
+void tst_PropertyModel::onUserValueChangedForGroups()
+{
+    auto root = PropertyGroup::create(QStringLiteral("root"));
+    PropertyGroup& t = root->addGroup(QStringLiteral("t"));
+    t.addInt(QStringLiteral("x"), 0);
+    t.addGroup(QStringLiteral("deep")).addInt(QStringLiteral("y"), 0);
+    root->addInt(QStringLiteral("tx"), 0); // "t" is a prefix of "tx", not its parent
+    PropertyModel model(std::move(root));
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+
+    QStringList underT;
+    QStringList all;
+    QStringList exact;
+    model.onUserValueChanged(QStringLiteral("t"), this,
+        [&underT](const QString& path, const QVariant& value) {
+            underT << path + QLatin1Char('=') + value.toString();
+        });
+    model.onUserValueChanged(
+        QString(), this, [&all](const QString& path, const QVariant&) { all << path; });
+    model.onUserValueChanged(QStringLiteral("tx"), this,
+        [&exact](const QString& path, const QVariant&) { exact << path; });
+
+    QVERIFY(model.setValue(QStringLiteral("t/x"), 1)); // application: ignored
+    QVERIFY(model.setData(valueIndex(model, QStringLiteral("t/x")), 2));
+    QVERIFY(model.setValue(QStringLiteral("t/deep/y"), 3)); // application: ignored
+    QVERIFY(model.setData(valueIndex(model, QStringLiteral("t/deep/y")), 4));
+    QVERIFY(model.setData(valueIndex(model, QStringLiteral("tx")), 5));
+    QCOMPARE(underT, QStringList({"t/x=2", "t/deep/y=4"}));
+    QCOMPARE(all, QStringList({"t/x", "t/deep/y", "tx"}));
+    QCOMPARE(exact, QStringList {QStringLiteral("tx")});
+}
+
+void tst_PropertyModel::treeChangeFromUserValueHandler_data()
+{
+    QTest::addColumn<int>("change");
+    for (const ChangeRow& change : changeRows)
+        QTest::newRow(change.name) << int(change.change);
+}
+
+// A slot of userValueChanged() may replace the tree or remove the edited
+// property's group (or the property): slots connected after it, and the write
+// that triggered the change, carry on with intact values.
+void tst_PropertyModel::treeChangeFromUserValueHandler()
+{
+    QFETCH(int, change);
+    HandlerScenario s;
+    QObject::connect(&s.model, &PropertyModel::userValueChanged, &s.model,
+        [&s, change](const QString& path) {
+            if (path == XPath && !s.treeChanged) {
+                s.treeChanged = true;
+                changeTree(s.model, TreeChange(change));
+            }
+        });
+    QObject::connect(&s.model, &PropertyModel::userValueChanged, &s.model,
+        [&s](const QString& path, const QVariant& newValue, const QVariant& oldValue) {
+            if (s.calls++ > 0)
+                return;
+            s.propertyAlive = !s.lifetime.expired();
+            if (!s.propertyAlive)
+                return; // the values would refer to a destroyed property
+            s.firstPath = path;
+            s.firstNewValue = newValue;
+            s.firstOldValue = oldValue;
+        });
+    s.model.onUserValueChanged(XPath, &s.model, [&s](const QVariant& value) {
+        if (s.callbackCalls++ == 0 && !s.lifetime.expired())
+            s.callbackValue = value;
+    });
+
+    QVERIFY(s.model.setData(valueIndex(s.model, XPath), 5.0));
+
+    QVERIFY(s.treeChanged);
+    QCOMPARE(s.calls, 1);
+    QVERIFY2(s.propertyAlive,
+        "the edited property was destroyed while a later slot of the same change ran");
+    QCOMPARE(s.firstPath, XPath);
+    QCOMPARE(s.firstNewValue, QVariant(5.0));
+    QCOMPARE(s.firstOldValue, QVariant(1.0));
+    QCOMPARE(s.callbackCalls, 1);
+    QCOMPARE(s.callbackValue, QVariant(5.0));
+    QVERIFY2(s.lifetime.expired(), "the detached property is destroyed once the write returned");
+    checkTreeAfter(s.model, TreeChange(change));
+}
+
+void tst_PropertyModel::userValueChangedFollowsATreeChangeInValueChanged_data()
+{
+    QTest::addColumn<int>("change");
+    for (const ChangeRow& change : changeRows)
+        QTest::newRow(change.name) << int(change.change);
+}
+
+// A slot of valueChanged() that changes the tree does not swallow the
+// userValueChanged() of the same edit, and its arguments stay valid.
+void tst_PropertyModel::userValueChangedFollowsATreeChangeInValueChanged()
+{
+    QFETCH(int, change);
+    HandlerScenario s;
+    s.armValueHandlers(TreeChange(change));
+    int userCalls = 0;
+    bool userAlive = false;
+    QString userPath;
+    QVariant userNew;
+    QVariant userOld;
+    QVariant userCallbackValue;
+    QObject::connect(&s.model, &PropertyModel::userValueChanged, &s.model,
+        [&](const QString& path, const QVariant& newValue, const QVariant& oldValue) {
+            if (userCalls++ > 0)
+                return;
+            userAlive = !s.lifetime.expired();
+            if (!userAlive)
+                return;
+            userPath = path;
+            userNew = newValue;
+            userOld = oldValue;
+        });
+    s.model.onUserValueChanged(
+        XPath, &s.model, [&](const QVariant& value) { userCallbackValue = value; });
+
+    QVERIFY(s.model.setData(valueIndex(s.model, XPath), 5.0));
+
+    QVERIFY(s.treeChanged);
+    QCOMPARE(userCalls, 1);
+    QVERIFY2(userAlive, "the edited property was destroyed before userValueChanged() was delivered");
+    QCOMPARE(userPath, XPath);
+    QCOMPARE(userNew, QVariant(5.0));
+    QCOMPARE(userOld, QVariant(1.0));
+    QCOMPARE(userCallbackValue, QVariant(5.0));
+    QVERIFY(s.lifetime.expired());
+    checkTreeAfter(s.model, TreeChange(change));
+}
+
+// A signal spy connected after the slot that replaces the tree stores the
+// signal's arguments.
+void tst_PropertyModel::signalSpyAfterTreeChangeInUserValueChanged()
+{
+    PropertyModel model(createTree());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QObject::connect(
+        &model, &PropertyModel::userValueChanged, &model, [&model](const QString& path) {
+            if (path == XPath)
+                model.setRoot(createTree());
+        });
+    QSignalSpy spy(&model, &PropertyModel::userValueChanged);
+
+    QVERIFY(model.setData(valueIndex(model, XPath), 5.0));
+
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(spy.at(0).at(0).toString(), XPath);
+    QCOMPARE(spy.at(0).at(1), QVariant(5.0));
+    QCOMPARE(spy.at(0).at(2), QVariant(0.0));
+    QCOMPARE(model.find(XPath)->value(), QVariant(0.0)); // the new tree
+}
+
+// A slot may delete the model that is notifying it; the write returns without
+// touching the model again.
+void tst_PropertyModel::modelDeletedByAUserValueHandler()
+{
+    auto* model = new PropertyModel(createTree());
+    const QPointer<PropertyModel> guard(model);
+    int calls = 0;
+    QObject::connect(model, &PropertyModel::userValueChanged, [&calls, model] {
+        ++calls;
+        delete model;
+    });
+
+    const bool ok = model->setData(valueIndex(*model, XPath), 5.0, Qt::EditRole);
+
+    QVERIFY(ok);
+    QCOMPARE(calls, 1);
+    QVERIFY(guard.isNull());
+}
+
+// --- Normalising values and making them the defaults ---------------------------------------
+
+// A value stored before a range changed is brought inside it again; the
+// change is an application write.
+void tst_PropertyModel::normalizeValueBringsAValueInsideItsRange()
+{
+    PropertyModel model(createTree());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    Property* fov = model.find(QStringLiteral("fov"));
+    QVERIFY(fov->setValue(150));
+    fov->setAttribute(Attr::Maximum, 100);
+    QCOMPARE(fov->value(), QVariant(150)); // the attribute alone moves nothing
+
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    QSignalSpy user(&model, &PropertyModel::userValueChanged);
+    QSignalSpy data(&model, &QAbstractItemModel::dataChanged);
+
+    QVERIFY(fov->normalizeValue());
+    QCOMPARE(fov->value(), QVariant(100));
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(values.at(0).at(0).toString(), QStringLiteral("fov"));
+    QCOMPARE(values.at(0).at(1), QVariant(100));
+    QCOMPARE(values.at(0).at(2), QVariant(150));
+    QCOMPARE(user.count(), 0);
+    QVERIFY(data.count() >= 1);
+    QCOMPARE(model.indexOf(fov).data(PropertyModel::IsModifiedRole).toBool(), true);
+
+    // Inside the range already: nothing happens.
+    values.clear();
+    data.clear();
+    QVERIFY(fov->normalizeValue());
+    QCOMPARE(fov->value(), QVariant(100));
+    QCOMPARE(values.count(), 0);
+    QCOMPARE(data.count(), 0);
+
+    // A read-only property is normalised too: this is application code.
+    fov->setReadOnly(true);
+    fov->setAttribute(Attr::Maximum, 80);
+    values.clear();
+    QVERIFY(fov->normalizeValue());
+    QCOMPARE(fov->value(), QVariant(80));
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(user.count(), 0);
+}
+
+// Rounding, 64-bit ranges and custom types go through the same pipeline; a
+// value the validator refuses is kept and reported.
+void tst_PropertyModel::normalizeValueRoundsAndReportsRejections()
+{
+    const TypeId capped = QStringLiteral("test.capped");
+    TypeHandler handler;
+    handler.normalize = [](const QVariant& value, const Property& property) {
+        return QVariant(
+            qMin(value.toInt(), property.attribute(QStringLiteral("test.cap"), 1000).toInt()));
+    };
+    QVERIFY(TypeRegistry::global().registerType<int>(capped, handler));
+
+    auto root = PropertyGroup::create(QStringLiteral("root"));
+    Property& d = root->addDouble(QStringLiteral("d"), 1.234).decimals(3);
+    Property& big = root->addInt64(QStringLiteral("big"), 900).range(0, 1000);
+    Property& c = root->add(capped, QStringLiteral("c"), 80);
+    Property& checked = root->addInt(QStringLiteral("checked"), 5);
+    PropertyModel model(std::move(root));
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    QSignalSpy user(&model, &PropertyModel::userValueChanged);
+    QSignalSpy failures(&model, &PropertyModel::validationFailed);
+
+    // Double: rounded to the decimals that apply now.
+    d.setAttribute(Attr::Decimals, 1);
+    QCOMPARE(d.value().toDouble(), 1.234);
+    QVERIFY(d.normalizeValue());
+    QCOMPARE(d.value().toDouble(), 1.2);
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(values.at(0).at(0).toString(), QStringLiteral("d"));
+    QCOMPARE(values.at(0).at(1).toDouble(), 1.2);
+    QCOMPARE(values.at(0).at(2).toDouble(), 1.234);
+
+    // Int64.
+    big.setAttribute(Attr::Maximum, qint64(500));
+    QCOMPARE(big.value(), QVariant(qint64(900)));
+    QVERIFY(big.normalizeValue());
+    QCOMPARE(big.value(), QVariant(qint64(500)));
+    QCOMPARE(values.count(), 2);
+    QCOMPARE(values.at(1).at(2), QVariant(qint64(900)));
+
+    // A custom type with its own normalize handler.
+    c.setAttribute(QStringLiteral("test.cap"), 50);
+    QCOMPARE(c.value(), QVariant(80));
+    QVERIFY(c.normalizeValue());
+    QCOMPARE(c.value(), QVariant(50));
+    QCOMPARE(values.count(), 3);
+    QCOMPARE(values.at(2).at(1), QVariant(50));
+    QCOMPARE(values.at(2).at(2), QVariant(80));
+
+    // Each of them is stable once normalised.
+    QVERIFY(d.normalizeValue());
+    QVERIFY(big.normalizeValue());
+    QVERIFY(c.normalizeValue());
+    QCOMPARE(values.count(), 3);
+
+    // The validator now refuses the stored value: it stays, and is reported.
+    QCOMPARE(failures.count(), 0);
+    checked.setValidator([](const QVariant& value, const Property&) {
+        return value.toInt() > 3 ? ValidationResult::error(QStringLiteral("too big"))
+                                 : ValidationResult::valid();
+    });
+    QVERIFY(!checked.normalizeValue());
+    QCOMPARE(checked.value(), QVariant(5));
+    QCOMPARE(failures.count(), 1);
+    QCOMPARE(failures.at(0).at(0).toString(), QStringLiteral("checked"));
+    QCOMPARE(failures.at(0).at(1), QVariant(5));
+    QCOMPARE(failures.at(0).at(2).toString(), QStringLiteral("too big"));
+    QCOMPARE(values.count(), 3);
+    QCOMPARE(user.count(), 0);
+}
+
+// On a group the descendants are normalised in one batch; live ones are left
+// alone, read-only and disabled ones are not.
+void tst_PropertyModel::normalizeValueOnAGroupRunsInOneBatch()
+{
+    auto root = PropertyGroup::create(QStringLiteral("root"));
+    PropertyGroup& g = root->addGroup(QStringLiteral("g"));
+    Property& a = g.addInt(QStringLiteral("a"), 50).range(0, 100);
+    Property& b = g.addGroup(QStringLiteral("h")).addInt(QStringLiteral("b"), 60).range(0, 100);
+    Property& r = g.addInt(QStringLiteral("r"), 70).range(0, 100).readOnly();
+    Property& d = g.addInt(QStringLiteral("d"), 80).range(0, 100);
+    d.setEnabled(false);
+    Property& live = g.addInt(QStringLiteral("live"), 90).range(0, 100).live();
+    Property& other = root->addInt(QStringLiteral("other"), 95).range(0, 100);
+    PropertyModel model(std::move(root));
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    for (Property* property : {&a, &b, &r, &d, &live, &other})
+        property->setAttribute(Attr::Maximum, 40);
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    QSignalSpy user(&model, &PropertyModel::userValueChanged);
+    QSignalSpy batch(&model, &PropertyModel::batchValueChanged);
+
+    QVERIFY(g.normalizeValue());
+
+    QCOMPARE(a.value(), QVariant(40));
+    QCOMPARE(b.value(), QVariant(40));
+    QCOMPARE(r.value(), QVariant(40));
+    QCOMPARE(d.value(), QVariant(40));
+    QCOMPARE(live.value(), QVariant(90)); // live: left alone
+    QCOMPARE(other.value(), QVariant(95)); // outside the group
+    QCOMPARE(values.count(), 4);
+    QCOMPARE(user.count(), 0);
+    QCOMPARE(batch.count(), 1);
+    QCOMPARE(batch.at(0).at(0).toStringList(),
+        (QStringList {QStringLiteral("g/a"), QStringLiteral("g/h/b"), QStringLiteral("g/r"),
+            QStringLiteral("g/d")}));
+
+    // Nothing left to do: no signal at all.
+    QVERIFY(g.normalizeValue());
+    QCOMPARE(values.count(), 4);
+    QCOMPARE(batch.count(), 1);
+
+    // A rejected descendant makes the call false; the others are still done.
+    QVERIFY(a.setValue(30));
+    a.setAttribute(Attr::Maximum, 20);
+    Property& e = g.addInt(QStringLiteral("e"), 5);
+    QVERIFY(e.setValue(7));
+    e.setValidator([](const QVariant&, const Property&) {
+        return ValidationResult::error(QStringLiteral("refused"));
+    });
+    QSignalSpy failures(&model, &PropertyModel::validationFailed);
+    values.clear();
+    QVERIFY(!g.normalizeValue());
+    QCOMPARE(a.value(), QVariant(20));
+    QCOMPARE(e.value(), QVariant(7));
+    QCOMPARE(failures.count(), 1);
+    QCOMPARE(failures.at(0).at(0).toString(), QStringLiteral("g/e"));
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(batch.count(), 2);
+    QCOMPARE(batch.at(1).at(0).toStringList(), QStringList {QStringLiteral("g/a")});
+}
+
+void tst_PropertyModel::normalizeAllValuesCoversTheWholeTree()
+{
+    PropertyModel empty;
+    QVERIFY(empty.normalizeAllValues());
+
+    PropertyModel model(createTree());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    Property* x = model.find(QStringLiteral("Transform/x"));
+    Property* fov = model.find(QStringLiteral("fov"));
+    Property& used = model.root()->addInt(QStringLiteral("used"), 50).range(0, 100);
+    used.setLive(true);
+    QVERIFY(x->setValue(8.0));
+    QVERIFY(fov->setValue(150));
+    x->setReadOnly(true);
+    x->setAttribute(Attr::Maximum, 5.0);
+    fov->setAttribute(Attr::Maximum, 100);
+    used.setAttribute(Attr::Maximum, 10);
+
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    QSignalSpy user(&model, &PropertyModel::userValueChanged);
+    QSignalSpy batch(&model, &PropertyModel::batchValueChanged);
+    QVERIFY(model.normalizeAllValues());
+    QCOMPARE(x->value(), QVariant(5.0));
+    QCOMPARE(fov->value(), QVariant(100));
+    QCOMPARE(used.value(), QVariant(50)); // live
+    QCOMPARE(values.count(), 2);
+    QCOMPARE(user.count(), 0);
+    QCOMPARE(batch.count(), 1);
+    QCOMPARE(batch.at(0).at(0).toStringList(),
+        (QStringList {QStringLiteral("Transform/x"), QStringLiteral("fov")}));
+
+    QVERIFY(model.normalizeAllValues());
+    QCOMPARE(values.count(), 2);
+    QCOMPARE(batch.count(), 1);
+
+    // One refusal: false, and the rest of the tree is still normalised.
+    fov->setAttribute(Attr::Maximum, 150);
+    QVERIFY(fov->setValue(120));
+    fov->setAttribute(Attr::Maximum, 100);
+    x->setAttribute(Attr::Maximum, 3.0);
+    model.find(QStringLiteral("name"))->setValidator([](const QVariant&, const Property&) {
+        return ValidationResult::error(QStringLiteral("refused"));
+    });
+    QSignalSpy failures(&model, &PropertyModel::validationFailed);
+    QVERIFY(!model.normalizeAllValues());
+    QCOMPARE(x->value(), QVariant(3.0));
+    QCOMPARE(fov->value(), QVariant(100));
+    QCOMPARE(failures.count(), 1);
+}
+
+// The value becomes the default: the row refreshes, no value signal follows.
+void tst_PropertyModel::makeValueDefaultNotifiesTheRow()
+{
+    PropertyModel model(createTree());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    Property* fov = model.find(QStringLiteral("fov"));
+    QVERIFY(fov->setValue(90));
+    QVERIFY(fov->isModified());
+    QCOMPARE(model.indexOf(fov).data(PropertyModel::IsModifiedRole).toBool(), true);
+
+    QSignalSpy data(&model, &QAbstractItemModel::dataChanged);
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    QSignalSpy user(&model, &PropertyModel::userValueChanged);
+    QSignalSpy batch(&model, &PropertyModel::batchValueChanged);
+
+    fov->makeValueDefault();
+
+    QCOMPARE(fov->defaultValue(), QVariant(90));
+    QCOMPARE(fov->value(), QVariant(90));
+    QVERIFY(!fov->isModified());
+    QCOMPARE(model.indexOf(fov).data(PropertyModel::IsModifiedRole).toBool(), false);
+    QCOMPARE(data.count(), 1);
+    QCOMPARE(data.at(0).at(0).value<QModelIndex>(), model.indexOf(fov));
+    QCOMPARE(data.at(0).at(1).value<QModelIndex>().row(), model.indexOf(fov).row());
+    QCOMPARE(values.count(), 0);
+    QCOMPARE(user.count(), 0);
+    QCOMPARE(batch.count(), 0);
+
+    // The default already equals the value: no notification.
+    fov->makeValueDefault();
+    QCOMPARE(data.count(), 1);
+
+    // A reset now returns to the new default.
+    QVERIFY(fov->setValue(100));
+    QVERIFY(fov->resetToDefault());
+    QCOMPARE(fov->value(), QVariant(90));
+
+    // An unmodified property is left as it is.
+    Property* name = model.find(QStringLiteral("name"));
+    data.clear();
+    name->makeValueDefault();
+    QCOMPARE(name->defaultValue(), QVariant(QStringLiteral("Main")));
+    QCOMPARE(data.count(), 0);
+}
+
+// On a group and on the model: every descendant except live ones, and a
+// notification only for the rows whose default changed.
+void tst_PropertyModel::makeValueDefaultOnGroupsAndTheModel()
+{
+    auto root = PropertyGroup::create(QStringLiteral("root"));
+    PropertyGroup& g = root->addGroup(QStringLiteral("g"));
+    Property& p = g.addInt(QStringLiteral("p"), 1);
+    Property& q = g.addInt(QStringLiteral("q"), 2);
+    Property& r = g.addGroup(QStringLiteral("h")).addInt(QStringLiteral("r"), 3);
+    Property& ro = g.addInt(QStringLiteral("ro"), 4).readOnly();
+    Property& lv = g.addInt(QStringLiteral("lv"), 5).live();
+    PropertyGroup& status = g.addGroup(QStringLiteral("status"));
+    status.setLive(true);
+    Property& counter = status.addInt(QStringLiteral("counter"), 6);
+    Property& other = root->addInt(QStringLiteral("other"), 7);
+    PropertyModel model(std::move(root));
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QVERIFY(p.setValue(10));
+    QVERIFY(r.setValue(30));
+    QVERIFY(ro.setValue(40));
+    QVERIFY(lv.setValue(50));
+    QVERIFY(counter.setValue(60));
+    QVERIFY(other.setValue(70));
+
+    QSignalSpy data(&model, &QAbstractItemModel::dataChanged);
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    QSignalSpy batch(&model, &PropertyModel::batchValueChanged);
+
+    g.makeValueDefault();
+
+    QCOMPARE(p.defaultValue(), QVariant(10));
+    QCOMPARE(q.defaultValue(), QVariant(2));
+    QCOMPARE(r.defaultValue(), QVariant(30));
+    QCOMPARE(ro.defaultValue(), QVariant(40)); // application code: read-only does not matter
+    QCOMPARE(lv.defaultValue(), QVariant(5)); // live: left alone
+    QCOMPARE(counter.defaultValue(), QVariant(6)); // below a live group
+    QCOMPARE(other.defaultValue(), QVariant(7)); // outside the group
+    QVERIFY(other.isModified());
+    QStringList notified;
+    for (const QList<QVariant>& arguments : data)
+        notified << model.data(arguments.at(0).value<QModelIndex>(), PropertyModel::PathRole)
+                        .toString();
+    notified.sort();
+    QCOMPARE(notified,
+        (QStringList {QStringLiteral("g/h/r"), QStringLiteral("g/p"), QStringLiteral("g/ro")}));
+    QCOMPARE(values.count(), 0);
+    QCOMPARE(batch.count(), 0);
+
+    // Called on the live property itself, it applies, as a reset does.
+    lv.makeValueDefault();
+    QCOMPARE(lv.defaultValue(), QVariant(50));
+
+    // The whole tree.
+    data.clear();
+    model.makeAllValuesDefault();
+    QCOMPARE(other.defaultValue(), QVariant(70));
+    QCOMPARE(counter.defaultValue(), QVariant(6));
+    QVERIFY(!other.isModified());
+    QCOMPARE(data.count(), 1);
+    QCOMPARE(data.at(0).at(0).value<QModelIndex>(), model.indexOf(&other));
+    QCOMPARE(values.count(), 0);
+
+    data.clear();
+    model.makeAllValuesDefault();
+    QCOMPARE(data.count(), 0);
+
+    PropertyModel empty;
+    empty.makeAllValuesDefault(); // nothing to do, and no crash
+    QVERIFY(!empty.root());
+}
+
+// Guard: changing an attribute never changes a stored value; only the explicit
+// calls do.
+void tst_PropertyModel::attributeChangesNeverMoveValues()
+{
+    PropertyModel model(createTree());
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    Property* fov = model.find(QStringLiteral("fov"));
+    Property* x = model.find(QStringLiteral("Transform/x"));
+    QVERIFY(fov->setValue(150));
+    QVERIFY(x->setValue(1.25));
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    QSignalSpy user(&model, &PropertyModel::userValueChanged);
+    QSignalSpy batch(&model, &PropertyModel::batchValueChanged);
+
+    fov->setAttribute(Attr::Maximum, 100);
+    x->setAttribute(Attr::Decimals, 0);
+    x->setAttribute(Attr::Maximum, 0.5);
+
+    QCOMPARE(fov->value(), QVariant(150));
+    QCOMPARE(x->value(), QVariant(1.25));
+    QCOMPARE(fov->defaultValue(), QVariant(60));
+    QCOMPARE(values.count(), 0);
+    QCOMPARE(user.count(), 0);
+    QCOMPARE(batch.count(), 0);
 }
 
 QTEST_APPLESS_MAIN(tst_PropertyModel)

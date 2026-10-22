@@ -48,8 +48,9 @@ the CMake options, static and shared builds, Qt 5 and upgrading are in [doc/inte
   Rejected values keep the old value and report a message.
 - **State**: read-only, disabled, hidden and live (a value maintained by the application), inherited by children.
   Conditions enable or show a property depending on another one's value.
-- **Model**: a two-column `QAbstractItemModel` for any Qt view; change signals per value and per batch, callbacks per
-  path; properties can be added and removed while the model is shown; reset of one property, a group or everything.
+- **Model**: a two-column `QAbstractItemModel` for any Qt view; change signals per value and per batch, a separate
+  signal for edits of the user, callbacks per path; properties can be added and removed while the model is shown; reset
+  of one property, a group or everything; normalizing values and making them the defaults.
 - **Views**: `PropertyTreeView` (collapsible tree or flat list with section headers) and `PropertyFormView` (a form
   with persistent editors and collapsible sections). Bold names for modified values, "Reset to default" context menu,
   full keyboard use (Enter, Esc, Tab), validation messages as tool tips. The form view can show the model's

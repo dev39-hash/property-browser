@@ -32,6 +32,11 @@ private slots:
     void modifiedAndReset();
     void groupResetResetsDescendants();
     void liveProperties();
+
+    void normalizeValueWithoutModel();
+    void normalizeValueOnGroups();
+    void makeValueDefaultWithoutModel();
+    void attributeChangesLeaveValuesAlone();
 };
 
 void tst_Property::typedAddsStoreValueAndDefault()
@@ -461,6 +466,170 @@ void tst_Property::liveProperties()
     QVERIFY(counter.setValue(9));
     status.setLive(false);
     QVERIFY(counter.isModified());
+}
+
+// A stored value is run through the write pipeline again, for example after a
+// range changed.
+void tst_Property::normalizeValueWithoutModel()
+{
+    auto root = PropertyGroup::create(QStringLiteral("root"));
+    Property& n = root->addInt(QStringLiteral("n"), 5).range(0, 1000);
+    Property& d = root->addDouble(QStringLiteral("d"), 1.234).decimals(3);
+    Property& big = root->addInt64(QStringLiteral("big"), 900).range(0, 1000);
+    Property& s = root->addString(QStringLiteral("s"), QStringLiteral("abc"));
+
+    QVERIFY(n.setValue(500));
+    n.setAttribute(Attr::Maximum, 100);
+    QCOMPARE(n.value(), QVariant(500));
+    QVERIFY(n.normalizeValue());
+    QCOMPARE(n.value(), QVariant(100));
+    QVERIFY(n.isModified());
+    QVERIFY(n.normalizeValue()); // already inside the range
+    QCOMPARE(n.value(), QVariant(100));
+
+    d.setAttribute(Attr::Decimals, 1);
+    QCOMPARE(d.value().toDouble(), 1.234);
+    QVERIFY(d.normalizeValue());
+    QCOMPARE(d.value().toDouble(), 1.2);
+
+    big.setAttribute(Attr::Maximum, qint64(500));
+    QVERIFY(big.normalizeValue());
+    QCOMPARE(big.value(), QVariant(qint64(500)));
+
+    QVERIFY(s.normalizeValue());
+    QCOMPARE(s.value(), QVariant(QStringLiteral("abc")));
+
+    // A value the validator refuses now is kept.
+    s.setValidator([](const QVariant&, const Property&) {
+        return ValidationResult::error(QStringLiteral("refused"));
+    });
+    QVERIFY(!s.normalizeValue());
+    QCOMPARE(s.value(), QVariant(QStringLiteral("abc")));
+
+    // Read-only and disabled properties are normalised: this is application code.
+    Property& locked = root->addInt(QStringLiteral("locked"), 50).range(0, 100).readOnly();
+    locked.setEnabled(false);
+    locked.setAttribute(Attr::Maximum, 10);
+    QVERIFY(locked.normalizeValue());
+    QCOMPARE(locked.value(), QVariant(10));
+
+    // A type that is not registered cannot be written, normalised included.
+    Property& unknown = root->add(QStringLiteral("test.unregistered"), QStringLiteral("u"), 1);
+    QVERIFY(!unknown.normalizeValue());
+}
+
+void tst_Property::normalizeValueOnGroups()
+{
+    auto root = PropertyGroup::create(QStringLiteral("root"));
+    PropertyGroup& g = root->addGroup(QStringLiteral("g"));
+    Property& a = g.addInt(QStringLiteral("a"), 50).range(0, 100);
+    Property& b = g.addGroup(QStringLiteral("h")).addInt(QStringLiteral("b"), 60).range(0, 100);
+    Property& live = g.addInt(QStringLiteral("live"), 90).range(0, 100).live();
+    PropertyGroup& status = g.addGroup(QStringLiteral("status"));
+    status.setLive(true);
+    Property& counter = status.addInt(QStringLiteral("counter"), 80).range(0, 100);
+    Property& other = root->addInt(QStringLiteral("other"), 95).range(0, 100);
+    for (Property* property : {&a, &b, &live, &counter, &other})
+        property->setAttribute(Attr::Maximum, 40);
+
+    QVERIFY(g.normalizeValue());
+    QCOMPARE(a.value(), QVariant(40));
+    QCOMPARE(b.value(), QVariant(40));
+    QCOMPARE(live.value(), QVariant(90)); // live, and below a live group: left alone
+    QCOMPARE(counter.value(), QVariant(80));
+    QCOMPARE(other.value(), QVariant(95)); // outside the group
+
+    // The whole tree through the root.
+    QVERIFY(a.setValue(30));
+    a.setAttribute(Attr::Maximum, 20);
+    Property& refused = g.addInt(QStringLiteral("refused"), 5);
+    refused.setValidator([](const QVariant& value, const Property&) {
+        return value.toInt() > 5 ? ValidationResult::error(QStringLiteral("refused"))
+                                 : ValidationResult::valid();
+    });
+    refused.setAttribute(Attr::Maximum, 5);
+    QVERIFY(root->normalizeValue());
+    QCOMPARE(a.value(), QVariant(20));
+    QCOMPARE(other.value(), QVariant(40));
+
+    // A refusal makes the call false but does not stop the others.
+    QVERIFY(a.setValue(10));
+    a.setAttribute(Attr::Maximum, 5);
+    refused.setValidator([](const QVariant&, const Property&) {
+        return ValidationResult::error(QStringLiteral("refused"));
+    });
+    QVERIFY(!root->normalizeValue());
+    QCOMPARE(a.value(), QVariant(5));
+
+    PropertyGroup& empty = root->addGroup(QStringLiteral("empty"));
+    QVERIFY(empty.normalizeValue());
+}
+
+// The current value becomes the default; groups cover their descendants,
+// live ones excepted.
+void tst_Property::makeValueDefaultWithoutModel()
+{
+    auto root = PropertyGroup::create(QStringLiteral("root"));
+    PropertyGroup& g = root->addGroup(QStringLiteral("g"));
+    Property& p = g.addInt(QStringLiteral("p"), 1);
+    Property& q = g.addInt(QStringLiteral("q"), 2);
+    Property& r = g.addGroup(QStringLiteral("h")).addString(QStringLiteral("r"), QStringLiteral("x"));
+    Property& ro = g.addInt(QStringLiteral("ro"), 4).readOnly();
+    Property& lv = g.addInt(QStringLiteral("lv"), 5).live();
+    Property& other = root->addInt(QStringLiteral("other"), 7);
+    QVERIFY(p.setValue(10));
+    QVERIFY(r.setValue(QStringLiteral("y")));
+    QVERIFY(ro.setValue(40));
+    QVERIFY(lv.setValue(50));
+    QVERIFY(other.setValue(70));
+
+    p.makeValueDefault();
+    QCOMPARE(p.defaultValue(), QVariant(10));
+    QCOMPARE(p.value(), QVariant(10));
+    QVERIFY(!p.isModified());
+    QVERIFY(p.resetToDefault());
+    QCOMPARE(p.value(), QVariant(10));
+    QVERIFY(p.setValue(11));
+    QVERIFY(p.isModified());
+    QVERIFY(p.resetToDefault());
+    QCOMPARE(p.value(), QVariant(10));
+
+    g.makeValueDefault();
+    QCOMPARE(q.defaultValue(), QVariant(2));
+    QCOMPARE(r.defaultValue(), QVariant(QStringLiteral("y")));
+    QCOMPARE(ro.defaultValue(), QVariant(40)); // read-only: application code
+    QCOMPARE(lv.defaultValue(), QVariant(5)); // live: left alone
+    QCOMPARE(other.defaultValue(), QVariant(7)); // outside the group
+    QVERIFY(!r.isModified());
+    QVERIFY(!ro.isModified());
+    QVERIFY(other.isModified());
+
+    // On the live property itself it applies, as a reset does.
+    lv.makeValueDefault();
+    QCOMPARE(lv.defaultValue(), QVariant(50));
+
+    root->makeValueDefault();
+    QCOMPARE(other.defaultValue(), QVariant(70));
+    QVERIFY(!other.isModified());
+}
+
+// Guard: an attribute change alone never changes a value or a default.
+void tst_Property::attributeChangesLeaveValuesAlone()
+{
+    auto root = PropertyGroup::create(QStringLiteral("root"));
+    Property& n = root->addInt(QStringLiteral("n"), 5).range(0, 1000);
+    Property& d = root->addDouble(QStringLiteral("d"), 1.234).decimals(3);
+    QVERIFY(n.setValue(500));
+
+    n.setAttribute(Attr::Maximum, 100);
+    n.setAttribute(Attr::Minimum, 50);
+    d.setAttribute(Attr::Decimals, 0);
+    d.setAttribute(Attr::Maximum, 1.0);
+
+    QCOMPARE(n.value(), QVariant(500));
+    QCOMPARE(n.defaultValue(), QVariant(5));
+    QCOMPARE(d.value().toDouble(), 1.234);
+    QCOMPARE(d.defaultValue().toDouble(), 1.234);
 }
 
 QTEST_APPLESS_MAIN(tst_Property)
