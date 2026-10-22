@@ -137,13 +137,15 @@ target_link_libraries(my_app PRIVATE qpb::widgets)
 Everything in this documentation applies to both Qt majors, except two API differences where Qt 5 has no equivalent;
 they are listed in [Compatibility](compatibility.md#qt-5-and-qt-6). Use one Qt major for qpb and your application.
 
-Compilers: Qt 5.15's own headers do not compile with MSVC 2026 (they use `stdext::checked_array_iterator`, which its
-standard library no longer has). Use MSVC 2019 or 2022, GCC or Clang with Qt 5.15.
+Compilers: Qt 5.15's own headers do not compile with the default toolset of MSVC 2026 (they use
+`stdext::checked_array_iterator`, which its standard library no longer has). Use the MSVC 2019 (14.29) or 2022 toolset,
+GCC or Clang with Qt 5.15; Visual Studio 2026 works with the 14.29 toolset installed and selected
+(`vcvarsall x86 -vcvars_ver=14.29`).
 
 ## Platforms
 
-- **Windows** (MSVC 2019 or newer; Qt 6 with MSVC 2022 or newer, Qt 5.15 with MSVC 2019 or 2022): verified for every
-  release by a full test run in both Qt configurations.
+- **Windows** (MSVC 2019 or newer; Qt 6 with MSVC 2022 or newer, Qt 5.15 with the MSVC 2019 or 2022 toolset):
+  verified for every release by a full test run in both Qt configurations.
 - **Linux** (GCC, Clang): supported. The code and the CMake files are portable, but Linux is not built for every release.
 - **macOS**: not supported.
 
