@@ -1,4 +1,4 @@
-# qpb - property browser for Qt 6 Widgets
+# qpb - property browser for Qt 6 and Qt 5.15 Widgets
 
 qpb shows and edits a tree of typed properties ("name | value") in Qt Widgets applications: object
 inspectors, settings dialogs, plugin and device configuration. You describe the properties in code; qpb provides the
@@ -15,8 +15,8 @@ Contents: [Requirements](#requirements) - [Integration](#integration) - [Feature
 ## Requirements
 
 - C++17 or newer, Qt 6.5 or newer or (since 1.7) Qt 5.15 (Core, Widgets), CMake 3.21 or newer.
-- Any compiler and platform supported by that Qt (MSVC, GCC, Clang; Windows, Linux, macOS); see [Qt 5](#qt-5) for
-  the compilers Qt 5.15 accepts.
+- Windows (MSVC) and Linux (GCC, Clang) with a Qt that supports them. Windows is verified for every release, Linux is
+  supported; see [Qt 5](#qt-5) for the compilers Qt 5.15 accepts.
 
 ## Integration
 
@@ -414,28 +414,16 @@ Within 1.x, updating the folder never requires changes to your code or CMake (wi
 
 ## Version history
 
-Details and upgrade notes for every version: `CHANGELOG.md`.
+Each version has a section in `CHANGELOG.md` (next to this file) with what was added, changed, deprecated and fixed, and
+its upgrade notes.
 
-- **1.8.0** - Translations of qpb's own texts for English, Japanese and Vietnamese, `qpb::loadTranslation()` (see
-  [Translations](#translations)); the built-in validation messages are translatable; column titles and open path
-  editors follow language changes at run time.
-- **1.7.0** - Qt 5.15 support (see [Qt 5](#qt-5)); Qt 6 builds unchanged. Fixed: MSVC 2019 warning C4267 when
-  building the library.
-- **1.6.1** - Documentation only: this README; the changelog and header comments refer to it instead of documents
-  outside the folder.
-- **1.6.0** - Theming with style sheets: tree view colour properties (`groupBackground`, `groupForeground`,
-  `modifiedForeground`, `readOnlyForeground`) and form view selectors (`qpbPart`, `qpbModified`). Fixed: modified
-  labels of the form view lost their bold font under application style sheets.
-- **1.5.0** - `PropertyModel::resetAllToDefault()`; `PropertyTreeView::setTabStopsOnCheckBoxes()` (off by default).
-  Fixed: MSVC warning C4458 when building the library.
-- **1.4.0** - Conditions between properties (`enabledWhen`, `visibleWhen`, also as `QObjectPropertySource` class
-  info); `PropertyModel::onValueChanged()` callbacks per path.
-- **1.3.0** - Live properties (`Property::Flag::Live`, `live()`); `QObjectPropertySource` group titles from a
-  `Q_PROPERTY` and live read-only values (`setLiveReadOnlyProperties()`).
-- **1.2.0** - `QObjectPropertySource`; `qpb::serialization` (JSON, `QSettings`); the 64-bit integer type
-  (`Types::Int64`, `addInt64()`).
-- **1.1.0** - `PropertyFormView`; `PropertyFilterProxyModel`; multi-line strings (`multiline()`).
-- **1.0.0** - First stable release: property tree and builders, seven built-in types and custom types, validation,
-  `PropertyModel`, `PropertyTreeView` (tree and list modes), `PropertyDelegate`, `EditorFactory` and custom editors,
-  reset to default, the component folder. Read-only and disabled only restrict the user; application code can still
-  set such values (changed during the release candidates).
+- **1.8.0** - translations of qpb's own texts (English, Japanese, Vietnamese).
+- **1.7.0** - Qt 5.15 as a second configuration.
+- **1.6.1** - documentation only: this README in the component folder.
+- **1.6.0** - style sheet hooks for the tree and form views.
+- **1.5.0** - `resetAllToDefault()`, check boxes in the Tab chain.
+- **1.4.0** - `onValueChanged()` callbacks, `enabledWhen()` / `visibleWhen()` conditions.
+- **1.3.0** - live values, group titles from `QObjectPropertySource`.
+- **1.2.0** - `QObjectPropertySource`, JSON and `QSettings` serialization, `Int64`.
+- **1.1.0** - `PropertyFormView`, `PropertyFilterProxyModel`, multi-line strings.
+- **1.0.0** - first stable release: model, tree view, editors for the basic types.
