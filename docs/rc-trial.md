@@ -1,5 +1,8 @@
 # qpb — RC trial report
 
+> Historical record of the release-candidate trial rounds 1 to 9 (1.0.0-rc1 to 1.8.0). A round written here is not
+> rewritten; the current behaviour is defined by docs/SPEC.md and `qpb/CHANGELOG.md`.
+
 The release-candidate trial of docs/PLAN.md (RC.1, RC.2): the three reference scenarios of
 [`use-cases.md`](use-cases.md) built as one standalone application, [`rc-trial/`](../rc-trial), that embeds a released
 component folder exactly as a consuming project does (`rc-trial/run_trial.sh <qpb-x.y.z.zip>`). Nothing else from this
@@ -104,8 +107,7 @@ so upgrading needs no code change. Then the settings page adopted the two additi
 `PropertyModel::resetAllToDefault()` instead of `root()->resetToDefault()`, and its tree view calls
 `setTabStopsOnCheckBoxes(true)`. The keyboard test now expects Tab to stop on the autosave check box (the only change to
 an earlier test, and the behaviour the option was added for); a new test clicks "Reset all". All trial tests pass. This
-round ran on Windows (MSVC 19.51, Qt 6.11.1) with the steps of `run_trial.sh` done by hand, since GitHub Actions is not
-available at the moment.
+round ran on Windows (MSVC 19.51, Qt 6.11.1) with the steps of `run_trial.sh` done by hand.
 
 | # | Finding | Outcome |
 |---|---------|---------|

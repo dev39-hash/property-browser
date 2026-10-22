@@ -9,7 +9,8 @@ namespace qpb {
 
 namespace detail {
 
-// Empty for now; keeps room for state added in later versions.
+// The private part behind the d-pointer of the public class (SPEC section 9.3). It has no
+// members: the class keeps a d-pointer so state can be added without changing its layout.
 class PropertyFilterProxyModelPrivate
 {
 };

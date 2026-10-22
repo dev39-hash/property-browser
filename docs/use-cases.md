@@ -1,10 +1,13 @@
 # qpb — Reference use cases
 
-No real consuming project is available yet, so API design (PLAN M1.2) and the pre-1.0 trial (PLAN RC.1)
-use the three reference scenarios below. Each one becomes an example application; together they cover every
+> Historical record of the scenarios written in M0.1 that drove the API design (M1) and the 1.0 release-candidate
+> trial. The current behaviour is defined by docs/SPEC.md; the scenarios themselves are still what `rc-trial/` builds.
+
+No real consuming project was available, so API design (PLAN M1.2) and the pre-1.0 trial (PLAN RC.1)
+used the three reference scenarios below. Each one became an example application; together they cover every
 basic type, groups, custom types and all three views.
 
-"Custom property table" in the original brainstorm means: **users build their own property tables with the
+"Custom property table" in the original brainstorm (no longer in the repository) meant: **users build their own property tables with the
 public API of the library** (declare properties with the builder, register custom types and editors) — goals G1 and G3
 in the spec. It does not mean extra columns or a separate table widget.
 

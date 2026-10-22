@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Updates qpb's translations (docs/SPEC.md §4.10, PLAN M12.3).
 
-  update_translations.py --qt-bin C:/Qt/6.11.1/msvc2022_64/bin
+  update_translations.py --qt-bin "<Qt prefix>/bin"
   update_translations.py --qt-bin <dir> --check
 
 Two catalogs: qpb's own (qpb/translations/qpb_<lang>.ts, from qpb/src and

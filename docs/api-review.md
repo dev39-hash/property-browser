@@ -1,5 +1,8 @@
 # qpb — 1.0 API review (M1)
 
+> Historical record of the 1.0 API review (M1, M4.10). The current API is defined by the public headers under
+> `qpb/include/qpb/` and by docs/SPEC.md.
+
 Review of the 1.0 public headers written in M1 (docs/PLAN.md M1.1–M1.5), against the stability rules of
 docs/SPEC.md §9. The headers under `qpb/include/qpb/` are the normative API reference (D21).
 
@@ -93,4 +96,4 @@ During M1:
 | Duplicate / invalid ids | Settled in M2 (D29): warning, existing child returned, invalid characters replaced. |
 
 Both remaining conditions for `1.0.0` are met: the RC trial ([rc-trial.md](rc-trial.md)) needed no API change after
-`1.0.0-rc2`, and CI is green on Linux, Windows and macOS.
+`1.0.0-rc2`, and at the time CI was green on Linux, Windows and macOS (the repository has had no CI since D58).

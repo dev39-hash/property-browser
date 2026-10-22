@@ -33,7 +33,9 @@ add_subdirectory(core)
 add_subdirectory(widgets)
 add_subdirectory(consumer)
 
-# --- repository checks (docs/PLAN.md M4.3, M4.6) --------------------------------
+# --- repository checks: architecture rules R1, R2, R5, R6 (docs/PLAN.md M4.6), the
+# --- Qt Creator example list, translations up to date (M12.5), and the size criteria
+# --- S1 and S2 (SPEC 1.3, docs/PLAN.md M4.3) --------------------------------------
 
 add_test(NAME architecture_rules
     COMMAND "${CMAKE_COMMAND}" "-DQPB_DIR=${PROJECT_SOURCE_DIR}/qpb"

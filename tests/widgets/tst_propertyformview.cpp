@@ -625,7 +625,8 @@ void tst_PropertyFormView::styleSheetSelectors()
 
 void tst_PropertyFormView::styleSheetRulesApply()
 {
-    // Any rule for QLabel used to drop the bold font of modified labels.
+    // A style sheet rule for QLabel resets the font of styled labels; the bold font of
+    // modified labels (and of group titles) is applied again afterwards (D52).
     qApp->setStyleSheet(QStringLiteral("QLabel { color: #e0e4ea; }"
                                        "QLabel[qpbModified=\"true\"] { color: #ff0000; }"
                                        "QToolButton[qpbPart=\"groupTitle\"] { color: #00ff00; }"));
@@ -647,8 +648,9 @@ void tst_PropertyFormView::styleSheetRulesApply()
     QCOMPARE(label->palette().color(QPalette::WindowText), QColor(0xe0, 0xe4, 0xea));
 }
 
-// The case found by the M10 probe: the application sets its sheet first, and
-// the form is built for a model that already has modified properties.
+// The bold font of modified labels survives an application style sheet (D52,
+// PLAN M10.3) when the sheet is set first and the form is then built for a model
+// that already has modified properties.
 void tst_PropertyFormView::boldSurvivesApplicationStyleSheet()
 {
     qApp->setStyleSheet(QStringLiteral("QWidget { color: #e0e4ea; } QLabel { color: #e0e4ea; }"));

@@ -1,9 +1,8 @@
-# qpb — Property Browser for Qt 6: Technical Specification (1.0 → 1.2)
+# qpb — Property Browser for Qt: Technical Specification
 
-> Source: [`brainstorm-vi.md`](brainstorm-vi.md) (direction B — *explicit model + pluggable views/types*).
-> Vietnamese translation: [`SPEC-vi.md`](SPEC-vi.md). This English document is authoritative.
-> Status: **Draft 3** — C++17, Qt 6.5, namespace `qpb` and CMake-only are confirmed. Items still marked
-> **[Assumption]** are unconfirmed; when one changes, update that item and [Appendix B](#appendix-b--decision-log).
+> Design direction: an *explicit model with pluggable views and types*.
+> Status: describes qpb **1.8.0**. Decisions are recorded in [Appendix B](#appendix-b--decision-log); when one changes,
+> update the affected section and that appendix.
 
 ---
 
@@ -27,8 +26,8 @@ Qt Quick/QML views · Python bindings · multi-object editing · built-in undo/r
 compound types in core (color, font, vector, array) · Qt 5 before 5.15 (5.15 since 1.7, §9.6) · DSL/code generator ·
 custom theming system (QSS is enough) · declarative conditional visibility expressions · qmake support.
 
-Rationale: brainstorm section 11. The design **must not preclude** multi-object editing or QML later
-(→ core does not depend on QtWidgets, `Property` does not assume exactly one source object).
+Rationale: each of these would widen the stable API well beyond a property browser. The design **must not
+preclude** multi-object editing or QML later (→ core does not depend on QtWidgets, `Property` does not assume exactly one source object).
 
 ### 1.3 Project-level acceptance criteria
 
@@ -47,28 +46,28 @@ Rationale: brainstorm section 11. The design **must not preclude** multi-object 
 
 | Area            | Decision                                                                                     |
 |-----------------|----------------------------------------------------------------------------------------------|
-| Language        | **C++17** (confirmed). The public API does **not** rely on designated initializers (C++20)   |
-| Qt              | Minimum **6.5** (confirmed); primary development/CI version **6.8 LTS**; since 1.7 also **5.15** (§9.6). Only Core, Gui, Widgets, Test |
-| Build           | **CMake only** (confirmed; no qmake), CMake ≥ 3.21; targets `qpb::core`, `qpb::widgets`. **Primary** integration: `add_subdirectory(components/qpb)` (§6) |
-| Namespace       | `qpb` (confirmed)                                                                             |
+| Language        | **C++17**. The public API does **not** rely on designated initializers (C++20)                |
+| Qt              | Minimum **6.5**; developed and verified with 6.8 LTS and 6.11; since 1.7 also **5.15** (§9.6). Only Core, Gui, Widgets, Test |
+| Build           | **CMake only** (no qmake), CMake ≥ 3.21; targets `qpb::core`, `qpb::widgets`. **Primary** integration: `add_subdirectory(components/qpb)` (§6) |
+| Namespace       | `qpb`                                                                                         |
 | Library type    | **Static by default** (`QPB_BUILD_SHARED=OFF`), independent of the consumer's `BUILD_SHARED_LIBS`; export macros `QPB_CORE_EXPORT`, `QPB_WIDGETS_EXPORT` still exist for the shared case |
-| License         | MIT [Assumption]                                                                              |
-| Platforms       | Linux, Windows (MSVC 2019+), macOS                                                            |
-| Dependencies    | `qpb::core` → Qt6::Core **only**. `qpb::widgets` → `qpb::core`, Qt6::Widgets. No third-party libraries |
+| License         | MIT                                                                                           |
+| Platforms       | Windows (MSVC 2019+), verified for every release; Linux (GCC, Clang), supported, not built for every release (D58) |
+| Dependencies    | `qpb::core` → Qt Core **only** (`Qt6::Core`, `Qt5::Core` with Qt 5). `qpb::widgets` → `qpb::core`, Qt Widgets. No third-party libraries |
 | Raising minimums| Raising the C++ standard, minimum Qt or minimum CMake is a **breaking change** (new major only) |
-| Language of code/docs | English. Files with a `-vi` suffix are Vietnamese reference translations              |
+| Language of code/docs | English (D60)                                                                          |
 
 ---
 
 ## 3. Architecture
 
 ```text
-┌─────────────────────────────── qpb::widgets (Qt6::Widgets) ───────────────────────────────┐
+┌─────────────────────────────── qpb::widgets (Qt Widgets) ─────────────────────────────────┐
 │  PropertyTreeView ──┐                                                                     │
 │   (mode Tree/List)  ├── PropertyDelegate ──┐                                              │
 │                     │                      ├── EditorFactory  (typeId → EditorHandler)    │
 │  PropertyFormView ──┴──────────────────────┘                                              │
-├─────────────────────────────── qpb::core (Qt6::Core only) ────────────────────────────────┤
+├─────────────────────────────── qpb::core (Qt Core only) ──────────────────────────────────┤
 │  PropertyModel : QAbstractItemModel                                                       │
 │  Property / PropertyGroup (data tree)       TypeRegistry (typeId → TypeHandler)           │
 │  Attributes (standard keys)   Validation                                                  │
@@ -110,6 +109,7 @@ inline constexpr QLatin1StringView Enum{"enum"};
 inline constexpr QLatin1StringView FilePath{"filepath"};
 inline constexpr QLatin1StringView DirPath{"dirpath"};
 inline constexpr QLatin1StringView Group{"group"};
+inline constexpr QLatin1StringView Int64{"int64"};   // 1.2: qint64 storage (§4.4)
 }
 }
 ```
@@ -117,7 +117,7 @@ inline constexpr QLatin1StringView Group{"group"};
 With Qt 5 (since 1.7) the same constants are `QLatin1String` (§9.6).
 
 User-registered types use IDs of their choosing; a prefix is recommended (`"myapp.color"`) to avoid collisions.
-IDs starting with `qpb.` or equal to one of the 8 IDs above are reserved.
+IDs starting with `qpb.` or equal to one of the 9 IDs above are reserved.
 
 ### 4.2 `Property`
 
@@ -184,6 +184,7 @@ public:
     PropertyGroup&  addGroup(const QString& id);
     BoolBuilder     addBool  (const QString& id, bool value);
     IntBuilder      addInt   (const QString& id, int value);
+    Int64Builder    addInt64 (const QString& id, qint64 value);                   // 1.2
     DoubleBuilder   addDouble(const QString& id, double value);
     StringBuilder   addString(const QString& id, const QString& value);
     EnumBuilder     addEnum  (const QString& id, const QStringList& labels, int currentIndex);
@@ -206,9 +207,10 @@ public:
 - Adding a duplicate `id` to the same group logs a warning and returns the existing property (nothing new is created); `addGroup()` over a
   non-group child adds the group under the first free id (`<id>_2`, ...). Empty ids and ids containing `/` are sanitized with a warning. [D29]
 - `PropertyBuilder<T>` is a thin wrapper around `Property&` whose setters return `*this`:
-  `displayName`, `toolTip`, `readOnly`, `enabled`, `visible`, `validator`, plus type-specific setters
-  (`range`, `minimum`, `maximum`, `step`, `decimals`, `prefix`, `suffix`, `maxLength`, `placeholder`, `regularExpression`, `filter`, `dialogMode`, `defaultDir`, `mustExist`), plus `attribute` and `editor` for any type.
-  Builders are concrete classes (`BoolBuilder`, `IntBuilder`, `DoubleBuilder`, `StringBuilder`, `EnumBuilder`, `FilePathBuilder`, `DirPathBuilder`)
+  `displayName`, `toolTip`, `readOnly`, `enabled`, `visible`, `live` (1.3), `enabledWhen` / `visibleWhen` (1.4, §4.2),
+  `validator`, plus type-specific setters
+  (`range`, `minimum`, `maximum`, `step`, `decimals`, `prefix`, `suffix`, `maxLength`, `placeholder`, `regularExpression`, `multiline` (1.1), `filter`, `dialogMode`, `defaultDir`, `mustExist`), plus `attribute` and `editor` for any type.
+  Builders are concrete classes (`BoolBuilder`, `IntBuilder`, `Int64Builder` (1.2), `DoubleBuilder`, `StringBuilder`, `EnumBuilder`, `FilePathBuilder`, `DirPathBuilder`)
   sharing `PropertyBuilderBase<Derived>`; a setter that does not apply to the type (e.g. `regularExpression` on an int) **does not compile**.
 - A builder converts implicitly to `Property&`.
 
@@ -246,6 +248,8 @@ struct TypeHandler {
     std::function<QString(const QVariant&, const Property&)> displayText; // empty → QVariant::toString()
     std::function<QVariant(const QVariant&, const Property&)> normalize;  // empty → unchanged (e.g. clamp)
     std::function<ValidationResult(const QVariant&, const Property&)> validate; // empty → always valid
+    std::function<QJsonValue(const QVariant&, const Property&)> toJson;   // 1.2; empty → QJsonValue::fromVariant()
+    std::function<QVariant(const QJsonValue&, const Property&)> fromJson; // 1.2; empty → QJsonValue::toVariant()
 };
 
 class TypeRegistry {
@@ -260,7 +264,7 @@ public:
 };
 ```
 
-- The 7 basic types are registered the first time `TypeRegistry::global()` is called.
+- The basic types (the 7 of 1.0, then `Int64` since 1.2) are registered the first time `TypeRegistry::global()` is called.
 - Handlers are configured by assigning fields (C++17), not with designated initializers.
 - `TypeRegistry` is **not thread-safe**; register on the main thread before creating models.
 - A property whose `typeId` is not registered is still shown (text = `QVariant::toString()`), **read-only**, with a single `qWarning`.
@@ -711,8 +715,9 @@ property-browser/                  (development repo)
 │       ├── core/
 │       └── widgets/
 ├── CMakeLists.txt                 # dev: add_subdirectory(qpb) + tests + examples
-├── tests/   (core, widgets, api_compat, consumer)
+├── tests/   (core, widgets, api, api_compat, consumer)
 ├── examples/ (quickstart, custom_type, inspector, ...; qtcreator/: CMake and qmake projects for Qt Creator)
+├── rc-trial/                      # the RC trial application and its test (PLAN RC.1)
 ├── tools/
 └── docs/
 ```
@@ -746,7 +751,9 @@ folder: files removed by the new version must not linger), rebuild, and read the
 No change to the consumer's CMake or code within the same major version (G5, S6).
 
 Three supported ways to get and update the folder; the consumer chooses. All three produce the same `components/qpb/`
-with the content of the release zip, so the CMake above is the same for each. [D47]
+with the content of the release zip, so the CMake above is the same for each. [D47] The repository is local, with no
+hosted remote (D59): the zip is the default, and `git subtree` / `git submodule` work from a clone of this repository
+(`<remote>` below is the path of that clone).
 
 | Method                | Suits                                 | Pinned to a version by                                |
 |-----------------------|---------------------------------------|-------------------------------------------------------|
@@ -754,9 +761,9 @@ with the content of the release zip, so the CMake above is the same for each. [D
 | `git subtree`         | Git projects that commit the folder   | The tag in the `add` / `pull` command                 |
 | `git submodule`       | Git projects already using submodules | The commit recorded for `components/qpb`              |
 
-What every release publishes for them (see `docs/RELEASING.md`):
+What every release produces for them (see `docs/RELEASING.md`):
 
-- `qpb-X.Y.Z.zip` on the GitHub Release of tag `vX.Y.Z`: the `qpb/` folder only;
+- `qpb-X.Y.Z.zip`, made by `tools/make_release.sh` from the release commit (tag `vX.Y.Z`): the `qpb/` folder only;
 - the branch `qpb-release`: the history of `qpb/` alone (`git subtree split`), its tip always the newest release;
 - the tag `qpb-vX.Y.Z` on the `qpb-release` commit of that release. `vX.Y.Z` tags the whole repository and cannot be
   used by subtree or submodule, which need the component at the root.
@@ -778,7 +785,7 @@ git add components/qpb && git commit -m "Use qpb X.Y.Z"                   # same
 With a submodule, `git submodule update --remote components/qpb` moves to the newest release (the tip of
 `qpb-release`); its clone also downloads the development history, but only the component is checked out. A local change
 to the folder is overwritten by the zip, shows up as a merge conflict with subtree, and must be committed inside the
-submodule; changes belong upstream instead.
+submodule; changes belong in this repository instead.
 
 ### 6.3 Requirements for `qpb/CMakeLists.txt` (do not pollute the host project)
 
@@ -792,8 +799,10 @@ submodule; changes belong upstream instead.
   when there is no Qt 6 (`find_package(QT NAMES Qt6 Qt5)`). Verify the minimum version: 6.5, or 5.15 (§9.6).
 - Target names use the `qpb_` prefix; aliases `qpb::core`, `qpb::widgets`. Options use the `QPB_` prefix.
 - No tests/examples inside `qpb/`; no `install()` by default (option `QPB_INSTALL`, OFF).
-- **No Qt resources (`.qrc`)** in 1.x: a static library would need `Q_INIT_RESOURCE` on the consumer side → breaks "two lines of CMake".
-  Icons come from `QStyle::standardIcon` or are painted in code.
+- **No Qt resources (`.qrc`)**, with one exception: the embedded translations (1.8, D55). A static library would need
+  `Q_INIT_RESOURCE` on the consumer side → breaks "two lines of CMake"; so `loadTranslation()` registers that one
+  resource itself (`Q_INIT_RESOURCE`, once), and consumers still need nothing. Icons come from `QStyle::standardIcon` or
+  are painted in code.
 - **No reliance on static initializers** to register types (the linker may drop them when linking statically).
   Basic types are registered lazily in `TypeRegistry::global()` / `EditorFactory::global()`.
 - Shared builds (`QPB_BUILD_SHARED=ON`) are supported; consumers must then deploy the DLL/.so — documented in the README.
@@ -807,15 +816,17 @@ submodule; changes belong upstream instead.
 |---------------|--------------------------------|-----------------------------------------------------------------------------------|
 | Core          | Qt Test (no GUI)               | builder, path/find, inherited effective state, registry, validation pipeline      |
 | Model         | Qt Test + `QAbstractItemModelTester` (Fatal mode) | every structural/value operation; signals (`QSignalSpy`); batches |
-| Widgets       | Qt Test, `QT_QPA_PLATFORM=offscreen` | create/commit/cancel editors for all 7 types; Enter/Esc/Tab; focus-out; Tree↔List; reset menu; PathEdit does not close while a dialog is open (dialog replaced by a test hook) |
-| Examples      | built in CI                    | S1 and S2 measured automatically by a line-count script                            |
+| Widgets       | Qt Test, `QT_QPA_PLATFORM=offscreen` | create/commit/cancel editors for all 8 types (7 of 1.0 + Int64, 1.2); Enter/Esc/Tab; focus-out; Tree↔List; reset menu; PathEdit does not close while a dialog is open (dialog replaced by a test hook) |
+| Examples      | part of every build            | S1 and S2 measured automatically by a line-count script (`ctest`)                  |
 | API compat    | compile + run only             | §9.5: client code of every released 1.x still builds and behaves correctly        |
 | Consumer      | sample CMake project `tests/consumer` | copy `qpb/` into `components/`, build; no leaked global variables; C++17 and C++20; static and shared |
 
 The internal `PathEdit` has a test hook (under `src/`, not public) so tests can replace `QFileDialog` with a function returning a fixed value.
 
-CI: GitHub Actions, matrix Ubuntu/Windows/macOS × Qt 6.5 / 6.8, plus Qt 5.15 on Ubuntu and Windows (§9.6), via
-`jurplel/install-qt-action`.
+**Verification (D58):** there is no hosted repository and no CI. A release is verified locally by the full `ctest` run
+with Qt 6 (x64, MSVC 2022 or newer) and with Qt 5.15 (MSVC 2019 or 2022, §9.6), and by 25 Release runs of the widget suites. The
+examples are part of both builds. Linux stays supported (the code and the CMake files are portable) but is not built for
+every release.
 
 ---
 
@@ -899,8 +910,9 @@ D-pointers are still used (§9.3) to keep headers stable and internals free to c
   (signals, builders and handlers included). Old files are **never edited**; every later release must build them
   (deprecation warnings allowed) and pass.
 - "Self-contained header" test: every public header is included alone in its own `.cpp`.
-- `tools/api_snapshot`: exports the list of public symbols (by parsing headers, or with `abi-dumper` when available) and diffs it
-  against the previous release's snapshot → CI flags removals/changes. (Used from 1.1; 1.0 only creates the baseline.)
+- `tools/api_snapshot.py`: exports the list of public symbols (by parsing the headers) and `--check` compares it with the
+  snapshot `tests/api_compat/api-<x.y>.txt` of each released version → the `api_snapshot_*` tests in `ctest` flag
+  removals and changes; additions are allowed. (Used from 1.1; 1.0 only creates the baseline.)
 
 ### 9.6 The Qt 5.15 configuration (1.7)
 
@@ -921,8 +933,8 @@ behaviour, same snapshots.
   two changes above.
 - **Verification (§9.5):** `api-qt5-1.x.txt` snapshots (`tools/api_snapshot.py --qt-major 5`) next to the Qt 6 ones,
   all checked in both configurations; `tests/api_compat/qt5_v1_7.cpp` freezes the Qt 5 forms. Compatibility files of
-  earlier releases are built with Qt 5 too, except `v1_0.cpp`, which uses `QMetaType` values. CI builds and tests the
-  Qt 5.15 configuration on Linux (GCC) and Windows (MSVC 2022).
+  earlier releases are built with Qt 5 too, except `v1_0.cpp`, which uses `QMetaType` values. Per D58 every release is
+  built and tested with Qt 5.15 on Windows (MSVC 2019 or 2022); the code does not depend on the platform.
 - **Toolchains:** Qt 5.15.0's own headers do not compile with MSVC 2026 (they use `stdext::checked_array_iterator`,
   removed from its standard library); use MSVC 2019 or 2022, GCC or Clang.
 
@@ -989,10 +1001,10 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D12| The first release for real projects is 1.0 (API freeze); 0.x is internal  | Goal G5: consuming projects never have to change code                                  |
 | D13| Commitment is **source** compatibility, not ABI                            | Consumers always rebuild from the component folder                                     |
 | D14| Distribution as a self-contained `qpb/` folder + `add_subdirectory`         | Goal G6; `find_package`/install become optional                                       |
-| D15| Static library by default, no `.qrc`, no static initializers                | Avoids DLL deployment, `Q_INIT_RESOURCE`, and the linker dropping objects in static builds |
+| D15| Static library by default, no `.qrc`, no static initializers (narrowed by D55: the embedded translations) | Avoids DLL deployment, `Q_INIT_RESOURCE`, and the linker dropping objects in static builds |
 | D16| Written from scratch, no wrap/fork                                          | Goal G7; full control of the API makes the stability commitment possible              |
 | D17| C++17, Qt ≥ 6.5, namespace `qpb`, CMake only — confirmed                   | Settled before M1 because they are frozen until 2.0                                    |
-| D18| Code and docs in English; `-vi` files are reference translations only      | Project convention                                                                     |
+| D18| Code and docs in English; `-vi` files are reference translations only (translations: replaced by D60) | Project convention                                                                     |
 | D19| "Custom property table" = users build property tables with the public API (G1, G3) | Clarified by the maintainer; no separate feature                                  |
 | D20| API design and the RC trial use reference scenarios instead of real projects | No real consuming project is available yet                                          |
 | D21| The public headers are the normative API reference; SPEC code summarizes them | Avoids two sources of truth after M1                                              |
@@ -1032,3 +1044,6 @@ root->add("app.color", "tint", QColor(Qt::white));
 | D55| The `.qm` files are generated by the maintainers, committed and embedded in `qpb::core` | Building them at configure time needs Qt LinguistTools, which a consumer may not have installed; an upgrade that stops building breaks G6 and §9.2. Embedded, there is nothing to deploy |
 | D56| Contexts and source texts of qpb's translatable texts are stable within 1.x; the contexts of 1.0–1.7 are kept | Applications translate qpb into further languages, or override a wording, through these keys; changing one silently drops their translation |
 | D57| On `LanguageChange` qpb updates only what it shows by itself (column titles, path editor tool tips) | Texts given by the application are plain `QString`s, already translated; only the application can translate them again, as in any Qt UI |
+| D58| The repository is local (no hosted remote, no CI); a release is verified by the full `ctest` run with Qt 6 (x64, MSVC 2022 or newer) and Qt 5.15 (MSVC 2019 or 2022) and 25 Release runs of the widget suites. Linux stays supported but is not built for every release; macOS is no longer supported | The hosted repository and its CI are gone and the maintainers build these two configurations. There is no machine to build macOS on; Linux stays supported because the code and the CMake files are portable, without a build for every release |
+| D59| Without a hosted repository the release zip made by `tools/make_release.sh` stays the default way to get qpb; `git subtree` / `git submodule` of `qpb-release` and the `qpb-vX.Y.Z` tags work from a clone of this repository | Keeps the three ways of D47 and the consumer's CMake unchanged; only where the files come from changes |
+| D60| Tracked documentation is English only: the Vietnamese reference translations and the original brainstorm leave the tree (the history keeps them); a Vietnamese user manual is planned | The translations of the specification and the plan had to change with every edit and had drifted apart (M13 review); a manual written for users serves Vietnamese readers better. Replaces the second half of D18 |

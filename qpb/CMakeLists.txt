@@ -1,4 +1,4 @@
-# qpb - property browser for Qt 6 Widgets.
+# qpb - property browser for Qt 6 and Qt 5.15 Widgets.
 #
 # This folder is a self-contained component. Consuming projects copy it (e.g. to
 # components/qpb/) and use it with:
@@ -93,7 +93,7 @@ qpb_add_library(qpb_core
         src/core/Translations.cpp
         src/core/TypeRegistry.cpp
         src/core/qpbglobal.cpp
-        # Generated from qpb_<lang>.ts by tools/update_translations (since 1.8).
+        # Generated from qpb_<lang>.ts by tools/update_translations.py (since 1.8).
         translations/qpb_translations.qrc
 )
 target_link_libraries(qpb_core PUBLIC Qt${QPB_QT_MAJOR}::Core)

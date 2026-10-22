@@ -1,7 +1,6 @@
 # qpb — Implementation Plan
 
-> Specification: [`SPEC.md`](SPEC.md). Original idea: [`brainstorm-vi.md`](brainstorm-vi.md).
-> Vietnamese translation: [`PLAN-vi.md`](PLAN-vi.md). This English document is authoritative.
+> Specification: [`SPEC.md`](SPEC.md).
 > Resource assumption: **part-time (~15 hours/week)**, one person.
 
 ## 0. Direction
@@ -16,8 +15,12 @@ Three goals drive the whole plan (SPEC §1.1):
    tests and examples use it exactly like a consumer.
 3. **Written from scratch (G7):** no wrapping/forking, no code copied from QtPropertyBrowser/QtnProperty.
 
-Consequence: ~18 extra hours for API design, compatibility testing and packaging, plus a **trial (RC)** phase in a real project
-before tagging 1.0.
+Consequence: ~18 extra hours for API design, compatibility testing and packaging, plus a **trial (RC)** phase with the
+reference scenarios in a standalone application before tagging 1.0 (no real consuming project was available).
+
+**Repository.** Since 2026-10-22 the repository is local: there is no hosted remote, no CI and no pull requests, and
+changes travel between the development machine and the deployment machine as git bundles (D58). The mentions of pull
+requests, CI and GitHub Releases in the milestones below are history.
 
 ---
 
@@ -33,8 +36,16 @@ before tagging 1.0.
 | **RC** Trial                     | 7–8      | rc1 runs the reference scenarios in a standalone app with no API change → tag `1.0.0`    |
 | **M5** 1.1                       | after 1.0| Form view + filter (additive only)                                                        |
 | **M6** 1.2                       | after 1.1| QObject adapter, serialization, Int64 (additive only)                                    |
+| **M7** 1.3                       | after 1.2| Group titles (`qpb:title`) and live values (`Flag::Live`) for `QObjectPropertySource` (additive only) |
+| **M8** 1.4                       | after 1.3| `onValueChanged()` per path and `enabledWhen()` / `visibleWhen()` conditions (additive only) |
+| **M9** 1.5                       | after 1.4| `resetAllToDefault()` and check boxes in the Tab chain, opt-in (additive only)           |
+| **M10** 1.6                      | after 1.5| Style sheet theming: tree view colour properties, form view `qpbPart` selectors (additive only) |
+| **M11** 1.7                      | after 1.6| Qt 5.15 as a second configuration, built and tested with MSVC 2019                       |
+| **M12** 1.8                      | after 1.7| Translations: English, Japanese, Vietnamese (`qpb::loadTranslation()`, additive only)    |
+| **M13** no version change        | after 1.8| Documents and comments match the local repository (D58–D60); status in M13               |
 
-M0–M4 ≈ 86 hours (≈ 6 part-time weeks). M5–M6 will be re-planned after 1.0 is used for real.
+M0–M4 ≈ 86 hours (≈ 6 part-time weeks). Later milestones were planned one at a time, after the previous release and
+the RC trial round that followed it; each task table carries its own estimate. Releases 1.0 to 1.8 are done.
 
 ---
 
@@ -115,7 +126,7 @@ High-risk parts first: Int + String + FilePath (editor UX, focus while a dialog 
 
 **Decision point (end of M3.6):** if Tab/FocusOut requires replacing `QAbstractItemView`'s editing machinery
 → consider making the form view (persistent editors) the primary 1.0 view. This decision **must be made before M4**
-because it cannot change after 1.0.
+because it cannot change after 1.0. (Settled: it did not trigger, see the M3 status; the tree view stayed primary.)
 
 ### M4 — Hardening & API freeze (≈ 22h)
 
@@ -134,9 +145,9 @@ with a new rule R6 and `tools/count_lines.cmake` (M4.3, M4.6), Windows (MSVC) an
 | M4.3  | Finish examples; measure S1 (≤ 30 lines) and S2 (≤ 100 lines) with a script                   | 2 | Script runs in CTest |
 | M4.4  | `tests/api_compat/v1_0.cpp`: exercises **all** 1.0 public API (build + run)                   | 3 | CTest passes; file frozen from here on |
 | M4.5  | Extend `tests/consumer`: static/shared, C++17/C++20, no leaked globals (compare `CMAKE_*` before/after `add_subdirectory`), simulate "replace folder and rebuild" | 3 | CTest passes |
-| M4.6  | `tools/check_arch.sh`: core includes no QtWidgets/QtGui; views never branch on typeId; public headers never include `src/` (R1, R2, R5) | 1 | Runs in CTest |
+| M4.6  | `tools/check_architecture.cmake`: core includes no QtWidgets/QtGui; views never branch on typeId; public headers never include `src/` (R1, R2, R5) | 1 | Runs in CTest |
 | M4.7  | Windows (MSVC) + macOS builds; public headers warning-free under `-Wall -Wextra -Wpedantic` / `/W4` | 3 | Clean on all 3 OSes |
-| M4.8  | Baseline API snapshot (`tools/api_snapshot`) for comparisons from 1.1                          | 2 | Snapshot file in the repo |
+| M4.8  | Baseline API snapshot (`tools/api_snapshot.py`) for comparisons from 1.1                          | 2 | Snapshot file in the repo |
 | M4.9  | Release process (section 4): `CHANGELOG.md`, `qpb-1.0.0-rc1.zip` containing only `qpb/`, `qpb-release` branch via `git subtree split` | 3 | rc1 released on GitHub |
 | M4.10 | Final API review against SPEC §9; README covers component integration + upgrade policy        | 2 | Review done |
 
@@ -203,6 +214,7 @@ the space used). They should never look "modified", be reset or be saved.
   behaviour by default and add `QObjectPropertySource::setLiveReadOnlyProperties(bool)` (default `false`), so an
   application opts in with one call. Alternative: treat it as a bug fix (SPEC §9.1 allows fixing behaviour that
   contradicts the documentation) and call it out in the CHANGELOG.
+  (Settled: D44, as proposed - opt-in `setLiveReadOnlyProperties()`, default `false`; see the Status below.)
 
 | ID   | Task                                                                                              | Est. (h) | Done when |
 |------|---------------------------------------------------------------------------------------------------|----------|-----------|
@@ -246,7 +258,7 @@ model.onValueChanged("Transform/x", this, [this](const QVariant& v) { m_object.x
   `std::function<void(const QString& path, const QVariant& value)>`.
 - Open decision **D45:** on the model (proposed; the model already owns change notification and paths) or on
   `Property` (works without a model, but `Property` is not a QObject, so lifetime and disconnection need a handle type of
-  their own). Proposal: the model.
+  their own). Proposal: the model. (Settled: D45, as proposed - on the model.)
 
 **F10 — conditions between properties.** Declared once, evaluated by the model:
 
@@ -267,7 +279,8 @@ limits.addInt64("quota", 0).enabledWhen("Limits/mode", [](const QVariant& v) { r
   the condition "true" (nothing is hidden or disabled by a typo; a warning is logged once).
 - `QObjectPropertySource`: metadata keys `enabledWhen=<id>` and `visibleWhen=<id>`, relative to the object's group.
 - Open decision **D46:** combine with the own flags (proposed) or have the model write the flags `Disabled` / `Hidden`
-  (simpler, but it overwrites the application's own `setEnabled(false)`).
+  (simpler, but it overwrites the application's own `setEnabled(false)`). (Settled: D46, as proposed - combined with
+  the own flags.)
 - Out of scope: conditions on several sources, computed values, read-only conditions. The predicate form covers most
   cases (it may read other properties through the model it captures); a general rule API can come later.
 
@@ -325,6 +338,7 @@ view.setTabStopsOnCheckBoxes(true);   // also a Q_PROPERTY
 - Tree view only: in `PropertyFormView` check boxes are widgets and already take part in the Tab chain.
 - Open decision **D49:** opt-in (proposed) or the new default. The default would change what keyboard users of every
   consuming application get after an upgrade, which §9.2 forbids; the opt-in follows D44.
+  (Settled: D49, as proposed - opt-in.)
 - Decision **D48** records the F4 choice: a new method instead of giving `resetToDefault(QModelIndex())` a meaning.
 
 | ID   | Task                                                                                              | Est. (h) | Done when |
@@ -558,7 +572,7 @@ Qt's (where it exists) and the example's own, whose display names are set again 
 - **D54** the API: `bool loadTranslation(QTranslator&, const QLocale&)`, the application owns and installs the
   translator (chosen: Qt's pattern; the application controls the order and removal, qpb keeps no global state), not
   `installTranslation(const QLocale&)` with a translator inside qpb.
-- **D55** delivery: `.qm` files built by the maintainer (`tools/update_translations`), committed and embedded
+- **D55** delivery: `.qm` files built by the maintainer (`tools/update_translations.py`), committed and embedded
   (chosen), not built at configure time with Qt LinguistTools, a new build dependency that a consumer may not have;
   an upgrade that stops building breaks G6 and §9.2.
 - **D56** contexts and source texts are stable within 1.x; the existing contexts are kept, new texts use the
@@ -570,7 +584,7 @@ Qt's (where it exists) and the example's own, whose display names are set again 
 |-------|------------------------------------------------------------------------------------------------|----------|-----------|
 | M12.1 | SPEC: new §4.10 (translations), §4.7 (messages are translated, not API), §8 (1.8), D54–D57; `-vi` | 1.5 | Decisions recorded |
 | M12.2 | Sources: the seven messages through `QCoreApplication::translate()` in fixed contexts, `%n` plural; `<qpb/Translations.h>`, `loadTranslation()`, embedded resource (CMake and `qpb.pro`), static registration | 3 | Builds with Qt 6 and Qt 5; English output unchanged without a translation |
-| M12.3 | `qpb/translations/qpb_en.ts`, `qpb_ja.ts`, `qpb_vi.ts` and their `.qm`; `tools/update_translations` (lupdate + lrelease) | 2.5 | Every text translated; Japanese and Vietnamese wording reviewed by a native speaker |
+| M12.3 | `qpb/translations/qpb_en.ts`, `qpb_ja.ts`, `qpb_vi.ts` and their `.qm`; `tools/update_translations.py` (lupdate + lrelease) | 2.5 | Every text translated; Japanese and Vietnamese wording reviewed by a native speaker |
 | M12.4 | Run-time language change: model column titles, path editor tool tip                             | 1.5 | Widget test switches English → Japanese → Vietnamese |
 | M12.5 | Tests with Qt 6 and Qt 5: messages, titles, menus, tool tips per language; plural forms; locale fallback (`ja_JP` → ja, `de` → false); each `.qm` matches its `.ts`; `.ts` up to date with the sources (when `lupdate` is found) | 3 | `ctest` passes with both Qt majors |
 | M12.6 | `tests/api_compat/v1_8.cpp`, `api-1.8.txt`, `api-qt5-1.8.txt`; `examples/translations` (+ Qt Creator projects); `qpb/README.md` "Translations" (loading, contexts, adding a language) | 3 | Compat, snapshots and example builds pass; screenshots checked in the three languages |
@@ -601,6 +615,70 @@ the English one of 1.7.
   all nine examples with both. RC round 9: the trial's language setting switches qpb at once; F13 (texts from class
   info stay as written) is kept for a later version and documented. M12.8: released as `1.8.0`.
 
+### M13 — Repository hygiene after the move to a local repository (no version change)
+
+Requested by the maintainer: since 2026-10-22 the repository is local. There is no hosted remote, no CI and no pull
+requests; commits travel between the development machine and the deployment machine as git bundles, and the CI
+workflow was removed from the whole history. A review of the documents and the code against the repository's
+conventions found:
+
+| Area | Finding | Where |
+|---|---|---|
+| Release flow | Pull requests, green CI, `git push origin` and a GitHub Release described as current steps | `docs/RELEASING.md` §1–§3, PLAN §4–§5, the commands printed by `tools/make_release.sh`, `README.md` "Getting the component folder" |
+| CI claims | A CI matrix and "CI flags" presented as the current verification | SPEC §7, §9.5, §9.6; `docs/api-review.md` |
+| Stale current-state text | Title "(1.0 → 1.2)" and "for Qt 6"; "Draft 3" and "[Assumption]" (the licence is MIT); `Int64` missing from §4.1, §4.3, §4.5, §7; builder setters `live`, `enabledWhen`, `visibleWhen`, `multiline` missing from §4.3; `TypeHandler` without `toJson`/`fromJson` in §4.5; §6.1 without `rc-trial/`; §6.3 "no `.qrc`" against D55 | SPEC (+ `-vi`), `README.md`, `qpb/README.md`, `qpb/CMakeLists.txt` |
+| Plan sections about the present | §1 overview stops at M6; "Open decision" lines whose decisions were taken; §6 and §7 still list settled items (licence, primary data source) | PLAN (+ `-vi`) |
+| Tool names | `tools/check_arch.sh`, `check_arch`, `tools/update_translations`, `tools/api_snapshot` (the files are `tools/check_architecture.cmake`, `tools/update_translations.py`, `tools/api_snapshot.py`) | PLAN, SPEC, `qpb/CMakeLists.txt` |
+| Translations out of step | SPEC-vi lacks the §2 row on the language of code and docs; SPEC-vi D19 and PLAN-vi M3/M4 status lines address the reader instead of naming the maintainer; PLAN-vi §0 has sentences the English lacks; PLAN-vi §5 lacks the language bullet | `docs/SPEC-vi.md`, `docs/PLAN-vi.md` |
+| Translation without an original | `docs/brainstorm-vi.md` has no English file and is written as a working conversation (method names, open questions to the reader) | cited as "Source" by SPEC, PLAN, `README.md` |
+| One fact, several owners | Per-version content in SPEC §8, `README.md`, `qpb/README.md` "Version history" and the changelog; release steps in RELEASING and PLAN §4; `qpb-release` and the consumer commands in `README.md`, SPEC §6.2 and RELEASING | |
+| Comments | A machine path in a usage line; history wording in two tests and one source comment; the script header still says "pushing and uploading" | `tools/update_translations.py`, `tests/widgets/tst_propertyformview.cpp`, `qpb/src/core/PropertyFilterProxyModel.cpp`, `tools/make_release.sh` |
+
+Checked and not affected: every decision, SPEC section and PLAN task cited in code exists and matches its topic;
+`qpb/` is ASCII only (R6) and follows SPEC §6.3; no broken relative links; no code refers to a removed file.
+
+**Principles.**
+1. Documents about the present (SPEC, the README files, RELEASING, PLAN §1 and §4–§7) are corrected.
+2. The milestone sections M0–M12, `docs/rc-trial.md` and `docs/api-review.md` are history and stay as they
+   happened; where they mention the hosted repository or CI they get a short note, not a rewrite.
+3. One owner per fact: per-version content → `qpb/CHANGELOG.md`; release steps → `docs/RELEASING.md`; consumer
+   integration → `qpb/README.md` and SPEC §6. Other documents point there.
+4. File paths stay, so the citations in code keep working.
+5. No public header changes: `tests/api_compat/` and the API snapshots stay untouched.
+
+**Decisions (taken by the maintainer on 2026-10-22):**
+- **D58** Repository and verification: the repository is local; a release is verified by the full `ctest` run with
+  Qt 6 (x64, MSVC 2022 or newer) and Qt 5.15 (MSVC 2019 or 2022) plus 25 Release runs of the widget suites. Linux stays a
+  supported platform but is not built for every release; macOS is no longer supported.
+- **D59** Distribution without a hosted repository: the release zip made by `tools/make_release.sh` stays the default
+  (D47); `git subtree` / `git submodule` of `qpb-release` remain for consumers that have a clone of this repository.
+- **D60** Tracked documentation is English only: the Vietnamese reference translations (`docs/SPEC-vi.md`,
+  `docs/PLAN-vi.md`) and the brainstorm (`docs/brainstorm-vi.md`) leave the tree (the history keeps them); a
+  Vietnamese user manual will be written later, in a milestone of its own. This replaces the second half of D18.
+- Version history in `README.md` and `qpb/README.md`: one line per version, pointing to `qpb/CHANGELOG.md`.
+- Citation forms in code (`docs/SPEC.md §9.5`, `section 9.5`, `SPEC 9.5`) are all valid and stay as they are.
+
+| ID    | Task                                                                                             | h   | Done when |
+|-------|--------------------------------------------------------------------------------------------------|-----|-----------|
+| M13.1 | SPEC Appendix B: D58, D59, D60; D15 marked "narrowed by D55", D18 marked "translations: replaced by D60" | 0.5 | Decisions recorded |
+| M13.2 | SPEC current state: title, status, licence; §2 (Qt 5.15, platforms per D58, language per D60); §4.1, §4.3, §4.5, §7 (`Int64`, builder setters, `TypeHandler` JSON); §6.1 (`rc-trial/`); §6.2 (distribution, D59); §6.3 (`.qrc` exception); §7, §9.5, §9.6 (verification, D58); tool names; no links to the removed translations | 3 | SPEC describes the 1.8.0 code and the local workflow |
+| M13.3 | `docs/RELEASING.md`: local verification, tags, `tools/make_release.sh`, handing the release (tags, `qpb-release`, zip) to the other machine as a bundle; the script prints the same steps and its header no longer mentions pushing | 1.5 | The script, run on a scratch clone, prints the new steps |
+| M13.4 | PLAN: §1 overview M0–M13; §4 points to RELEASING; §5 working agreements without pull requests or CI (branches, Conventional Commits, Definition of Done, the API-change statement moves to the commit message, language per D60); §6 and §7 settled items closed; "Open decision" lines that were settled; tool names; a note in §0 on the local repository; no links to the removed translations | 2 | §1–§7 describe the present |
+| M13.5 | `README.md`, `qpb/README.md`: "Qt 6 and Qt 5.15", platforms (D58), distribution text (D59), version history as one line per version, documentation list without the translations | 1 | No reference to a hosted repository; one owner per fact |
+| M13.6 | Remove `docs/SPEC-vi.md`, `docs/PLAN-vi.md`, `docs/brainstorm-vi.md` (D60); `docs/use-cases.md`, `docs/api-review.md`, `docs/rc-trial.md`: a "historical record" line and present-tense sentences that are no longer true | 1 | Each document says whether it is current or history |
+| M13.7 | Comments: usage line of `tools/update_translations.py`; title and tool name in `qpb/CMakeLists.txt`; `PropertyFilterProxyModel.cpp`; `tst_propertyformview.cpp`; section header in `tests/CMakeLists.txt` | 0.5 | Comments state behaviour, not history |
+| M13.8 | Verification: whole-tree search for machine paths, removed files, links to removed documents and non-ASCII in `qpb/`; `ctest` 41/41 with Qt 6 and Qt 5.15; API snapshots unchanged | 0.5 | Results in the status line |
+
+Total ≈ 10 h. No version change: inside `qpb/` only comments change; they ship with the next release.
+
+**Status:** M13.1–M13.8 done on 2026-10-22 with D58–D60 as decided. The three Vietnamese documents left the tree;
+SPEC describes 1.8.0 (`Int64`, builder setters, `TypeHandler` JSON, the `.qrc` exception, verification per D58,
+distribution per D59); RELEASING and `tools/make_release.sh` describe the local release and the hand-over by bundle
+(`git fetch` of a bundle needs explicit refspecs, now given); PLAN §0, §1, §3–§7 describe the present; inside `qpb/`
+only comments changed (API change: none). Verification: no machine paths, no links to removed documents, `qpb/`
+ASCII only; `ctest` 41/41 with Qt 6.8 (MSVC 2022, x64) and with Qt 5.15 (MSVC 2019, x86); `tests/api_compat/`
+unchanged. The widget Release loop was not repeated: no widget code changed.
+
 ---
 
 ## 3. Task dependencies
@@ -611,51 +689,54 @@ M0.* ─► M1.1 ─► M1.2, M1.3 ─► M1.4 ─► M1.5
 M1.* ─► M2.1 ─► M2.2 ─► M2.3
         M2.4 ─► M2.5 ─► M2.6 ─► M2.7 ─► M2.8
 M2.4 ─► M3.1 ─► M3.2 ─► M3.3 ─► M3.4, M3.5 ─► M3.6 ─► M3.7 ─► M3.8
-M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7 ─► M8 ─► M9 ─► M10 ─► M11 ─► M12
+M3.* ─► M4.* ─► RC ─► 1.0.0 ─► M5 ─► M6 ─► M7 ─► M8 ─► M9 ─► M10 ─► M11 ─► M12 ─► M13
 ```
 
 ---
 
 ## 4. Release process (every 1.x release)
 
-Step-by-step guide and tooling: [`RELEASING.md`](RELEASING.md), `tools/make_release.sh`.
+The steps (version and changelog, verification, `api_compat` file and snapshot for a minor release, tags, the release
+zip and the `qpb-release` branch, handing the result to the other machine) are owned by
+[`RELEASING.md`](RELEASING.md); the verification required for a release is decision D58 (SPEC Appendix B), the
+distribution forms are SPEC §6.2 (D47, D59). The tooling is `tools/make_release.sh`.
 
-1. Update `qpb/VERSION` and add an entry to `qpb/CHANGELOG.md` (Added / Changed / Deprecated / Fixed / **Upgrade notes**).
-2. Green CI: unit tests, `api_compat/*` of **all** previous releases, `tests/consumer`, `check_arch`, API snapshot diff has additions only.
-3. Add `tests/api_compat/v<x_y>.cpp` for the new (minor) release and update the snapshot.
-4. Tag `vX.Y.Z` on `main`.
-5. Produce artifacts: `qpb-X.Y.Z.zip` (the `qpb/` folder only) attached to the GitHub Release; update the `qpb-release` branch
-   (`git subtree split --prefix qpb -b qpb-release`) and tag its tip `qpb-vX.Y.Z`, for consumers using `git subtree` or
-   `git submodule` (SPEC §6.2, D47).
-
-**Consumer side when upgrading:** replace `components/qpb/` (zip, `git subtree pull` or submodule checkout of
-`qpb-vX.Y.Z`) → rebuild → read the *Upgrade notes*. For 1.x the expectation is "nothing to do".
+**Consumer side when upgrading:** replace `components/qpb/` → rebuild → read the *Upgrade notes* in
+`qpb/CHANGELOG.md`. For 1.x the expectation is "nothing to do".
 
 ---
 
 ## 5. Working agreements
 
-- **Branches:** one branch per task/task group, e.g. `feat/M2.4-type-registry`; PR into `main`, squash merge.
-- **Definition of Done for every PR:** warning-free build; tests for new behaviour; `ctest` passes (widgets `offscreen`);
-  no violation of R1–R5 (SPEC §3); new public API has a user.
-- **PRs touching `qpb/include/`:** the description states "API change: none / additive / breaking".
+The repository is local (D58): there are no pull requests and no CI; the agreements below are what a change must
+satisfy before it is committed.
+
+- **Branches:** optional and local, e.g. `feat/M2.4-type-registry`, merged into `main` when the task is done.
+- **Definition of Done for every change:** warning-free build; tests for new behaviour; `ctest` passes with Qt 6 and
+  Qt 5.15 (D58; widgets `offscreen`); when widget code changed, the widget suites also pass the Release loop (25
+  runs, D58); no violation of R1–R6 (SPEC §3, `tools/check_architecture.cmake`); new public API has a user.
+- **Commits touching `qpb/include/`:** the commit message body states "API change: none / additive / breaking".
   After 1.0, "breaking" is rejected unless working on 2.0.
 - **Commits:** Conventional Commits (`feat(core): ...`, `fix(widgets): ...`).
-- **Language:** code, comments, commit messages and docs in English. `-vi` docs are Vietnamese reference translations.
+- **Language:** code, comments, commit messages and docs in English (D60).
 - **No copied code** from QtPropertyBrowser/QtnProperty or differently licensed sources (G7); only their UX behaviour may be referenced.
 
 ---
 
 ## 6. Risks and scope cuts
 
+Rows marked "(past)" were planned for 1.0 and did not occur (1.0.0 shipped after RC rounds 1-3); they are kept as the
+record of what was weighed. The other rows apply to every release.
+
 | Risk                                          | Signal                                         | Response                                                                    |
 |-----------------------------------------------|------------------------------------------------|-----------------------------------------------------------------------------|
-| 1.0 API is wrong but already frozen            | Workarounds needed in the real project during RC | Extend RC; do not tag 1.0 while in doubt. After 1.0: add new API + deprecate the old |
-| Schedule slip                                  | M3.6 not done by end of week 5                 | Cut from 1.0 (re-adding in 1.x is *additive*, not breaking): DirPath → Tab navigation → shared build. **Never** cut M1, M4.4–M4.6 |
-| Editor UX needs deep hacks                     | M3.4/M3.6 exceed 2× estimate                   | Decision point at end of M3.6                                               |
-| Unusual consumer CMake setup breaks the build  | RC.1 CMake errors                              | Add the case to `tests/consumer`, fix `qpb/CMakeLists.txt`                  |
-| `TreeObserver` causes index bugs               | `QAbstractItemModelTester` fails               | 1.0 only allows structural changes via `setRoot`; runtime add/remove becomes additive in 1.1 (the `add/remove` API already exists; the limitation is documented) |
-| Native dialogs differ across OSes              | Editor closes when the dialog opens on Windows/macOS | Fallback: close the editor before opening the dialog; write the result via `model->setData` |
+| 1.0 API is wrong but already frozen (past)     | Workarounds needed in the reference scenarios during RC | Extend RC; do not tag 1.0 while in doubt. After 1.0: add new API + deprecate the old. Outcome: no API change was needed after rc2 |
+| Schedule slip (past)                           | M3.6 not done by end of week 5                 | Cut from 1.0 (re-adding in 1.x is *additive*, not breaking): DirPath → Tab navigation → shared build. **Never** cut M1, M4.4–M4.6. Outcome: nothing was cut |
+| Editor UX needs deep hacks (past)              | M3.4/M3.6 exceed 2× estimate                   | Decision point at end of M3.6. Outcome: it did not trigger (M3 status)       |
+| Unusual consumer CMake setup breaks the build  | CMake errors in `tests/consumer` or in a consuming project | Add the case to `tests/consumer`, fix `qpb/CMakeLists.txt`      |
+| `TreeObserver` causes index bugs (past)        | `QAbstractItemModelTester` fails               | 1.0 only allows structural changes via `setRoot`; runtime add/remove becomes additive in 1.1 (the `add/remove` API already exists; the limitation is documented). Outcome: runtime add/remove works under the tester since M2.7 |
+| Native dialogs differ across OSes              | Editor closes when the dialog opens on Windows (or another platform) | Fallback: close the editor before opening the dialog; write the result via `model->setData` |
+| A change breaks an old consumer                | `tests/api_compat/*` or the API snapshot comparison fails | Fix the change, not the old test or snapshot (SPEC §9.2)           |
 
 ---
 
@@ -667,8 +748,9 @@ Step-by-step guide and tooling: [`RELEASING.md`](RELEASING.md), `tools/make_rele
 | Minimum Qt?                               | **Settled: 6.5**; Qt 5.15 as a second configuration from 1.7 (M11, D53) |
 | Namespace / target names / include prefix | **Settled: `qpb`, `qpb::core`, `qpb::widgets`, `<qpb/...>`** |
 | Build system of consuming projects        | **Settled: CMake only**                         |
-| Language of code and docs                 | **Settled: English** (`-vi` files for reference)|
-| How consumers sync the component folder   | **Settled:** release zip (default), `git subtree` or `git submodule` from `qpb-release`, pinned by `qpb-vX.Y.Z` tags (SPEC §6.2, D47) |
-| License                                   | Open — assumed MIT                              |
+| Language of code and docs                 | **Settled: English** (D60; tracked docs are English only) |
+| How consumers sync the component folder   | **Settled:** release zip (default), `git subtree` or `git submodule` from `qpb-release` for consumers with a clone of this repository, pinned by `qpb-vX.Y.Z` tags (SPEC §6.2, D47, D59) |
+| Hosted repository, CI, pull requests      | **Settled: none** (D58); the repository is local and changes travel as git bundles |
+| License                                   | **Settled: MIT**                                |
 | Meaning of "custom property table"        | **Settled:** users build their own property tables with the library's public API (G1, G3); no extra concept |
-| Primary data source                       | Open — assumed explicit builder; settle before M1.3 |
+| Primary data source                       | **Settled: explicit builder** (G1, SPEC §4.3); `QObjectPropertySource` (1.2) is an addition on top |
