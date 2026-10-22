@@ -8,6 +8,7 @@
 #include <QComboBox>
 #include <QContextMenuEvent>
 #include <QDoubleSpinBox>
+#include <QIdentityProxyModel>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
@@ -123,6 +124,97 @@ struct Fixture
     QLineEdit* other = nullptr;
 };
 
+// A proxy that annotates cells, like an application's layer of marks: the
+// foreground and the tool tip of each path are set by the test, everything
+// else comes from the source model. It can signal dataChanged for a row, a
+// cell or the whole tree without any value having changed.
+class MarkProxy : public QIdentityProxyModel
+{
+public:
+    void setForeground(const QString& path, int column, const QVariant& foreground)
+    {
+        if (foreground.isValid())
+            m_foregrounds.insert({path, column}, foreground);
+        else
+            m_foregrounds.remove({path, column});
+    }
+
+    void setToolTip(const QString& path, const QString& toolTip)
+    {
+        m_toolTips.insert(path, toolTip);
+    }
+
+    // dataChanged for the whole row of path (all columns).
+    void refresh(const QString& path, const QVector<int>& roles)
+    {
+        const QModelIndex first = indexOfPath(path, 0);
+        Q_ASSERT(first.isValid());
+        emit dataChanged(first, first.siblingAtColumn(columnCount(first.parent()) - 1), roles);
+    }
+
+    // dataChanged for one cell.
+    void refreshCell(const QString& path, int column, const QVector<int>& roles)
+    {
+        const QModelIndex cell = indexOfPath(path, column);
+        Q_ASSERT(cell.isValid());
+        emit dataChanged(cell, cell, roles);
+    }
+
+    // dataChanged for every row under parent, one signal per level (a proxy
+    // that refreshes all its marks).
+    void refreshAll(const QVector<int>& roles, const QModelIndex& parent = QModelIndex())
+    {
+        const int count = rowCount(parent);
+        if (count == 0)
+            return;
+        emit dataChanged(
+            index(0, 0, parent), index(count - 1, columnCount(parent) - 1, parent), roles);
+        for (int row = 0; row < count; ++row)
+            refreshAll(roles, index(row, 0, parent));
+    }
+
+    QVariant data(const QModelIndex& index, int role) const override
+    {
+        if (role == Qt::ForegroundRole || role == Qt::ToolTipRole) {
+            const QString path
+                = QIdentityProxyModel::data(index.siblingAtColumn(0), PropertyModel::PathRole)
+                      .toString();
+            if (role == Qt::ForegroundRole) {
+                const auto it = m_foregrounds.constFind({path, index.column()});
+                if (it != m_foregrounds.constEnd())
+                    return it.value();
+            } else if (index.column() == 0 && m_toolTips.contains(path)) {
+                return m_toolTips.value(path);
+            }
+        }
+        return QIdentityProxyModel::data(index, role);
+    }
+
+private:
+    QModelIndex indexOfPath(
+        const QString& path, int column, const QModelIndex& parent = QModelIndex()) const
+    {
+        const int count = rowCount(parent);
+        for (int row = 0; row < count; ++row) {
+            const QModelIndex name = index(row, 0, parent);
+            if (QIdentityProxyModel::data(name, PropertyModel::PathRole).toString() == path)
+                return name.siblingAtColumn(column);
+            const QModelIndex found = indexOfPath(path, column, name);
+            if (found.isValid())
+                return found;
+        }
+        return QModelIndex();
+    }
+
+    QMap<QPair<QString, int>, QVariant> m_foregrounds;
+    QHash<QString, QString> m_toolTips;
+};
+
+QVariant brushOf(const QColor& color)
+{
+    return QVariant::fromValue(QBrush(color));
+}
+
 // Opens the context menu of widget and triggers its only action if enabled.
 // Returns whether the action was enabled.
 bool resetFromMenu(QWidget* widget)
@@ -174,9 +266,19 @@ private slots:
     void styleSheetSelectors();
     void styleSheetRulesApply();
     void boldSurvivesApplicationStyleSheet();
+    void normalisedCommitShowsModelValue();
+    void dataChangedKeepsFocusAndTypedText_data();
+    void dataChangedKeepsFocusAndTypedText();
+    void valueChangeAndRevertWithTypedText();
+    void dataChangedForRangesAndWholeTree();
+    void attributeChangeResyncsAdjustedEditor();
 
 private:
+    // Shows the form through a MarkProxy over the fixture's model.
+    MarkProxy* useProxy();
+
     std::unique_ptr<Fixture> f;
+    std::unique_ptr<MarkProxy> markProxy;
 };
 
 void tst_PropertyFormView::init()
@@ -190,6 +292,15 @@ void tst_PropertyFormView::cleanup()
     qApp->setStyleSheet(QString());
     detail::PathEdit::setDialogProviderForTesting({});
     f.reset();
+    markProxy.reset();
+}
+
+MarkProxy* tst_PropertyFormView::useProxy()
+{
+    markProxy = std::make_unique<MarkProxy>();
+    markProxy->setSourceModel(&f->model);
+    f->view->setModel(markProxy.get());
+    return markProxy.get();
 }
 
 void tst_PropertyFormView::editorsForEveryProperty()
@@ -681,6 +792,246 @@ void tst_PropertyFormView::boldSurvivesApplicationStyleSheet()
     qApp->setStyleSheet(QStringLiteral("QLabel { color: #c0c4ca; }"));
     QTRY_VERIFY(name->font().bold());
     QVERIFY(!visible->font().bold());
+}
+
+// An accepted value that the model normalises to what it holds sends no
+// signal; the editor still shows the model's value afterwards.
+void tst_PropertyFormView::normalisedCommitShowsModelValue()
+{
+    const QString typeId = QStringLiteral("test.form.trimmed");
+    if (!TypeRegistry::global().contains(typeId)) {
+        TypeHandler type;
+        type.normalize = [](const QVariant& value, const Property&) {
+            return QVariant(value.toString().trimmed());
+        };
+        QVERIFY(TypeRegistry::global().registerType<QString>(typeId, type));
+    }
+    if (!EditorFactory::global().contains(typeId)) {
+        EditorHandler handler;
+        handler.createEditor
+            = [](QWidget* parent, const Property&) { return new QLineEdit(parent); };
+        handler.setEditorData = [](QWidget* editor, const QVariant& value, const Property&) {
+            static_cast<QLineEdit*>(editor)->setText(value.toString());
+        };
+        handler.editorData = [](QWidget* editor, const Property&) {
+            return QVariant(static_cast<QLineEdit*>(editor)->text());
+        };
+        QVERIFY(EditorFactory::global().registerEditor(typeId, handler));
+    }
+    f->model.root()->add(typeId, QStringLiteral("tag"), QStringLiteral("abc"));
+    auto* tag = f->editor<QLineEdit>(QStringLiteral("tag"));
+    QVERIFY(tag);
+    QCOMPARE(tag->text(), QStringLiteral("abc"));
+    QSignalSpy changed(&f->model, &PropertyModel::valueChanged);
+
+    // Enter.
+    tag->setFocus();
+    tag->setText(QStringLiteral("  abc  "));
+    QTest::keyClick(tag, Qt::Key_Return);
+    QTRY_COMPARE(tag->text(), QStringLiteral("abc"));
+    QCOMPARE(f->stored(QStringLiteral("tag")), QVariant(QStringLiteral("abc")));
+    QCOMPARE(changed.count(), 0);
+
+    // Focus out.
+    tag->setText(QStringLiteral(" abc"));
+    f->other->setFocus();
+    QTRY_COMPARE(tag->text(), QStringLiteral("abc"));
+    QCOMPARE(changed.count(), 0);
+
+    // A value that does change is committed and shown normalised.
+    tag->setFocus();
+    tag->setText(QStringLiteral("  xyz "));
+    QTest::keyClick(tag, Qt::Key_Return);
+    QTRY_COMPARE(f->stored(QStringLiteral("tag")), QVariant(QStringLiteral("xyz")));
+    QCOMPARE(tag->text(), QStringLiteral("xyz"));
+    QCOMPARE(changed.count(), 1);
+}
+
+// A dataChanged that does not change the value must not replace what the user
+// is typing, and must not move the focus.
+void tst_PropertyFormView::dataChangedKeepsFocusAndTypedText_data()
+{
+    QTest::addColumn<int>("scope"); // 0: the row with roles, 1: no role list, 2: whole tree
+    QTest::newRow("rowWithColourAndToolTipRoles") << 0;
+    QTest::newRow("rowWithoutRoleList") << 1;
+    QTest::newRow("wholeTreeWithoutRoleList") << 2;
+}
+
+void tst_PropertyFormView::dataChangedKeepsFocusAndTypedText()
+{
+    QFETCH(int, scope);
+    MarkProxy* marks = useProxy();
+    const auto refresh = [scope](MarkProxy* proxy) {
+        if (scope == 0)
+            proxy->refresh(QStringLiteral("name"), {Qt::ForegroundRole, Qt::ToolTipRole});
+        else if (scope == 1)
+            proxy->refresh(QStringLiteral("name"), {});
+        else
+            proxy->refreshAll({});
+    };
+    f->window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&f->window));
+    auto* name = f->editor<QLineEdit>(QStringLiteral("name"));
+    QLabel* label = f->label(QStringLiteral("name"));
+    QSignalSpy changed(&f->model, &PropertyModel::valueChanged);
+
+    name->setFocus();
+    QTRY_COMPARE(QApplication::focusWidget(), name);
+    QTest::keyClicks(name, QStringLiteral("abc"));
+    QCOMPARE(name->text(), QStringLiteral("Mainabc"));
+
+    const auto expectIntact = [&](const QString& toolTip) {
+        QCOMPARE(name->text(), QStringLiteral("Mainabc"));
+        QCOMPARE(QApplication::focusWidget(), name);
+        QCOMPARE(label->toolTip(), toolTip);
+        QCOMPARE(name->toolTip(), toolTip);
+        QCOMPARE(changed.count(), 0); // nothing was committed
+        QCOMPARE(f->stored(QStringLiteral("name")), QVariant(QStringLiteral("Main")));
+    };
+
+    // Twice, so that annotations already applied are replaced while typing too.
+    marks->setForeground(QStringLiteral("name"), 0, brushOf(Qt::red));
+    marks->setToolTip(QStringLiteral("name"), QStringLiteral("first"));
+    refresh(marks);
+    expectIntact(QStringLiteral("first"));
+    if (QTest::currentTestFailed())
+        return;
+    marks->setForeground(QStringLiteral("name"), 0, brushOf(Qt::green));
+    marks->setToolTip(QStringLiteral("name"), QStringLiteral("second"));
+    refresh(marks);
+    expectIntact(QStringLiteral("second"));
+    if (QTest::currentTestFailed())
+        return;
+
+    // Leaving the editor still commits what was typed.
+    f->other->setFocus();
+    QTRY_COMPARE(f->stored(QStringLiteral("name")), QVariant(QStringLiteral("Mainabc")));
+}
+
+// A change of the value itself replaces the text, an Escape restores the
+// model's value, and a rejected value is replaced too.
+void tst_PropertyFormView::valueChangeAndRevertWithTypedText()
+{
+    MarkProxy* marks = useProxy();
+    f->window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&f->window));
+    auto* name = f->editor<QLineEdit>(QStringLiteral("name"));
+    name->setFocus();
+    QTRY_COMPARE(QApplication::focusWidget(), name);
+
+    QTest::keyClicks(name, QStringLiteral("abc"));
+    QVERIFY(f->model.setValue(QStringLiteral("name"), QStringLiteral("Ext")));
+    QCOMPARE(name->text(), QStringLiteral("Ext"));
+
+    // Escape: back to the model's value, even after a refresh in between.
+    QTest::keyClicks(name, QStringLiteral("x"));
+    marks->refreshAll({});
+    QCOMPARE(name->text(), QStringLiteral("Extx"));
+    QTest::keyClick(name, Qt::Key_Escape);
+    QCOMPARE(name->text(), QStringLiteral("Ext"));
+    QTest::keyClicks(name, QStringLiteral("y"));
+    marks->refreshAll({});
+    QCOMPARE(name->text(), QStringLiteral("Exty"));
+
+    // Rejected: the model's value is shown again, then typing survives a refresh.
+    QSignalSpy failed(&f->model, &PropertyModel::validationFailed);
+    name->setText(QStringLiteral("forbidden"));
+    QTest::keyClick(name, Qt::Key_Return);
+    QTRY_COMPARE(failed.count(), 1);
+    QCOMPARE(name->text(), QStringLiteral("Ext"));
+    QTest::keyClicks(name, QStringLiteral("z"));
+    marks->refreshAll({});
+    QCOMPARE(name->text(), QStringLiteral("Extz"));
+    QTest::keyClick(name, Qt::Key_Return);
+    QTRY_COMPARE(f->stored(QStringLiteral("name")), QVariant(QStringLiteral("Extz")));
+    marks->refreshAll({});
+    QCOMPARE(name->text(), QStringLiteral("Extz"));
+
+    // A value changed from outside replaces text typed after the last commit.
+    QTest::keyClicks(name, QStringLiteral("!"));
+    QVERIFY(f->model.setValue(QStringLiteral("name"), QStringLiteral("Main")));
+    QCOMPARE(name->text(), QStringLiteral("Main"));
+}
+
+// A proxy that refreshes all its marks, or only one cell, reaches every row,
+// groups and nested properties included: labels, section titles and tool tips
+// follow, values change only where the model's value changed.
+void tst_PropertyFormView::dataChangedForRangesAndWholeTree()
+{
+    MarkProxy* marks = useProxy();
+    f->window.activateWindow();
+    QVERIFY(QTest::qWaitForWindowActive(&f->window));
+    auto* name = f->editor<QLineEdit>(QStringLiteral("name"));
+    auto* fov = f->editor<QSpinBox>(QStringLiteral("Camera/fov"));
+    auto* x = f->editor<QDoubleSpinBox>(QStringLiteral("Transform/x"));
+    QToolButton* transform = f->title(QStringLiteral("Transform"));
+    QVERIFY(name && fov && x && transform);
+
+    // The whole tree: a top-level row, a nested row, a group and a row of
+    // another group. The user is typing in two editors meanwhile.
+    name->setFocus();
+    QTRY_COMPARE(QApplication::focusWidget(), name);
+    QTest::keyClicks(name, QStringLiteral("abc"));
+    x->setValue(7.5);
+    marks->setToolTip(QStringLiteral("name"), QStringLiteral("name tip"));
+    marks->setToolTip(QStringLiteral("Transform/x"), QStringLiteral("x tip"));
+    marks->setToolTip(QStringLiteral("Transform"), QStringLiteral("group tip"));
+    marks->setToolTip(QStringLiteral("Camera/fov"), QStringLiteral("range tip"));
+    marks->setForeground(QStringLiteral("Transform"), 0, brushOf(Qt::green));
+    marks->refreshAll({});
+
+    QCOMPARE(f->label(QStringLiteral("name"))->toolTip(), QStringLiteral("name tip"));
+    QCOMPARE(f->label(QStringLiteral("Transform/x"))->toolTip(), QStringLiteral("x tip"));
+    QCOMPARE(transform->toolTip(), QStringLiteral("group tip"));
+    QCOMPARE(f->label(QStringLiteral("Camera/fov"))->toolTip(), QStringLiteral("range tip"));
+    QCOMPARE(fov->toolTip(), QStringLiteral("range tip"));
+    QCOMPARE(name->text(), QStringLiteral("Mainabc"));
+    QCOMPARE(x->value(), 7.5);
+    QCOMPARE(fov->value(), 60);
+    QCOMPARE(QApplication::focusWidget(), name);
+
+    // A range over the value column only reaches the row's label as well.
+    marks->setToolTip(QStringLiteral("Transform/x"), QStringLiteral("x tip 2"));
+    marks->refreshCell(QStringLiteral("Transform/x"), PropertyModel::ValueColumn, {});
+    QCOMPARE(f->label(QStringLiteral("Transform/x"))->toolTip(), QStringLiteral("x tip 2"));
+    QCOMPARE(x->toolTip(), QStringLiteral("x tip 2"));
+    QCOMPARE(x->value(), 7.5);
+    QCOMPARE(name->text(), QStringLiteral("Mainabc"));
+    QCOMPARE(f->label(QStringLiteral("name"))->toolTip(), QStringLiteral("name tip"));
+
+    // A value that changed in the model is shown; the other editors are left
+    // alone, also when everything is refreshed once more.
+    QVERIFY(f->model.setValue(QStringLiteral("Camera/fov"), 90));
+    marks->refreshAll({});
+    QCOMPARE(fov->value(), 90);
+    QCOMPARE(x->value(), 7.5);
+    QCOMPARE(name->text(), QStringLiteral("Mainabc"));
+    QCOMPARE(QApplication::focusWidget(), name);
+    QCOMPARE(f->stored(QStringLiteral("name")), QVariant(QStringLiteral("Main")));
+    QCOMPARE(f->stored(QStringLiteral("Transform/x")), QVariant(0.0));
+}
+
+// An attribute change can make an editor adjust its own value (a narrower
+// range clamps a spin box); when the attributes change again the editor shows
+// the model's value again, although the model's value itself never changed.
+void tst_PropertyFormView::attributeChangeResyncsAdjustedEditor()
+{
+    const QString path = QStringLiteral("Camera/fov"); // int, range 10..170
+    auto* fov = f->editor<QSpinBox>(path);
+    QVERIFY(fov);
+    QVERIFY(f->model.setValue(path, 90));
+    QCOMPARE(fov->value(), 90);
+
+    Property* property = f->model.find(path);
+    property->setAttribute(Attr::Maximum, 50);
+    QCOMPARE(fov->maximum(), 50);
+    QCOMPARE(fov->value(), 50); // clamped by the editor
+    QCOMPARE(f->stored(path), QVariant(90)); // the model keeps its value
+
+    property->setAttribute(Attr::Maximum, 200);
+    QCOMPARE(fov->maximum(), 200);
+    QCOMPARE(fov->value(), 90);
+    QCOMPARE(f->stored(path), QVariant(90));
 }
 
 QTEST_MAIN(tst_PropertyFormView)

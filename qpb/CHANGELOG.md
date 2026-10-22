@@ -6,6 +6,14 @@ All notable changes to qpb are documented here. Each release has the sections
 From 1.0.0 on, releases within a major version never require changes to consuming code or CMake.
 Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC trial shows a problem.
 
+## Unreleased
+
+### Fixed
+- `PropertyFormView` editors keep the text being typed when the model reports a change that leaves the
+  value as it was: another role such as the tool tip, a `dataChanged()` without roles, or a whole range. An editor
+  is written only when the model's value changed, or after its attributes were applied again. A value the user
+  commits that the model normalises to the value it already held (no signal follows) is shown as the model holds it.
+
 ## 1.8.0 - 2026-10-21
 
 Eighth feature release of 1.x: additions only; code written for 1.0-1.7 builds and behaves the same. Without a qpb
