@@ -45,6 +45,8 @@ struct FormRow
     bool hasEditor = false;
     QFormLayout* form = nullptr;
     QVariant attributes; // last attributes applied to the editor
+    QVariant shown; // the model's value last written into the editor
+    bool hasShown = false; // shown holds a value (it may be a null variant)
     // Groups.
     QWidget* section = nullptr;
     QToolButton* title = nullptr;
@@ -321,13 +323,22 @@ public:
             return;
         const QSignalBlocker blocker(row.editor);
         const QVariant attributes = name.data(PropertyModel::AttributesRole);
+        bool attributesApplied = false;
         if (handler->applyAttributes && attributes != row.attributes) {
             row.attributes = attributes;
             handler->applyAttributes(row.editor, *property);
+            attributesApplied = true; // the editor may have adjusted its value
         }
+        // Only a change of the value itself (or of the attributes) replaces the
+        // editor's content. Any other dataChanged (another role, a signal without
+        // roles, a whole range) must not wipe the text the user is typing.
         const QVariant current = value.data(Qt::EditRole);
-        if (handler->editorData(row.editor, *property) != current)
-            handler->setEditorData(row.editor, current, *property);
+        if (attributesApplied || !row.hasShown || current != row.shown) {
+            row.shown = current;
+            row.hasShown = true;
+            if (handler->editorData(row.editor, *property) != current)
+                handler->setEditorData(row.editor, current, *property);
+        }
     }
 
     void dataChanged(const QModelIndex& topLeft, const QModelIndex& bottomRight)
@@ -368,7 +379,9 @@ public:
     }
 
     // Writes the editor's value through the model (R3). A rejected value is
-    // replaced by the model's value and the reason is shown as a tool tip.
+    // replaced by the model's value and the reason is shown as a tool tip. An
+    // accepted value that the model normalised to what it already holds sends
+    // no signal, so the editor is brought back to the model's value here.
     void commit(FormRow* row)
     {
         if (rebuilding || !row || !row->hasEditor || !model || !row->index.isValid())
@@ -396,12 +409,26 @@ public:
         const QPointer<QWidget> guard(editor);
         const bool accepted = model->setData(value, edited, Qt::EditRole);
         disconnect(connection);
-        if (accepted || before != generation || !guard)
+        if (before != generation || !guard)
             return;
+        if (accepted) {
+            if (dirty || !row->index.isValid())
+                return; // the tree changed: a rebuild reads the model again
+            const QVariant current = value.data(Qt::EditRole);
+            row->shown = current;
+            row->hasShown = true;
+            if (handler->editorData(editor, *property) != current) {
+                const QSignalBlocker blocker(editor);
+                handler->setEditorData(editor, current, *property);
+            }
+            return;
+        }
 
         {
             const QSignalBlocker blocker(editor);
-            handler->setEditorData(editor, value.data(Qt::EditRole), *property);
+            row->shown = value.data(Qt::EditRole);
+            row->hasShown = true;
+            handler->setEditorData(editor, row->shown, *property);
         }
         if (!error.isEmpty())
             QToolTip::showText(editor->mapToGlobal(QPoint(0, editor->height())), error, editor);
@@ -427,7 +454,9 @@ public:
         if (const EditorHandler* handler
             = property ? EditorFactory::global().handlerFor(*property) : nullptr) {
             const QSignalBlocker blocker(row->editor);
-            handler->setEditorData(row->editor, value.data(Qt::EditRole), *property);
+            row->shown = value.data(Qt::EditRole);
+            row->hasShown = true;
+            handler->setEditorData(row->editor, row->shown, *property);
         }
     }
 
