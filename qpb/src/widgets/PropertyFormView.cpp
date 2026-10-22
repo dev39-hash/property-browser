@@ -7,6 +7,8 @@
 #include <QtCore/qpointer.h>
 #include <QtCore/qset.h>
 #include <QtCore/qtimer.h>
+#include <QtGui/qbrush.h>
+#include <QtGui/qcolor.h>
 #include <QtGui/qevent.h>
 #include <QtWidgets/qabstractbutton.h>
 #include <QtWidgets/qabstractspinbox.h>
@@ -47,6 +49,8 @@ struct FormRow
     QVariant attributes; // last attributes applied to the editor
     QVariant shown; // the model's value last written into the editor
     bool hasShown = false; // shown holds a value (it may be a null variant)
+    // Leaves and groups.
+    QColor foreground; // the model's colour applied to the label or title; invalid: none
     // Groups.
     QWidget* section = nullptr;
     QToolButton* title = nullptr;
@@ -111,6 +115,58 @@ void updateEmphasis(QWidget* widget)
     } else if (widget->testAttribute(Qt::WA_SetFont)) {
         widget->setFont(QFont()); // inherit again
     }
+}
+
+// The colour the model gives a row: the foreground of the name cell, else of
+// the value cell (a proxy may colour either). A brush holds a colour unless it
+// has no style or is a gradient or a texture (those have no single colour); an
+// invalid colour holds none either. The result is then invalid.
+QColor modelForeground(const QModelIndex& name, const QModelIndex& value)
+{
+    for (const QModelIndex& cell : {name, value}) {
+        const QVariant data = cell.data(Qt::ForegroundRole);
+        if (data.userType() == QMetaType::QBrush) {
+            const QBrush brush = data.value<QBrush>();
+            const Qt::BrushStyle style = brush.style();
+            const bool plain = style != Qt::NoBrush && style != Qt::LinearGradientPattern
+                && style != Qt::RadialGradientPattern && style != Qt::ConicalGradientPattern
+                && style != Qt::TexturePattern;
+            if (plain && brush.color().isValid())
+                return brush.color();
+        } else if (data.userType() == QMetaType::QColor) {
+            const QColor color = data.value<QColor>();
+            if (color.isValid())
+                return color;
+        }
+    }
+    return QColor();
+}
+
+// Shows the model's colour on a label or section title. It is set as the
+// widget's own style sheet: an application style sheet overrides a palette
+// when the widget paints, but not a rule of the widget itself. `:enabled`
+// leaves a disabled label with the colour it has without the model's. Without a colour
+// the sheet is removed, so the style and the application sheet apply again.
+// A style sheet polishes the widget, so it is set only when the colour
+// changed.
+void applyForeground(QWidget* widget, const char* className, QColor& applied, const QColor& wanted)
+{
+    if (applied == wanted)
+        return;
+    applied = wanted;
+    if (!wanted.isValid()) {
+        widget->setStyleSheet(QString());
+        return;
+    }
+    // The alpha of rgba() in a style sheet runs from 0 to 255. A style sheet may
+    // read an integer alpha of 1 as the fraction 1.0 (opaque); only alpha 1 of
+    // 255 is affected, and such text is invisible anyway.
+    widget->setStyleSheet(QStringLiteral("%1:enabled { color: rgba(%2, %3, %4, %5); }")
+                              .arg(QLatin1String(className))
+                              .arg(wanted.red())
+                              .arg(wanted.green())
+                              .arg(wanted.blue())
+                              .arg(wanted.alpha()));
 }
 
 } // namespace
@@ -280,6 +336,41 @@ public:
 
     // --- Model to view -----------------------------------------------------------
 
+    // Applies the model's colour to the label or title of a row, or removes it
+    // while showModelForeground is off. The bold weight is set again after, as
+    // the style sheet that carries the colour resets the font of the widget.
+    void updateForeground(FormRow& row)
+    {
+        const QModelIndex name = row.index;
+        if (!name.isValid())
+            return;
+        const QColor wanted = showForeground
+            ? modelForeground(name, name.siblingAtColumn(PropertyModel::ValueColumn))
+            : QColor();
+        QWidget* widget = row.section ? static_cast<QWidget*>(row.title) : row.label;
+        applyForeground(widget, row.section ? "QToolButton" : "QLabel", row.foreground, wanted);
+        updateEmphasis(widget);
+    }
+
+    // A style sheet can switch the property on while it polishes the view. The
+    // widgets that get their colour in that pass keep the palette of the
+    // application's sheet; polishing them again once control returns to the
+    // event loop applies their own rule.
+    void scheduleForegroundPolish()
+    {
+        QTimer::singleShot(0, this, [this, built = generation] {
+            if (built != generation || !showForeground)
+                return; // rebuilt since: the new widgets were coloured when created
+            for (const std::unique_ptr<FormRow>& row : rows) {
+                if (!row->foreground.isValid())
+                    continue;
+                QWidget* widget = row->section ? static_cast<QWidget*>(row->title) : row->label;
+                repolish(widget);
+                updateEmphasis(widget);
+            }
+        });
+    }
+
     void updateRow(FormRow& row)
     {
         const QModelIndex name = row.index;
@@ -295,6 +386,7 @@ public:
             row.section->setVisible(visible);
             row.title->setText(displayName);
             row.title->setToolTip(toolTip);
+            updateForeground(row);
             return;
         }
 
@@ -307,7 +399,7 @@ public:
             row.label->setProperty(StyleModifiedProperty, modified);
             repolish(row.label); // rules for [qpbModified="true"] apply at once
         }
-        updateEmphasis(row.label);
+        updateForeground(row);
 
         if (!row.hasEditor) {
             static_cast<QLabel*>(row.editor)->setText(value.data(Qt::DisplayRole).toString());
@@ -551,6 +643,7 @@ public:
     quint64 generation = 0; // incremented by every rebuild
     bool dirty = false; // a structural change has not been applied yet
     bool rebuildScheduled = false;
+    bool showForeground = false; // showModelForeground
     bool rebuilding = false; // also set while the view is destroyed
 };
 
@@ -608,6 +701,24 @@ QWidget* PropertyFormView::editor(const QString& path) const
     d->ensureBuilt();
     const detail::FormRow* row = d->byPath.value(path);
     return row ? row->editor : nullptr;
+}
+
+bool PropertyFormView::showModelForeground() const
+{
+    return d->showForeground;
+}
+
+void PropertyFormView::setShowModelForeground(bool show)
+{
+    if (d->showForeground == show)
+        return;
+    d->showForeground = show;
+    if (d->dirty)
+        return; // the pending rebuild reads the flag
+    for (const std::unique_ptr<detail::FormRow>& row : d->rows)
+        d->updateForeground(*row);
+    if (show)
+        d->scheduleForegroundPolish();
 }
 
 bool PropertyFormView::isExpanded(const QString& groupPath) const

@@ -6,7 +6,7 @@
 # Qt 5 has no equivalent. v1_0 uses those parts in their
 # Qt 6 form, so it is built with Qt 6 only; qt5_v1_7 freezes their Qt 5 form.
 
-set(_qpb_compat_files v1_0 v1_1 v1_2 v1_3 v1_4 v1_5 v1_6 v1_8)
+set(_qpb_compat_files v1_0 v1_1 v1_2 v1_3 v1_4 v1_5 v1_6 v1_8 v1_9)
 if(QT_VERSION_MAJOR EQUAL 5)
     list(REMOVE_ITEM _qpb_compat_files v1_0)
     list(APPEND _qpb_compat_files qt5_v1_7)

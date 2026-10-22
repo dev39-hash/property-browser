@@ -8,6 +8,12 @@ Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC tria
 
 ## Unreleased
 
+### Added
+- `PropertyFormView::showModelForeground` (a `Q_PROPERTY`, off by default; `qproperty-showModelForeground` in a style
+  sheet): labels and section titles show the model's `Qt::ForegroundRole` colour, also while a section is collapsed.
+  The colour is taken from the name cell, else the value cell; it follows `dataChanged()` and wins over a `color` of
+  the application style sheet (`doc/guide/views.md`, `doc/guide/style-sheets.md`).
+
 ### Fixed
 - `PropertyFormView` editors keep the text being typed when the model reports a change that leaves the
   value as it was: another role such as the tool tip, a `dataChanged()` without roles, or a whole range. An editor

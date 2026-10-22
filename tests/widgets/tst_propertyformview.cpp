@@ -4,6 +4,7 @@
 
 #include <QAction>
 #include <QApplication>
+#include <QBrush>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QContextMenuEvent>
@@ -12,6 +13,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QPixmap>
 #include <QPlainTextEdit>
 #include <QPointer>
 #include <QPushButton>
@@ -273,9 +275,32 @@ private slots:
     void dataChangedForRangesAndWholeTree();
     void attributeChangeResyncsAdjustedEditor();
 
+    void foregroundIsOffByDefault();
+    void turningOnColoursExistingRowsAtOnce();
+    void turningOffRemovesEveryColour();
+    void turningOffRestoresApplicationSheet();
+    void styleSheetTurnsOnModelForeground();
+    void foregroundSurvivesRebuild();
+    void collapsedSectionTitleShowsColour();
+    void foregroundColoursLabel();
+    void foregroundFallsBackToValueColumn();
+    void foregroundIgnoresGradientAndTextureBrushes();
+    void foregroundKeepsAlpha();
+    void noForegroundChangesNothing();
+    void clearedForegroundRestoresLabelColour();
+    void clearedForegroundRestoresModifiedRule();
+    void foregroundColoursSectionTitle();
+    void foregroundWinsOverApplicationSheet();
+    void disabledLabelKeepsDisabledColour();
+    void foregroundIsAppliedOnlyWhenChanged();
+    void turningOnWhileRebuildIsPendingColoursEveryRow();
+    void queuedPolishAfterTurningOnIsHarmless();
+
 private:
     // Shows the form through a MarkProxy over the fixture's model.
     MarkProxy* useProxy();
+    // The same, with the model's foreground colours turned on first.
+    MarkProxy* useForegroundProxy();
 
     std::unique_ptr<Fixture> f;
     std::unique_ptr<MarkProxy> markProxy;
@@ -301,6 +326,12 @@ MarkProxy* tst_PropertyFormView::useProxy()
     markProxy->setSourceModel(&f->model);
     f->view->setModel(markProxy.get());
     return markProxy.get();
+}
+
+MarkProxy* tst_PropertyFormView::useForegroundProxy()
+{
+    f->view->setShowModelForeground(true);
+    return useProxy();
 }
 
 void tst_PropertyFormView::editorsForEveryProperty()
@@ -1032,6 +1063,943 @@ void tst_PropertyFormView::attributeChangeResyncsAdjustedEditor()
     QCOMPARE(fov->maximum(), 200);
     QCOMPARE(fov->value(), 90);
     QCOMPARE(f->stored(path), QVariant(90));
+}
+
+namespace {
+
+const QColor kMark(0x00, 0xc0, 0xff);
+const QVector<int> kForegroundRole{Qt::ForegroundRole};
+
+QVariant colorOf(const QColor& color)
+{
+    return QVariant::fromValue(color);
+}
+
+QColor labelColor(const QLabel* label)
+{
+    return label->palette().color(QPalette::WindowText);
+}
+
+QColor titleColor(const QToolButton* title)
+{
+    return title->palette().color(QPalette::ButtonText);
+}
+
+// Counts the style changes a widget receives (each setStyleSheet sends one).
+class StyleChangeCounter : public QObject
+{
+public:
+    explicit StyleChangeCounter(QWidget* widget)
+        : QObject(widget)
+    {
+        widget->installEventFilter(this);
+    }
+
+    bool eventFilter(QObject*, QEvent* event) override
+    {
+        if (event->type() == QEvent::StyleChange)
+            ++count;
+        return false;
+    }
+
+    int count = 0;
+};
+
+// dataChanged for every row under parent of any model, one signal per level.
+void emitDataChangedForAll(
+    QAbstractItemModel* model, const QVector<int>& roles, const QModelIndex& parent = QModelIndex())
+{
+    const int count = model->rowCount(parent);
+    if (count == 0)
+        return;
+    emit model->dataChanged(model->index(0, 0, parent),
+        model->index(count - 1, model->columnCount(parent) - 1, parent), roles);
+    for (int row = 0; row < count; ++row)
+        emitDataChangedForAll(model, roles, model->index(row, 0, parent));
+}
+
+// Every label and every section title of the form.
+QList<QWidget*> labelsAndTitles(const PropertyFormView* view)
+{
+    QList<QWidget*> widgets;
+    const QList<QLabel*> labels = view->findChildren<QLabel*>();
+    for (QLabel* label : labels) {
+        if (part(label) == QLatin1String("label"))
+            widgets << label;
+    }
+    const QList<QToolButton*> buttons = view->findChildren<QToolButton*>();
+    for (QToolButton* button : buttons) {
+        if (part(button) == QLatin1String("groupTitle"))
+            widgets << button;
+    }
+    return widgets;
+}
+
+// The label whose buddy is the editor at path, in any form.
+QLabel* labelIn(const PropertyFormView* view, const QString& path)
+{
+    const QList<QLabel*> labels = view->findChildren<QLabel*>();
+    for (QLabel* label : labels) {
+        if (label->buddy() && label->buddy() == view->editor(path))
+            return label;
+    }
+    return nullptr;
+}
+
+const QString kForegroundSheet
+    = QStringLiteral("qpb--PropertyFormView { qproperty-showModelForeground: true; }");
+
+} // namespace
+
+// With the property off (the default) the model's colours are ignored: no
+// widget is coloured, restyled or even touched, whatever the model gives.
+void tst_PropertyFormView::foregroundIsOffByDefault()
+{
+    QVERIFY(!f->view->showModelForeground());
+    const QVariant property = f->view->property("showModelForeground");
+    QVERIFY(property.isValid());
+    QCOMPARE(property.toBool(), false);
+
+    MarkProxy* marks = useProxy();
+    const QColor plainLabel = labelColor(f->label(QStringLiteral("name")));
+    const QColor plainTitle = titleColor(f->title(QStringLiteral("Transform")));
+    QVERIFY(plainLabel != QColor(Qt::red));
+    QVERIFY(plainTitle != kMark);
+
+    // The form is built for a model that colours the name cell of a leaf, the
+    // value cell of another leaf and a group.
+    marks->setForeground(QStringLiteral("name"), 0, brushOf(Qt::red));
+    marks->setForeground(QStringLiteral("Camera/fov"), 1, colorOf(Qt::green));
+    marks->setForeground(QStringLiteral("Transform"), 0, brushOf(kMark));
+    f->view->setModel(&f->model);
+    f->view->setModel(marks);
+    QLabel* name = f->label(QStringLiteral("name"));
+    QLabel* fov = f->label(QStringLiteral("Camera/fov"));
+    QToolButton* transform = f->title(QStringLiteral("Transform"));
+    QVERIFY(name && fov && transform);
+    QCOMPARE(labelColor(name), plainLabel);
+    QCOMPARE(labelColor(fov), plainLabel);
+    QCOMPARE(titleColor(transform), plainTitle);
+
+    // The model's colours change and are announced: nothing is applied.
+    const QList<QWidget*> widgets = labelsAndTitles(f->view);
+    QCOMPARE(widgets.size(), 12); // 10 leaves and 2 groups
+    QList<StyleChangeCounter*> counters;
+    for (QWidget* widget : widgets)
+        counters << new StyleChangeCounter(widget);
+    marks->refreshAll(kForegroundRole);
+    marks->setForeground(QStringLiteral("name"), 0, brushOf(Qt::blue));
+    marks->setForeground(QStringLiteral("Transform"), 0, colorOf(Qt::yellow));
+    marks->refreshAll(kForegroundRole);
+    marks->refreshAll({});
+    QCOMPARE(labelColor(name), plainLabel);
+    QCOMPARE(labelColor(fov), plainLabel);
+    QCOMPARE(titleColor(transform), plainTitle);
+    for (int i = 0; i < widgets.size(); ++i) {
+        QVERIFY(widgets.at(i)->styleSheet().isEmpty());
+        QCOMPARE(counters.at(i)->count, 0);
+    }
+    qDeleteAll(counters);
+
+    // An application sheet colours the labels and titles as it always did.
+    qApp->setStyleSheet(QStringLiteral("QLabel[qpbPart=\"label\"] { color: #e0e4ea; }"
+                                       "QToolButton[qpbPart=\"groupTitle\"] { color: #00ff00; }"));
+    QCOMPARE(labelColor(f->label(QStringLiteral("name"))), QColor(0xe0, 0xe4, 0xea));
+    QCOMPARE(labelColor(f->label(QStringLiteral("Camera/fov"))), QColor(0xe0, 0xe4, 0xea));
+    QCOMPARE(titleColor(f->title(QStringLiteral("Transform"))), QColor(Qt::green));
+}
+
+// Turning the property on colours the rows that exist, without waiting for a
+// change of the model; a colour that changes later follows.
+void tst_PropertyFormView::turningOnColoursExistingRowsAtOnce()
+{
+    MarkProxy* marks = useProxy();
+    marks->setForeground(QStringLiteral("name"), 0, brushOf(Qt::red));
+    marks->setForeground(QStringLiteral("Camera/fov"), 1, colorOf(Qt::green));
+    marks->setForeground(QStringLiteral("Transform"), 0, brushOf(kMark));
+    marks->refreshAll(kForegroundRole);
+    const QColor plainLabel = labelColor(f->label(QStringLiteral("visible")));
+    const QColor plainTitle = titleColor(f->title(QStringLiteral("Camera")));
+    QCOMPARE(labelColor(f->label(QStringLiteral("name"))), plainLabel);
+    QCOMPARE(titleColor(f->title(QStringLiteral("Transform"))), plainTitle);
+
+    f->view->setShowModelForeground(true);
+    QVERIFY(f->view->showModelForeground());
+    QCOMPARE(f->view->property("showModelForeground").toBool(), true);
+    QCOMPARE(labelColor(f->label(QStringLiteral("name"))), QColor(Qt::red));
+    QCOMPARE(labelColor(f->label(QStringLiteral("Camera/fov"))), QColor(Qt::green));
+    QCOMPARE(labelColor(f->label(QStringLiteral("visible"))), plainLabel);
+    QCOMPARE(titleColor(f->title(QStringLiteral("Transform"))), kMark);
+    QCOMPARE(titleColor(f->title(QStringLiteral("Camera"))), plainTitle);
+
+    // A change announced while on is applied.
+    marks->setForeground(QStringLiteral("name"), 0, brushOf(Qt::blue));
+    marks->refresh(QStringLiteral("name"), kForegroundRole);
+    QCOMPARE(labelColor(f->label(QStringLiteral("name"))), QColor(Qt::blue));
+
+    // Turning it on again changes nothing in the widgets.
+    const QList<QWidget*> widgets = labelsAndTitles(f->view);
+    QList<StyleChangeCounter*> counters;
+    for (QWidget* widget : widgets)
+        counters << new StyleChangeCounter(widget);
+    f->view->setShowModelForeground(true);
+    for (const StyleChangeCounter* counter : std::as_const(counters))
+        QCOMPARE(counter->count, 0);
+    qDeleteAll(counters);
+}
+
+// Turning the property off removes every colour at once; while it is off,
+// colours that change are not applied, and turning it on again shows the
+// model's current colours.
+void tst_PropertyFormView::turningOffRemovesEveryColour()
+{
+    MarkProxy* marks = useForegroundProxy();
+    QVERIFY(f->model.setValue(QStringLiteral("Camera/fov"), 90)); // modified: bold label
+    marks->setForeground(QStringLiteral("name"), 0, brushOf(Qt::red));
+    marks->setForeground(QStringLiteral("Camera/fov"), 1, colorOf(Qt::green));
+    marks->setForeground(QStringLiteral("Transform"), 0, brushOf(kMark));
+    marks->setForeground(QStringLiteral("Camera"), 1, brushOf(Qt::magenta));
+    marks->refreshAll(kForegroundRole);
+    const QColor plainLabel = labelColor(f->label(QStringLiteral("visible")));
+    QCOMPARE(labelColor(f->label(QStringLiteral("name"))), QColor(Qt::red));
+    QCOMPARE(labelColor(f->label(QStringLiteral("Camera/fov"))), QColor(Qt::green));
+    QCOMPARE(titleColor(f->title(QStringLiteral("Transform"))), kMark);
+    QCOMPARE(titleColor(f->title(QStringLiteral("Camera"))), QColor(Qt::magenta));
+
+    f->view->setShowModelForeground(false);
+    QVERIFY(!f->view->showModelForeground());
+    const QColor plainOther = titleColor(f->title(QStringLiteral("Transform")));
+    QVERIFY(plainOther != kMark);
+    QVERIFY(plainOther != QColor(Qt::magenta));
+    QCOMPARE(labelColor(f->label(QStringLiteral("name"))), plainLabel);
+    QCOMPARE(labelColor(f->label(QStringLiteral("Camera/fov"))), plainLabel);
+    QCOMPARE(titleColor(f->title(QStringLiteral("Camera"))), plainOther);
+    const QList<QWidget*> widgets = labelsAndTitles(f->view);
+    QCOMPARE(widgets.size(), 12);
+    for (const QWidget* widget : widgets)
+        QVERIFY(widget->styleSheet().isEmpty());
+    // The bold weight of modified labels and of titles stays.
+    QVERIFY(f->label(QStringLiteral("Camera/fov"))->font().bold());
+    QVERIFY(f->title(QStringLiteral("Transform"))->font().bold());
+
+    // Off: new colours are not applied, not even when announced.
+    marks->setForeground(QStringLiteral("name"), 0, brushOf(Qt::blue));
+    marks->setForeground(QStringLiteral("Transform"), 0, brushOf(Qt::yellow));
+    marks->refreshAll(kForegroundRole);
+    QCOMPARE(labelColor(f->label(QStringLiteral("name"))), plainLabel);
+    QCOMPARE(titleColor(f->title(QStringLiteral("Transform"))), plainOther);
+
+    // On again: the model's current colours.
+    f->view->setShowModelForeground(true);
+    QCOMPARE(labelColor(f->label(QStringLiteral("name"))), QColor(Qt::blue));
+    QCOMPARE(labelColor(f->label(QStringLiteral("Camera/fov"))), QColor(Qt::green));
+    QCOMPARE(titleColor(f->title(QStringLiteral("Transform"))), QColor(Qt::yellow));
+    QCOMPARE(titleColor(f->title(QStringLiteral("Camera"))), QColor(Qt::magenta));
+
+    // Turning it off when it is off changes nothing.
+    f->view->setShowModelForeground(false);
+    QList<StyleChangeCounter*> counters;
+    for (QWidget* widget : labelsAndTitles(f->view))
+        counters << new StyleChangeCounter(widget);
+    f->view->setShowModelForeground(false);
+    for (const StyleChangeCounter* counter : std::as_const(counters))
+        QCOMPARE(counter->count, 0);
+    qDeleteAll(counters);
+}
+
+// Turning the property off hands the colours back to the style and to the
+// application's sheet, including the rule for modified labels.
+void tst_PropertyFormView::turningOffRestoresApplicationSheet()
+{
+    qApp->setStyleSheet(QStringLiteral(
+        "QLabel[qpbPart=\"label\"] { color: #e0e4ea; }"
+        "QLabel[qpbModified=\"true\"] { color: #ff0000; }"
+        "QToolButton[qpbPart=\"groupTitle\"], QToolButton[qpbPart=\"groupTitle\"]:checked"
+        " { color: #00ff00; }"));
+    QVERIFY(f->model.setValue(QStringLiteral("Camera/fov"), 90));
+    MarkProxy* marks = useForegroundProxy();
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, brushOf(kMark));
+    marks->setForeground(QStringLiteral("name"), 0, brushOf(kMark));
+    marks->setForeground(QStringLiteral("Transform"), 0, brushOf(kMark));
+    marks->refreshAll(kForegroundRole);
+    QCOMPARE(labelColor(f->label(QStringLiteral("Camera/fov"))), kMark);
+    QCOMPARE(labelColor(f->label(QStringLiteral("name"))), kMark);
+    QCOMPARE(titleColor(f->title(QStringLiteral("Transform"))), kMark);
+
+    f->view->setShowModelForeground(false);
+    QCOMPARE(labelColor(f->label(QStringLiteral("Camera/fov"))), QColor(Qt::red));
+    QCOMPARE(labelColor(f->label(QStringLiteral("name"))), QColor(0xe0, 0xe4, 0xea));
+    QCOMPARE(titleColor(f->title(QStringLiteral("Transform"))), QColor(Qt::green));
+    QTRY_VERIFY(f->label(QStringLiteral("Camera/fov"))->font().bold());
+    QTRY_VERIFY(f->title(QStringLiteral("Transform"))->font().bold());
+    QVERIFY(!f->label(QStringLiteral("name"))->font().bold());
+}
+
+// The sheet form of the property turns the colours on and off, also for a
+// form that is created while the sheet is active.
+void tst_PropertyFormView::styleSheetTurnsOnModelForeground()
+{
+    MarkProxy* marks = useProxy();
+    marks->setForeground(QStringLiteral("name"), 0, brushOf(Qt::red));
+    marks->setForeground(QStringLiteral("Transform"), 0, brushOf(kMark));
+    marks->refreshAll(kForegroundRole);
+    const QColor plainLabel = labelColor(f->label(QStringLiteral("name")));
+    const QColor plainTitle = titleColor(f->title(QStringLiteral("Transform")));
+    QVERIFY(!f->view->showModelForeground());
+
+    qApp->setStyleSheet(kForegroundSheet);
+    QVERIFY(f->view->showModelForeground());
+    QTRY_COMPARE(labelColor(f->label(QStringLiteral("name"))), QColor(Qt::red));
+    QTRY_COMPARE(titleColor(f->title(QStringLiteral("Transform"))), kMark);
+
+    qApp->setStyleSheet(
+        QStringLiteral("qpb--PropertyFormView { qproperty-showModelForeground: false; }"));
+    QVERIFY(!f->view->showModelForeground());
+    QTRY_COMPARE(labelColor(f->label(QStringLiteral("name"))), plainLabel);
+    QTRY_COMPARE(titleColor(f->title(QStringLiteral("Transform"))), plainTitle);
+    for (const QWidget* widget : labelsAndTitles(f->view))
+        QVERIFY(widget->styleSheet().isEmpty());
+
+    // A form created while the sheet is active.
+    qApp->setStyleSheet(kForegroundSheet);
+    QWidget window;
+    auto* layout = new QVBoxLayout(&window);
+    auto* second = new PropertyFormView;
+    layout->addWidget(second);
+    second->setModel(marks);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    QTRY_VERIFY(second->showModelForeground());
+    QLabel* name = labelIn(second, QStringLiteral("name"));
+    QVERIFY(name);
+    QTRY_COMPARE(labelColor(name), QColor(Qt::red));
+}
+
+// The colours survive a rebuild of the form: rows inserted or removed, a
+// group that gains a row, a model reset; a rebuild with the property off
+// builds an uncoloured form.
+void tst_PropertyFormView::foregroundSurvivesRebuild()
+{
+    qApp->setStyleSheet(QStringLiteral("QLabel[qpbPart=\"label\"] { color: #e0e4ea; }"));
+    MarkProxy* marks = useForegroundProxy();
+    marks->setForeground(QStringLiteral("name"), 0, brushOf(Qt::red));
+    marks->setForeground(QStringLiteral("Camera/fov"), 1, colorOf(Qt::green));
+    marks->setForeground(QStringLiteral("Transform"), 0, brushOf(kMark));
+    marks->setForeground(QStringLiteral("extra"), 0, brushOf(Qt::blue));
+    marks->setForeground(QStringLiteral("Transform/z"), 0, brushOf(Qt::yellow));
+    marks->refreshAll(kForegroundRole);
+    const QColor sheetLabel(0xe0, 0xe4, 0xea);
+    // The colour of a label or title, or an invalid colour while it does not exist.
+    const auto labelAt = [this](const QString& path) {
+        const QLabel* label = f->label(path);
+        return label ? labelColor(label) : QColor();
+    };
+    const auto titleAt = [this](const QString& path) {
+        const QToolButton* title = f->title(path);
+        return title ? titleColor(title) : QColor();
+    };
+    const auto expectColours = [&](bool extra, bool z) {
+        QTRY_COMPARE(labelAt(QStringLiteral("name")), QColor(Qt::red));
+        QTRY_COMPARE(labelAt(QStringLiteral("Camera/fov")), QColor(Qt::green));
+        QTRY_COMPARE(titleAt(QStringLiteral("Transform")), kMark);
+        QTRY_COMPARE(labelAt(QStringLiteral("Transform/y")), sheetLabel);
+        if (extra)
+            QTRY_COMPARE(labelAt(QStringLiteral("extra")), QColor(Qt::blue));
+        if (z)
+            QTRY_COMPARE(labelAt(QStringLiteral("Transform/z")), QColor(Qt::yellow));
+    };
+    expectColours(false, false);
+    if (QTest::currentTestFailed())
+        return;
+
+    // A row inserted at the top level.
+    f->model.root()->addInt(QStringLiteral("extra"), 1);
+    QVERIFY(f->view->editor(QStringLiteral("extra")));
+    expectColours(true, false);
+    if (QTest::currentTestFailed())
+        return;
+
+    // A row inserted into a group, a row removed.
+    f->model.find(QStringLiteral("Transform"))->toGroup()->addDouble(QStringLiteral("z"), 3.0);
+    QVERIFY(f->view->editor(QStringLiteral("Transform/z")));
+    expectColours(true, true);
+    if (QTest::currentTestFailed())
+        return;
+    QVERIFY(f->model.root()->remove(QStringLiteral("visible")));
+    QVERIFY(!f->view->editor(QStringLiteral("visible")));
+    expectColours(true, true);
+    if (QTest::currentTestFailed())
+        return;
+
+    // A row inserted without any query: the rebuild happens back in the
+    // event loop. A row removed after it.
+    f->model.root()->addInt(QStringLiteral("late"), 2);
+    QTRY_COMPARE(labelsAndTitles(f->view).size(), 14);
+    QVERIFY(f->model.root()->remove(QStringLiteral("extra")));
+    expectColours(false, true);
+    if (QTest::currentTestFailed())
+        return;
+
+    // A model reset (a new tree with the same paths).
+    f->model.setRoot(createTree());
+    QVERIFY(f->view->editor(QStringLiteral("name")));
+    f->model.find(QStringLiteral("Transform"))->toGroup()->addDouble(QStringLiteral("z"), 3.0);
+    QVERIFY(f->view->editor(QStringLiteral("Transform/z")));
+    expectColours(false, true);
+    if (QTest::currentTestFailed())
+        return;
+
+    // Off: a rebuilt form has no colours.
+    f->view->setShowModelForeground(false);
+    f->model.root()->addInt(QStringLiteral("extra"), 1);
+    QVERIFY(f->view->editor(QStringLiteral("extra")));
+    QTRY_COMPARE(labelAt(QStringLiteral("extra")), sheetLabel);
+    QCOMPARE(labelAt(QStringLiteral("name")), sheetLabel);
+    QCOMPARE(labelAt(QStringLiteral("Transform/z")), sheetLabel);
+    for (const QWidget* widget : labelsAndTitles(f->view))
+        QVERIFY(widget->styleSheet().isEmpty());
+}
+
+// A section title shows its group's colour while the section is collapsed:
+// when the colour arrives, when the form is built, and after a rebuild.
+void tst_PropertyFormView::collapsedSectionTitleShowsColour()
+{
+    f->view->setExpanded(QStringLiteral("Transform"), false);
+    MarkProxy* marks = useForegroundProxy();
+    QToolButton* transform = f->title(QStringLiteral("Transform"));
+    QToolButton* camera = f->title(QStringLiteral("Camera"));
+    QVERIFY(transform && camera);
+    QVERIFY(!f->view->isExpanded(QStringLiteral("Transform")));
+    QVERIFY(!transform->isChecked());
+    QVERIFY(!f->view->editor(QStringLiteral("Transform/x"))->isVisible());
+    const QColor plain = titleColor(camera);
+
+    // The colour arrives while collapsed.
+    marks->setForeground(QStringLiteral("Transform"), 0, brushOf(kMark));
+    marks->refresh(QStringLiteral("Transform"), kForegroundRole);
+    QCOMPARE(titleColor(transform), kMark);
+    QCOMPARE(titleColor(camera), plain);
+    QVERIFY(transform->font().bold());
+
+    // A second section collapses: its colour (from the value cell) shows.
+    marks->setForeground(QStringLiteral("Camera"), 1, colorOf(Qt::green));
+    marks->refreshCell(QStringLiteral("Camera"), 1, kForegroundRole);
+    f->view->setExpanded(QStringLiteral("Camera"), false);
+    QCOMPARE(titleColor(f->title(QStringLiteral("Camera"))), QColor(Qt::green));
+
+    // A rebuild keeps both sections collapsed and coloured.
+    f->model.root()->addInt(QStringLiteral("extra"), 1);
+    QVERIFY(f->view->editor(QStringLiteral("extra")));
+    transform = f->title(QStringLiteral("Transform"));
+    camera = f->title(QStringLiteral("Camera"));
+    QVERIFY(transform && camera);
+    QVERIFY(!transform->isChecked());
+    QVERIFY(!camera->isChecked());
+    QTRY_COMPARE(titleColor(transform), kMark);
+    QTRY_COMPARE(titleColor(camera), QColor(Qt::green));
+
+    // Expanding and collapsing again does not lose it.
+    f->view->setExpanded(QStringLiteral("Transform"), true);
+    QCOMPARE(titleColor(f->title(QStringLiteral("Transform"))), kMark);
+    f->view->setExpanded(QStringLiteral("Transform"), false);
+    QCOMPARE(titleColor(f->title(QStringLiteral("Transform"))), kMark);
+}
+
+// Foreground colours of the model reach the labels.
+void tst_PropertyFormView::foregroundColoursLabel()
+{
+    MarkProxy* marks = useForegroundProxy();
+    QLabel* fov = f->label(QStringLiteral("Camera/fov"));
+    QLabel* name = f->label(QStringLiteral("name"));
+    QLabel* visible = f->label(QStringLiteral("visible"));
+    QVERIFY(fov && name && visible);
+    const QColor plain = labelColor(name);
+    QVERIFY(plain != QColor(Qt::red));
+    QCOMPARE(labelColor(fov), plain);
+
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, brushOf(Qt::red));
+    marks->refresh(QStringLiteral("Camera/fov"), kForegroundRole);
+    QCOMPARE(labelColor(fov), QColor(Qt::red));
+    QCOMPARE(labelColor(name), plain);
+    QCOMPARE(labelColor(visible), plain);
+
+    // A QColor works like a brush.
+    marks->setForeground(QStringLiteral("visible"), 0, colorOf(Qt::green));
+    marks->refresh(QStringLiteral("visible"), kForegroundRole);
+    QCOMPARE(labelColor(visible), QColor(Qt::green));
+    QCOMPARE(labelColor(fov), QColor(Qt::red));
+
+    // Values that hold no colour: no brush, an invalid colour, other types.
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, brushOf(Qt::red));
+    marks->setForeground(QStringLiteral("visible"), 0, colorOf(Qt::green));
+    marks->setForeground(QStringLiteral("name"), 0, QVariant::fromValue(QBrush(Qt::NoBrush)));
+    marks->refresh(QStringLiteral("name"), kForegroundRole);
+    QCOMPARE(labelColor(name), plain);
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, QVariant::fromValue(QBrush()));
+    marks->refresh(QStringLiteral("Camera/fov"), kForegroundRole);
+    QCOMPARE(labelColor(fov), plain);
+    marks->setForeground(QStringLiteral("visible"), 0, QVariant::fromValue(QColor()));
+    marks->refresh(QStringLiteral("visible"), kForegroundRole);
+    QCOMPARE(labelColor(visible), plain);
+    marks->setForeground(QStringLiteral("name"), 0, QVariant(5));
+    marks->refresh(QStringLiteral("name"), kForegroundRole);
+    QCOMPARE(labelColor(name), plain);
+    marks->setForeground(QStringLiteral("name"), 0, QVariant(QStringLiteral("red")));
+    marks->refresh(QStringLiteral("name"), kForegroundRole);
+    QCOMPARE(labelColor(name), plain);
+}
+
+void tst_PropertyFormView::foregroundFallsBackToValueColumn()
+{
+    MarkProxy* marks = useForegroundProxy();
+    QLabel* fov = f->label(QStringLiteral("Camera/fov"));
+    QLabel* name = f->label(QStringLiteral("name"));
+    const QColor plain = labelColor(name);
+
+    // Only the value cell is coloured: its dataChanged names the value column.
+    marks->setForeground(QStringLiteral("Camera/fov"), 1, brushOf(Qt::red));
+    marks->refreshCell(QStringLiteral("Camera/fov"), 1, kForegroundRole);
+    QCOMPARE(labelColor(fov), QColor(Qt::red));
+    QCOMPARE(labelColor(name), plain);
+
+    // The name cell wins when both are coloured.
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, brushOf(Qt::blue));
+    marks->refresh(QStringLiteral("Camera/fov"), kForegroundRole);
+    QCOMPARE(labelColor(fov), QColor(Qt::blue));
+
+    // A name cell without a colour does not hide the value cell's colour.
+    marks->setForeground(
+        QStringLiteral("Camera/fov"), 0, QVariant::fromValue(QBrush(Qt::NoBrush)));
+    marks->refresh(QStringLiteral("Camera/fov"), kForegroundRole);
+    QCOMPARE(labelColor(fov), QColor(Qt::red));
+
+    // A QColor on the value cell.
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, QVariant());
+    marks->setForeground(QStringLiteral("Camera/fov"), 1, colorOf(Qt::green));
+    marks->refresh(QStringLiteral("Camera/fov"), kForegroundRole);
+    QCOMPARE(labelColor(fov), QColor(Qt::green));
+
+    marks->setForeground(QStringLiteral("Camera/fov"), 1, QVariant());
+    marks->refresh(QStringLiteral("Camera/fov"), kForegroundRole);
+    QCOMPARE(labelColor(fov), plain);
+}
+
+// Gradient and texture brushes have no single colour: the style's colour stays.
+void tst_PropertyFormView::foregroundIgnoresGradientAndTextureBrushes()
+{
+    MarkProxy* marks = useForegroundProxy();
+    QLabel* name = f->label(QStringLiteral("name"));
+    QToolButton* transform = f->title(QStringLiteral("Transform"));
+    const QColor plainLabel = labelColor(name);
+    const QColor plainTitle = titleColor(transform);
+
+    QPixmap pixmap(4, 4);
+    pixmap.fill(Qt::red);
+    const QList<QBrush> brushes{QBrush(QLinearGradient(0, 0, 1, 0)),
+        QBrush(QRadialGradient(0, 0, 1)), QBrush(QConicalGradient(0, 0, 0)), QBrush(pixmap)};
+    for (const QBrush& brush : brushes) {
+        marks->setForeground(QStringLiteral("name"), 0, QVariant::fromValue(brush));
+        marks->setForeground(QStringLiteral("Transform"), 0, QVariant::fromValue(brush));
+        marks->refreshAll(kForegroundRole);
+        QCOMPARE(labelColor(name), plainLabel);
+        QVERIFY(name->styleSheet().isEmpty());
+        QCOMPARE(titleColor(transform), plainTitle);
+        QVERIFY(transform->styleSheet().isEmpty());
+    }
+
+    // Such a name cell holds no colour, so the value cell's colour is used.
+    marks->setForeground(
+        QStringLiteral("name"), 0, QVariant::fromValue(QBrush(QLinearGradient(0, 0, 1, 0))));
+    marks->setForeground(QStringLiteral("name"), 1, brushOf(Qt::red));
+    marks->refreshAll(kForegroundRole);
+    QCOMPARE(labelColor(name), QColor(Qt::red));
+}
+
+void tst_PropertyFormView::foregroundKeepsAlpha()
+{
+    MarkProxy* marks = useForegroundProxy();
+    QLabel* name = f->label(QStringLiteral("name"));
+    const QColor translucent(10, 20, 30, 128);
+    marks->setForeground(QStringLiteral("name"), 0, brushOf(translucent));
+    marks->refresh(QStringLiteral("name"), kForegroundRole);
+    QCOMPARE(labelColor(name), translucent);
+    marks->setForeground(QStringLiteral("name"), 0, colorOf(QColor(255, 128, 0, 255)));
+    marks->refresh(QStringLiteral("name"), kForegroundRole);
+    QCOMPARE(labelColor(name), QColor(255, 128, 0));
+}
+
+// A model that gives no colours (the plain model, or a proxy without marks)
+// leaves every label and title alone, whatever dataChanged says, also with the
+// property on.
+void tst_PropertyFormView::noForegroundChangesNothing()
+{
+    f->view->setShowModelForeground(true);
+    for (const bool proxied : {false, true}) {
+        QAbstractItemModel* model = &f->model;
+        if (proxied)
+            model = useProxy();
+        f->view->setModel(model);
+
+        QList<StyleChangeCounter*> counters;
+        const QList<QWidget*> widgets = labelsAndTitles(f->view);
+        QCOMPARE(widgets.size(), 12); // 10 leaves and 2 groups
+        for (QWidget* widget : widgets)
+            counters << new StyleChangeCounter(widget);
+
+        emitDataChangedForAll(model, {});
+        emitDataChangedForAll(model, kForegroundRole);
+        if (proxied)
+            static_cast<MarkProxy*>(model)->refreshAll({});
+
+        for (int i = 0; i < widgets.size(); ++i) {
+            QVERIFY(widgets.at(i)->styleSheet().isEmpty());
+            QCOMPARE(counters.at(i)->count, 0);
+        }
+        qDeleteAll(counters);
+    }
+}
+
+void tst_PropertyFormView::clearedForegroundRestoresLabelColour()
+{
+    MarkProxy* marks = useForegroundProxy();
+    QLabel* fov = f->label(QStringLiteral("Camera/fov"));
+    const QColor plain = labelColor(fov);
+
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, brushOf(kMark));
+    marks->refresh(QStringLiteral("Camera/fov"), kForegroundRole);
+    QCOMPARE(labelColor(fov), kMark);
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, QVariant());
+    marks->refresh(QStringLiteral("Camera/fov"), kForegroundRole);
+    QCOMPARE(labelColor(fov), plain);
+    QVERIFY(fov->styleSheet().isEmpty());
+
+    // With an application sheet the sheet's colour is back.
+    qApp->setStyleSheet(QStringLiteral("QLabel { color: #e0e4ea; }"));
+    QCOMPARE(labelColor(fov), QColor(0xe0, 0xe4, 0xea));
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, brushOf(kMark));
+    marks->refresh(QStringLiteral("Camera/fov"), kForegroundRole);
+    QCOMPARE(labelColor(fov), kMark);
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, QVariant());
+    marks->refresh(QStringLiteral("Camera/fov"), kForegroundRole);
+    QCOMPARE(labelColor(fov), QColor(0xe0, 0xe4, 0xea));
+}
+
+void tst_PropertyFormView::clearedForegroundRestoresModifiedRule()
+{
+    qApp->setStyleSheet(QStringLiteral("QLabel { color: #e0e4ea; }"
+                                       "QLabel[qpbModified=\"true\"] { color: #ff0000; }"));
+    MarkProxy* marks = useForegroundProxy();
+    QVERIFY(f->model.setValue(QStringLiteral("Camera/fov"), 90));
+    QLabel* fov = f->label(QStringLiteral("Camera/fov"));
+    QCOMPARE(labelColor(fov), QColor(Qt::red));
+
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, brushOf(kMark));
+    marks->refresh(QStringLiteral("Camera/fov"), kForegroundRole);
+    QCOMPARE(labelColor(fov), kMark);
+    QVERIFY(fov->font().bold());
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, QVariant());
+    marks->refresh(QStringLiteral("Camera/fov"), kForegroundRole);
+    QCOMPARE(labelColor(fov), QColor(Qt::red));
+    QVERIFY(fov->font().bold());
+
+    // Reset while coloured: the label is no longer modified, the colour stays.
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, brushOf(kMark));
+    marks->refresh(QStringLiteral("Camera/fov"), kForegroundRole);
+    QVERIFY(f->model.find(QStringLiteral("Camera/fov"))->resetToDefault());
+    QCOMPARE(labelColor(fov), kMark);
+    QVERIFY(!fov->font().bold());
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, QVariant());
+    marks->refresh(QStringLiteral("Camera/fov"), kForegroundRole);
+    QCOMPARE(labelColor(fov), QColor(0xe0, 0xe4, 0xea));
+}
+
+void tst_PropertyFormView::foregroundColoursSectionTitle()
+{
+    MarkProxy* marks = useForegroundProxy();
+    QToolButton* transform = f->title(QStringLiteral("Transform"));
+    QToolButton* camera = f->title(QStringLiteral("Camera"));
+    QVERIFY(transform && camera);
+    const QColor plain = titleColor(transform);
+    QVERIFY(plain != QColor(Qt::red));
+
+    marks->setForeground(QStringLiteral("Transform"), 0, brushOf(Qt::red));
+    marks->refresh(QStringLiteral("Transform"), kForegroundRole);
+    QCOMPARE(titleColor(transform), QColor(Qt::red));
+    QCOMPARE(titleColor(camera), plain);
+    QVERIFY(transform->font().bold());
+
+    // A collapsed section keeps its colour and follows changes.
+    f->view->setExpanded(QStringLiteral("Transform"), false);
+    QCOMPARE(titleColor(transform), QColor(Qt::red));
+    marks->setForeground(QStringLiteral("Transform"), 0, brushOf(kMark));
+    marks->refresh(QStringLiteral("Transform"), kForegroundRole);
+    QCOMPARE(titleColor(transform), kMark);
+    f->view->setExpanded(QStringLiteral("Transform"), true);
+    QCOMPARE(titleColor(transform), kMark);
+
+    // Cleared: back to the style's colour.
+    f->view->setExpanded(QStringLiteral("Transform"), false);
+    marks->setForeground(QStringLiteral("Transform"), 0, QVariant());
+    marks->refresh(QStringLiteral("Transform"), kForegroundRole);
+    QCOMPARE(titleColor(transform), plain);
+    QVERIFY(transform->styleSheet().isEmpty());
+    QVERIFY(transform->font().bold());
+
+    // The value cell is the fallback, as for a leaf; a QColor works too.
+    marks->setForeground(QStringLiteral("Camera"), 1, colorOf(Qt::green));
+    marks->refreshCell(QStringLiteral("Camera"), 1, kForegroundRole);
+    QCOMPARE(titleColor(camera), QColor(Qt::green));
+}
+
+// An application sheet colours labels, modified labels and group titles; the
+// model's colour wins over all three, in either order of the two.
+void tst_PropertyFormView::foregroundWinsOverApplicationSheet()
+{
+    const QString sheet = QStringLiteral(
+        "QLabel[qpbPart=\"label\"] { color: #e0e4ea; }"
+        "QLabel[qpbModified=\"true\"] { color: #ff0000; }"
+        "QToolButton[qpbPart=\"groupTitle\"], QToolButton[qpbPart=\"groupTitle\"]:checked"
+        " { color: #00ff00; }");
+    QVERIFY(f->model.setValue(QStringLiteral("Camera/fov"), 90));
+
+    const auto check = [this](const QColor& plainLabel, const QColor& modifiedLabel,
+                           const QColor& plainTitle, bool marked) {
+        QLabel* fov = f->label(QStringLiteral("Camera/fov")); // modified, marked
+        QLabel* name = f->label(QStringLiteral("name")); // marked
+        QLabel* visible = f->label(QStringLiteral("visible")); // never marked
+        QToolButton* transform = f->title(QStringLiteral("Transform")); // marked
+        QToolButton* camera = f->title(QStringLiteral("Camera")); // never marked
+        QVERIFY(fov && name && visible && transform && camera);
+        QTRY_VERIFY(fov->font().bold());
+        QTRY_VERIFY(transform->font().bold());
+        QVERIFY(camera->font().bold());
+        QVERIFY(!name->font().bold());
+        QVERIFY(!visible->font().bold());
+        QCOMPARE(labelColor(fov), marked ? kMark : modifiedLabel);
+        QCOMPARE(labelColor(name), marked ? kMark : plainLabel);
+        QCOMPARE(titleColor(transform), marked ? kMark : plainTitle);
+        QCOMPARE(labelColor(visible), plainLabel);
+        QCOMPARE(titleColor(camera), plainTitle);
+    };
+    const QColor plainLabel(0xe0, 0xe4, 0xea);
+    const QColor modifiedLabel(0xff, 0x00, 0x00);
+    const QColor plainTitle(0x00, 0xff, 0x00);
+
+    // The sheet is set first and the view is built for a coloured model.
+    f->view->setShowModelForeground(true);
+    qApp->setStyleSheet(sheet);
+    markProxy = std::make_unique<MarkProxy>();
+    MarkProxy* marks = markProxy.get();
+    marks->setSourceModel(&f->model);
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, brushOf(kMark));
+    marks->setForeground(QStringLiteral("name"), 0, brushOf(kMark));
+    marks->setForeground(QStringLiteral("Transform"), 0, brushOf(kMark));
+    f->view->setModel(marks);
+    check(plainLabel, modifiedLabel, plainTitle, true);
+    if (QTest::currentTestFailed())
+        return;
+
+    // Clearing the colours brings the sheet back.
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, QVariant());
+    marks->setForeground(QStringLiteral("name"), 0, QVariant());
+    marks->setForeground(QStringLiteral("Transform"), 0, QVariant());
+    marks->refreshAll(kForegroundRole);
+    check(plainLabel, modifiedLabel, plainTitle, false);
+    if (QTest::currentTestFailed())
+        return;
+
+    // The colours are applied first, the sheet is set (or replaced) later.
+    qApp->setStyleSheet(QString());
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, brushOf(kMark));
+    marks->setForeground(QStringLiteral("name"), 0, brushOf(kMark));
+    marks->setForeground(QStringLiteral("Transform"), 0, brushOf(kMark));
+    marks->refreshAll(kForegroundRole);
+    qApp->setStyleSheet(sheet);
+    check(plainLabel, modifiedLabel, plainTitle, true);
+    if (QTest::currentTestFailed())
+        return;
+    QString replaced = sheet;
+    replaced.replace(QStringLiteral("#e0e4ea"), QStringLiteral("#123456"));
+    qApp->setStyleSheet(replaced);
+    check(QColor(0x12, 0x34, 0x56), modifiedLabel, plainTitle, true);
+}
+
+void tst_PropertyFormView::disabledLabelKeepsDisabledColour()
+{
+    Property* x = f->model.find(QStringLiteral("Transform/x"));
+    x->setEnabled(false);
+    MarkProxy* marks = useForegroundProxy();
+    QLabel* label = f->label(QStringLiteral("Transform/x"));
+    QVERIFY(!label->isEnabled());
+    const QColor disabled = label->palette().color(QPalette::Disabled, QPalette::WindowText);
+
+    marks->setForeground(QStringLiteral("Transform/x"), 0, brushOf(kMark));
+    marks->refresh(QStringLiteral("Transform/x"), kForegroundRole);
+    QVERIFY(disabled != kMark);
+    QCOMPARE(label->palette().color(QPalette::Disabled, QPalette::WindowText), disabled);
+
+    // Enabled again: the colour shows.
+    x->setEnabled(true);
+    QVERIFY(label->isEnabled());
+    QCOMPARE(labelColor(label), kMark);
+    x->setEnabled(false);
+    QCOMPARE(label->palette().color(QPalette::Disabled, QPalette::WindowText), disabled);
+}
+
+void tst_PropertyFormView::foregroundIsAppliedOnlyWhenChanged()
+{
+    MarkProxy* marks = useForegroundProxy();
+    QLabel* fov = f->label(QStringLiteral("Camera/fov"));
+    QToolButton* transform = f->title(QStringLiteral("Transform"));
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, brushOf(Qt::red));
+    marks->setForeground(QStringLiteral("Transform"), 0, brushOf(Qt::red));
+    marks->refreshAll(kForegroundRole);
+    QCOMPARE(labelColor(fov), QColor(Qt::red));
+
+    StyleChangeCounter labelChanges(fov);
+    StyleChangeCounter titleChanges(transform);
+    marks->setToolTip(QStringLiteral("Camera/fov"), QStringLiteral("tip"));
+    marks->refreshAll(kForegroundRole);
+    marks->refreshAll({});
+    marks->refresh(QStringLiteral("Camera/fov"), {Qt::ToolTipRole});
+    QCOMPARE(fov->toolTip(), QStringLiteral("tip"));
+    QCOMPARE(labelChanges.count, 0);
+    QCOMPARE(titleChanges.count, 0);
+
+    // A different colour is applied, a QColor equal to the brush's is not.
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, brushOf(Qt::blue));
+    marks->refreshAll(kForegroundRole);
+    QCOMPARE(labelColor(fov), QColor(Qt::blue));
+    QVERIFY(labelChanges.count > 0);
+    const int applied = labelChanges.count;
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, colorOf(Qt::blue));
+    marks->refreshAll(kForegroundRole);
+    QCOMPARE(labelChanges.count, applied);
+
+    // Cleared once, then nothing more to clear.
+    marks->setForeground(QStringLiteral("Camera/fov"), 0, QVariant());
+    marks->refreshAll(kForegroundRole);
+    QVERIFY(labelChanges.count > applied);
+    const int cleared = labelChanges.count;
+    marks->refreshAll(kForegroundRole);
+    QCOMPARE(labelChanges.count, cleared);
+}
+
+namespace {
+
+// Counts the warnings logged while it lives. The platform plugin's size-hint
+// notice is not a warning of the form and is left out.
+class WarningCounter
+{
+public:
+    WarningCounter() { s_previous = qInstallMessageHandler(&handle); s_count = 0; }
+    ~WarningCounter() { qInstallMessageHandler(s_previous); }
+    int count() const { return s_count; }
+
+private:
+    static void handle(QtMsgType type, const QMessageLogContext& context, const QString& message)
+    {
+        if ((type == QtWarningMsg || type == QtCriticalMsg || type == QtFatalMsg)
+            && !message.contains(QLatin1String("propagateSizeHints")))
+            ++s_count;
+        if (s_previous)
+            s_previous(type, context, message);
+    }
+
+    static inline QtMessageHandler s_previous = nullptr;
+    static inline int s_count = 0;
+};
+
+// Lets the timers and posted events that are already queued run; it is not a
+// way to wait for a result.
+void drainEventLoop()
+{
+    QCoreApplication::processEvents();
+    QCoreApplication::processEvents();
+}
+
+} // namespace
+
+// Turning the property on while a structural change has not been applied yet:
+// the pending rebuild reads the flag, so the new row and the old rows are all
+// coloured once control returns to the event loop.
+void tst_PropertyFormView::turningOnWhileRebuildIsPendingColoursEveryRow()
+{
+    qApp->setStyleSheet(QStringLiteral("QLabel[qpbPart=\"label\"] { color: #e0e4ea; }"));
+    MarkProxy* marks = useProxy();
+    marks->setForeground(QStringLiteral("name"), 0, brushOf(Qt::red));
+    marks->setForeground(QStringLiteral("Camera/fov"), 1, colorOf(Qt::green));
+    marks->setForeground(QStringLiteral("Transform"), 0, brushOf(kMark));
+    marks->setForeground(QStringLiteral("extra"), 0, brushOf(Qt::blue));
+    const QColor sheetLabel(0xe0, 0xe4, 0xea);
+    QCOMPARE(labelColor(f->label(QStringLiteral("name"))), sheetLabel);
+    QCOMPARE(labelsAndTitles(f->view).size(), 12);
+
+    // A row is added and the property is turned on before the rebuild runs.
+    f->model.root()->addInt(QStringLiteral("extra"), 1);
+    QCOMPARE(labelsAndTitles(f->view).size(), 12); // not rebuilt yet
+    f->view->setShowModelForeground(true);
+    QVERIFY(f->view->showModelForeground());
+
+    QTRY_COMPARE(labelsAndTitles(f->view).size(), 13);
+    QTRY_COMPARE(labelColor(f->label(QStringLiteral("extra"))), QColor(Qt::blue));
+    QTRY_COMPARE(labelColor(f->label(QStringLiteral("name"))), QColor(Qt::red));
+    QTRY_COMPARE(labelColor(f->label(QStringLiteral("Camera/fov"))), QColor(Qt::green));
+    QTRY_COMPARE(titleColor(f->title(QStringLiteral("Transform"))), kMark);
+    QCOMPARE(labelColor(f->label(QStringLiteral("visible"))), sheetLabel);
+
+    // The same with a row removed, turning the property off again.
+    QVERIFY(f->model.root()->remove(QStringLiteral("visible")));
+    f->view->setShowModelForeground(false);
+    QTRY_COMPARE(labelsAndTitles(f->view).size(), 12);
+    QTRY_COMPARE(labelColor(f->label(QStringLiteral("name"))), sheetLabel);
+    for (const QWidget* widget : labelsAndTitles(f->view))
+        QVERIFY(widget->styleSheet().isEmpty());
+}
+
+// The re-polish that follows turning the property on runs later from the event
+// loop; it does nothing harmful when the form was rebuilt or deleted first.
+void tst_PropertyFormView::queuedPolishAfterTurningOnIsHarmless()
+{
+    MarkProxy* marks = useProxy();
+    marks->setForeground(QStringLiteral("name"), 0, brushOf(Qt::red));
+    marks->setForeground(QStringLiteral("Transform"), 0, brushOf(kMark));
+    marks->setForeground(QStringLiteral("extra"), 0, brushOf(Qt::blue));
+
+    // Rebuilt before the queued polish runs.
+    {
+        WarningCounter warnings;
+        f->view->setShowModelForeground(true); // queues the polish
+        f->model.root()->addInt(QStringLiteral("extra"), 1);
+        QVERIFY(f->view->editor(QStringLiteral("extra"))); // rebuilds now
+        drainEventLoop();
+        QTRY_COMPARE(labelColor(f->label(QStringLiteral("extra"))), QColor(Qt::blue));
+        QCOMPARE(labelColor(f->label(QStringLiteral("name"))), QColor(Qt::red));
+        QCOMPARE(titleColor(f->title(QStringLiteral("Transform"))), kMark);
+        QCOMPARE(labelsAndTitles(f->view).size(), 13);
+        QCOMPARE(warnings.count(), 0);
+    }
+
+    // Deleted before the queued polish runs.
+    {
+        WarningCounter warnings;
+        PropertyModel model(createTree());
+        MarkProxy proxy;
+        proxy.setSourceModel(&model);
+        proxy.setForeground(QStringLiteral("name"), 0, brushOf(Qt::red));
+        proxy.setForeground(QStringLiteral("Transform"), 0, brushOf(kMark));
+        auto* second = new PropertyFormView;
+        QPointer<PropertyFormView> guard(second);
+        second->setModel(&proxy);
+        QVERIFY(second->editor(QStringLiteral("name")));
+        second->setShowModelForeground(true); // queues the polish
+        // The row holds a colour, so the queued polish has work to do.
+        QVERIFY(!labelIn(second, QStringLiteral("name"))->styleSheet().isEmpty());
+        delete second;
+        QVERIFY(guard.isNull());
+        drainEventLoop();
+        QCOMPARE(warnings.count(), 0);
+    }
 }
 
 QTEST_MAIN(tst_PropertyFormView)

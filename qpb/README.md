@@ -52,7 +52,8 @@ the CMake options, static and shared builds, Qt 5 and upgrading are in [doc/inte
   path; properties can be added and removed while the model is shown; reset of one property, a group or everything.
 - **Views**: `PropertyTreeView` (collapsible tree or flat list with section headers) and `PropertyFormView` (a form
   with persistent editors and collapsible sections). Bold names for modified values, "Reset to default" context menu,
-  full keyboard use (Enter, Esc, Tab), validation messages as tool tips.
+  full keyboard use (Enter, Esc, Tab), validation messages as tool tips. The form view can show the model's
+  `Qt::ForegroundRole` colour on labels and section titles (`showModelForeground`, off by default).
 - **Editors**: one per type, replaceable per type or per property; custom editors may open dialogs.
 - **Search**: a filter proxy model by display name for both views.
 - **QObject properties**: show the `Q_PROPERTY`s of your objects and keep both sides in sync.
