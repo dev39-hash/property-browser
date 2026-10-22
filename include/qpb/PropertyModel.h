@@ -20,7 +20,7 @@ namespace detail {
 class PropertyModelPrivate;
 }
 
-// Item model exposing a property tree to Qt views (README.md, "Model").
+// Item model exposing a property tree to Qt views (doc/api-overview.md, "Model").
 //
 // Two columns: the property name and its value. Every row is one property;
 // groups have children. The model owns the root group. Any QAbstractItemView

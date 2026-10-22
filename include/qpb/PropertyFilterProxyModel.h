@@ -13,8 +13,8 @@ namespace detail {
 class PropertyFilterProxyModelPrivate;
 }
 
-// Filters a PropertyModel by property name for a search box (README.md,
-// "Other core classes"). Since 1.1.
+// Filters a PropertyModel by property name for a search box
+// (doc/guide/views.md, "Search: the filter proxy"). Since 1.1.
 //
 // Set the text with the usual QSortFilterProxyModel functions, typically
 // setFilterFixedString() connected to QLineEdit::textChanged. The filter

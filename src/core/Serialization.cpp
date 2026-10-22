@@ -17,7 +17,8 @@ const TypeHandler* handlerOf(const Property& property)
     return TypeRegistry::global().handler(property.typeId());
 }
 
-// Read-only and live properties are maintained by the application (D42, D44).
+// Read-only and live properties are maintained by the application, so loading
+// must not overwrite them (e.g. the running version with a stored one).
 bool isStored(const Property& property)
 {
     return !property.isReadOnly() && !property.isLive();

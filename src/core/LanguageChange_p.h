@@ -13,7 +13,8 @@ namespace qpb::detail {
 
 // Turns the QEvent::LanguageChange that the application object receives when a
 // translator is installed or removed into a signal, with one application-wide
-// event filter for all models (README.md, "Translations"; D57).
+// event filter for all models (doc/guide/translations.md). qpb updates only the
+// texts it shows itself; texts given by the application are its own to translate.
 class LanguageChangeNotifier : public QObject
 {
     Q_OBJECT

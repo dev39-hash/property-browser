@@ -89,7 +89,8 @@ void repolish(QWidget* widget)
 // Group titles and labels of modified properties are bold. Only the weight is
 // set, everything else is inherited (from the parent or a style sheet); a
 // style sheet resets the font when it polishes the widget, so eventFilter()
-// sets it again (D52).
+// sets it again (otherwise a style sheet rule for QLabel would drop the bold
+// "modified" cue).
 bool wantsBold(const QWidget* widget)
 {
     const QString part = widget->property(StylePartProperty).toString();
@@ -434,7 +435,7 @@ public:
     {
         switch (event->type()) {
         case QEvent::FontChange:
-            // A style sheet replaced the font of a bold title or label (D52).
+            // A style sheet replaced the font of a bold title or label: set the weight again.
             if (auto* widget = qobject_cast<QWidget*>(object); widget && wantsBold(widget))
                 updateEmphasis(widget);
             break;

@@ -1,7 +1,7 @@
 # Changelog
 
 All notable changes to qpb are documented here. Each release has the sections
-*Added*, *Changed*, *Deprecated*, *Fixed* and *Upgrade notes* (see `README.md`, "Compatibility").
+*Added*, *Changed*, *Deprecated*, *Fixed* and *Upgrade notes* (see `doc/compatibility.md`).
 
 From 1.0.0 on, releases within a major version never require changes to consuming code or CMake.
 Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC trial shows a problem.
@@ -12,7 +12,7 @@ Eighth feature release of 1.x: additions only; code written for 1.0-1.7 builds a
 translation installed, every text is the English one of 1.7.
 
 ### Added
-- Translations of qpb's own texts for English, Japanese and Vietnamese (`README.md`, "Translations"):
+- Translations of qpb's own texts for English, Japanese and Vietnamese (`doc/guide/translations.md`):
   `qpb::loadTranslation(translator, locale)` in `<qpb/Translations.h>` loads them from `qpb::core`, where they are
   embedded; nothing to deploy, no Qt Linguist tools needed to build.
 - The messages of the built-in validation and of failed conversions are translatable (context `qpb::TypeRegistry`
@@ -30,7 +30,7 @@ translation installed, every text is the English one of 1.7.
 Seventh feature release of 1.x: additions only; code written for 1.0-1.6 builds and behaves the same with Qt 6.
 
 ### Added
-- Qt 5.15 support (`README.md`, "Qt 5"): CMake uses the host's Qt 6 or Qt 5, otherwise finds Qt 6, then Qt 5.15.
+- Qt 5.15 support (`doc/integration.md`, "Qt 5"; `doc/compatibility.md`): CMake uses the host's Qt 6 or Qt 5, otherwise finds Qt 6, then Qt 5.15.
   With Qt 5, `Types::*` and `Attr::*` are `QLatin1String` and `TypeHandler::storageType` is an `int` type id.
 
 ### Fixed
@@ -59,7 +59,7 @@ Documentation release: no change to the API or behaviour.
 Sixth feature release of 1.x: additions only; code written for 1.0-1.5 builds and behaves the same.
 
 ### Added
-- Theming with style sheets (`README.md`, "Style sheets"):
+- Theming with style sheets (`doc/guide/style-sheets.md`):
   - `PropertyTreeView` colour properties `groupBackground`, `groupForeground`, `modifiedForeground` and
     `readOnlyForeground`, settable from a sheet with `qproperty-` (invalid values keep the defaults);
   - style sheet selectors on the widgets of `PropertyFormView` and of the file / directory editors: the dynamic

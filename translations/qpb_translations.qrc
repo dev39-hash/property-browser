@@ -1,6 +1,6 @@
 <!DOCTYPE RCC>
 <!-- qpb's translations, embedded in qpb::core and loaded with
-     qpb::loadTranslation() (README.md, "Translations"). The .qm files are
+     qpb::loadTranslation() (doc/guide/translations.md). The .qm files are
      generated from the .ts files next to them by tools/update_translations.py. -->
 <RCC version="1.0">
     <qresource prefix="/qpb/translations">

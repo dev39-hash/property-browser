@@ -269,7 +269,7 @@ PropertyModel::PropertyModel(QObject* parent)
     , d(std::make_unique<detail::PropertyModelPrivate>(this))
 {
     // The column titles are translated: views read them again when the
-    // application's language changes (README.md, "Translations"; D57).
+    // application's language changes (doc/guide/translations.md).
     if (detail::LanguageChangeNotifier* notifier = detail::LanguageChangeNotifier::instance()) {
         connect(notifier, &detail::LanguageChangeNotifier::languageChanged, this,
             [this] { emit headerDataChanged(Qt::Horizontal, 0, columnCount() - 1); });

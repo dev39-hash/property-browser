@@ -15,7 +15,7 @@
 
 namespace qpb {
 
-// A property that holds an ordered list of child properties (README.md, "Properties").
+// A property that holds an ordered list of child properties (doc/api-overview.md, "Properties").
 //
 // Groups nest without limit. A group has no value; its state flags apply to
 // all descendants. When a group belongs to a PropertyModel, adding and removing
