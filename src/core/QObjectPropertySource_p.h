@@ -68,25 +68,9 @@ public:
     // Marks a sync (a model write, a notification, a refresh) in progress. Records
     // of removed objects are erased when the outermost scope ends, so no loop of a
     // running sync sees a record vanish or move.
-    class SyncScope
-    {
-    public:
-        explicit SyncScope(QObjectPropertySourcePrivate* owner)
-            : m_owner(owner)
-        {
-            ++m_owner->syncDepth;
-        }
-        ~SyncScope()
-        {
-            if (--m_owner->syncDepth == 0)
-                m_owner->eraseDead();
-        }
-        SyncScope(const SyncScope&) = delete;
-        SyncScope& operator=(const SyncScope&) = delete;
-
-    private:
-        QObjectPropertySourcePrivate* m_owner;
-    };
+    // A handler may delete the source meanwhile; the scope then ends without
+    // touching the owner.
+    class SyncScope;
 
     QPointer<PropertyModel> model;
     // Records of live objects, and of removed ones until the outermost sync ends.
@@ -99,6 +83,26 @@ public:
 
 public Q_SLOTS:
     void notified();
+};
+
+class QObjectPropertySourcePrivate::SyncScope
+{
+public:
+    explicit SyncScope(QObjectPropertySourcePrivate* owner)
+        : m_owner(owner)
+    {
+        ++owner->syncDepth;
+    }
+    ~SyncScope()
+    {
+        if (m_owner && --m_owner->syncDepth == 0)
+            m_owner->eraseDead();
+    }
+    SyncScope(const SyncScope&) = delete;
+    SyncScope& operator=(const SyncScope&) = delete;
+
+private:
+    QPointer<QObjectPropertySourcePrivate> m_owner;
 };
 
 } // namespace detail

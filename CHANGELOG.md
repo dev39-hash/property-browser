@@ -69,6 +69,16 @@ Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC tria
   model) follow changes of the property's attributes, such as a range, `decimals` or a suffix, while they are open. They
   keep the text being typed when the model reports a change that leaves the value as it was (another role such as the
   tool tip, a `dataChanged()` without roles, or a whole range).
+- A `QObjectPropertySource`, or its parent, may be deleted while the source is syncing: from a handler of the model's
+  `valueChanged`, `dataChanged`, `rowsInserted` or `rowsRemoved`, from the object's setter, or from a slot on its
+  `NOTIFY` signal (not from a getter), also during `addObject()`, `removeObject()` and `refresh()`. The write or read in
+  progress completes, nothing further is synced, and the groups stay in the model with their last values. A handler of
+  `valueChanged` or `dataChanged` may also delete the model while the source stays alive, or remove the group, or one of
+  its properties, while `addObject()` is adding it. `addObject()` then stops at once and the object is not synchronized.
+  It returns the group with the properties added so far while the group is in the model, and `nullptr` when the model
+  was deleted or the group was removed meanwhile. Before, the source used its freed memory. An object whose id (the
+  object name or the `id` argument) contains `/` gets the group id with `_` for `/`, made unique like any other id (for
+  example `a_b_2`); it no longer lands in an existing group of that id.
 
 ## 1.8.0 - 2026-10-21
 
