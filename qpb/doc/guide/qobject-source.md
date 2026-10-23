@@ -78,7 +78,10 @@ is off by default, which keeps such properties as plain read-only ones.
   object name, else the class name, made unique with a suffix `_2`, `_3`, ... Adding an object again returns its
   existing group. It returns `nullptr` for a null object.
 - `removeObject(object)` removes the group and stops synchronizing it; it returns `false` if the object was not added.
-  `objects()` lists the objects and `groupOf(object)` finds a group.
+  `objects()` lists the objects and `groupOf(object)` finds a group. Removing an object, or deleting it, is safe at any
+  time: also from a `valueChanged` handler, from a slot on the object's own `NOTIFY` signal or from its setter, while
+  the source is writing a value or reading the object back. The group leaves the model and the object stops being
+  synchronized at once.
 - Edits in the model are written with `QMetaProperty::write`. If the object adjusts or refuses the value, the model
   shows the object's value.
 - Changes of the object are read back through its `NOTIFY` signal. For a `Q_PROPERTY` without one, call `refresh()`,

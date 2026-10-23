@@ -134,7 +134,7 @@ QObjectPropertySourcePrivate::~QObjectPropertySourcePrivate()
 ObjectBinding* QObjectPropertySourcePrivate::bindingOf(const QObject* object) const
 {
     for (const auto& binding : bindings) {
-        if (binding->key == object)
+        if (!binding->dead && binding->key == object)
             return binding.get();
     }
     return nullptr;
@@ -148,6 +148,12 @@ PropertyGroup* QObjectPropertySourcePrivate::groupOf(const ObjectBinding& bindin
 
 void QObjectPropertySourcePrivate::remove(ObjectBinding* binding, bool removeGroup)
 {
+    if (binding->dead)
+        return;
+    // Dead first: a handler reacting to the group's removal finds no record.
+    // The scope keeps the record until this call has finished too.
+    SyncScope scope(this);
+    binding->dead = true;
     for (const QMetaObject::Connection& connection : std::as_const(binding->connections))
         disconnect(connection);
     if (removeGroup) {
@@ -156,16 +162,22 @@ void QObjectPropertySourcePrivate::remove(ObjectBinding* binding, bool removeGro
                 parent->remove(group->id());
         }
     }
-    for (auto it = bindings.begin(); it != bindings.end(); ++it) {
-        if (it->get() == binding) {
-            bindings.erase(it);
-            break;
-        }
+}
+
+void QObjectPropertySourcePrivate::eraseDead()
+{
+    for (auto it = bindings.begin(); it != bindings.end();) {
+        if ((*it)->dead)
+            it = bindings.erase(it);
+        else
+            ++it;
     }
 }
 
 void QObjectPropertySourcePrivate::read(ObjectBinding& binding, const QString& id)
 {
+    if (binding.dead)
+        return;
     PropertyGroup* group = groupOf(binding);
     Property* property = group ? group->child(id) : nullptr;
     if (!property || !binding.object)
@@ -181,19 +193,26 @@ void QObjectPropertySourcePrivate::modelValueChanged(const QString& path, const 
 {
     if (updating)
         return;
-    for (const auto& binding : bindings) {
+    SyncScope scope(this);
+    // The write may run handlers that remove objects: records are only marked
+    // dead meanwhile, so the pointer to the record stays valid.
+    for (const auto& entry : bindings) {
+        ObjectBinding* binding = entry.get();
+        if (binding->dead)
+            continue;
         const QString prefix = binding->groupPath + QLatin1Char('/');
         if (!path.startsWith(prefix))
             continue;
         const QString id = path.mid(prefix.size());
-        const auto it = binding->properties.constFind(id);
-        if (it == binding->properties.constEnd() || !binding->object)
+        const auto found = binding->properties.constFind(id);
+        if (found == binding->properties.constEnd() || !binding->object)
             return;
+        const QMetaProperty metaProperty = *found;
         updating = true;
-        it->write(binding->object, value);
+        metaProperty.write(binding->object, value);
         updating = false;
         // The object may have refused or adjusted the value.
-        if (readValue(*it, binding->object) != value)
+        if (!binding->dead && binding->object && readValue(metaProperty, binding->object) != value)
             read(*binding, id);
         return;
     }
@@ -204,11 +223,15 @@ void QObjectPropertySourcePrivate::notified()
     ObjectBinding* binding = bindingOf(sender());
     if (!binding)
         return;
+    SyncScope scope(this);
     const int signal = senderSignalIndex();
     const QStringList ids = binding->notified.value(signal);
-    for (const QString& id : ids)
+    for (const QString& id : ids) {
+        if (binding->dead)
+            return;
         read(*binding, id);
-    if (binding->title.isValid() && binding->title.notifySignalIndex() == signal)
+    }
+    if (!binding->dead && binding->title.isValid() && binding->title.notifySignalIndex() == signal)
         readTitle(*binding);
 }
 
@@ -374,7 +397,7 @@ QList<QObject*> QObjectPropertySource::objects() const
 {
     QList<QObject*> result;
     for (const auto& binding : d->bindings) {
-        if (binding->object)
+        if (!binding->dead && binding->object)
             result << binding->object;
     }
     return result;
@@ -388,9 +411,18 @@ PropertyGroup* QObjectPropertySource::groupOf(const QObject* object) const
 
 void QObjectPropertySource::refresh()
 {
-    for (const auto& binding : d->bindings) {
-        for (auto it = binding->properties.constBegin(); it != binding->properties.constEnd(); ++it)
-            d->read(*binding, it.key());
+    detail::QObjectPropertySourcePrivate::SyncScope scope(d.get());
+    // A slot may remove objects; they are only marked dead until the loop ends, so
+    // the index and the pointers stay valid. Objects added meanwhile are fresh.
+    const std::size_t count = d->bindings.size();
+    for (std::size_t i = 0; i < count; ++i) {
+        detail::ObjectBinding* binding = d->bindings[i].get();
+        const QStringList ids = binding->properties.keys();
+        for (const QString& id : ids) {
+            if (binding->dead)
+                break;
+            d->read(*binding, id);
+        }
     }
 }
 

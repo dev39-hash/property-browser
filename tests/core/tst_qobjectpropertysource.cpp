@@ -4,8 +4,11 @@
 
 #include <QAbstractItemModelTester>
 #include <QPointer>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTest>
+
+#include <functional>
 
 using namespace qpb;
 
@@ -211,6 +214,39 @@ signals:
     void changed();
 };
 
+// Application code reacting inside the setter: the hook runs instead of the
+// notification and may remove or delete the object, so nothing of the object
+// is used after it.
+class Reactive : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(int level READ level WRITE setLevel NOTIFY levelChanged)
+
+public:
+    int level() const
+    {
+        return m_level;
+    }
+    void setLevel(int level)
+    {
+        m_level = level;
+        if (inSetter) {
+            const std::function<void()> hook = inSetter;
+            hook();
+            return;
+        }
+        emit levelChanged();
+    }
+
+    std::function<void()> inSetter;
+
+signals:
+    void levelChanged();
+
+private:
+    int m_level = 1;
+};
+
 QStringList childIds(const PropertyGroup* group)
 {
     QStringList ids;
@@ -246,6 +282,22 @@ private slots:
     void userEditsOfSourcedPropertiesEmitUserValueChanged();
     void treeReplacedByAUserValueHandlerStillReachesTheObject();
     void treeReplacedByAUserValueHandlerWhileTheObjectAdjustsTheValue();
+
+    // Removing or deleting objects while the source is syncing them.
+    void modelWriteWithAReadBackSlotRemovingTheObject_data();
+    void modelWriteWithAReadBackSlotRemovingTheObject();
+    void objectReactingToAModelWriteByLeaving_data();
+    void objectReactingToAModelWriteByLeaving();
+    void objectChangeWithSeveralPropertiesLeavingInTheFirstSlot_data();
+    void objectChangeWithSeveralPropertiesLeavingInTheFirstSlot();
+    void titleNotificationAfterTheObjectLeft();
+    void refreshWithAnObjectLeavingInASlot_data();
+    void refreshWithAnObjectLeavingInASlot();
+    void otherObjectRemovedInsideAModelWrite();
+    void otherObjectRemovedInsideAnObjectChange();
+    void objectRemovedByAnEarlierSlotLeavesNoRecord();
+    void objectRemovedAndAddedAgainInsideASync_data();
+    void objectRemovedAndAddedAgainInsideASync();
 };
 
 void tst_QObjectPropertySource::propertiesAndTypes()
@@ -731,6 +783,474 @@ void tst_QObjectPropertySource::treeReplacedByAUserValueHandlerWhileTheObjectAdj
     QVERIFY(!model.find(QStringLiteral("cam")));
     camera.setFov(90); // no property to follow it any more
     QCOMPARE(camera.fov(), 90);
+}
+
+void tst_QObjectPropertySource::modelWriteWithAReadBackSlotRemovingTheObject_data()
+{
+    QTest::addColumn<bool>("throughSetData");
+    QTest::newRow("setValue") << false;
+    QTest::newRow("setData") << true;
+}
+
+// The object adjusts the written value, so the source reads it back inside the
+// write; a slot connected after the source reacts to that read-back by removing
+// the object while the write is still running.
+void tst_QObjectPropertySource::modelWriteWithAReadBackSlotRemovingTheObject()
+{
+    QFETCH(bool, throughSetData);
+    PropertyModel model;
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QObjectPropertySource source(&model);
+    Camera camera;
+    camera.setObjectName(QStringLiteral("cam"));
+    QVERIFY(source.addObject(&camera));
+    int removals = 0;
+    QObject::connect(
+        &model, &PropertyModel::valueChanged, &model, [&source, &camera, &removals](const QString& path) {
+            if (path == QStringLiteral("cam/fov") && source.removeObject(&camera))
+                ++removals;
+        });
+
+    bool ok = false;
+    if (throughSetData) {
+        ok = model.setData(
+            model.indexOf(model.find(QStringLiteral("cam/fov")), PropertyModel::ValueColumn), 75);
+    } else {
+        ok = model.setValue(QStringLiteral("cam/fov"), 75);
+    }
+
+    QVERIFY(ok);
+    QCOMPARE(removals, 1);
+    QCOMPARE(camera.fov(), 74); // odd values are refused by the object
+    QVERIFY(!model.find(QStringLiteral("cam")));
+    QVERIFY(source.objects().isEmpty());
+    QVERIFY(!source.groupOf(&camera));
+    QVERIFY(!source.removeObject(&camera));
+
+    // The object is not synchronized any more.
+    camera.setFov(90);
+    camera.setName(QStringLiteral("Later"));
+    QVERIFY(!model.find(QStringLiteral("cam")));
+
+    // It can be added again and shows its current values.
+    PropertyGroup* again = source.addObject(&camera);
+    QVERIFY(again);
+    QCOMPARE(again->path(), QStringLiteral("cam"));
+    QCOMPARE(model.find(QStringLiteral("cam/fov"))->value(), QVariant(90));
+    QCOMPARE(model.find(QStringLiteral("cam/name"))->value(), QVariant(QStringLiteral("Later")));
+}
+
+namespace {
+
+enum class Leaving {
+    SetterRemoves,
+    SetterDeletes,
+    NotifySlotRemoves,
+    NotifySlotDeletes,
+};
+
+} // namespace
+
+void tst_QObjectPropertySource::objectReactingToAModelWriteByLeaving_data()
+{
+    QTest::addColumn<int>("leaving");
+    QTest::addColumn<bool>("throughSetData");
+    const struct
+    {
+        const char* name;
+        Leaving leaving;
+    } rows[] = {
+        {"setterRemoves", Leaving::SetterRemoves},
+        {"setterDeletes", Leaving::SetterDeletes},
+        {"notifySlotRemoves", Leaving::NotifySlotRemoves},
+        {"notifySlotDeletes", Leaving::NotifySlotDeletes},
+    };
+    for (const auto& row : rows) {
+        QTest::newRow(QByteArray(row.name).append("/setValue").constData())
+            << int(row.leaving) << false;
+        QTest::newRow(QByteArray(row.name).append("/setData").constData())
+            << int(row.leaving) << true;
+    }
+}
+
+// A model-side write reaches the object's setter; the setter itself, or a slot
+// on the object's NOTIFY signal, removes the object from the source or deletes
+// it before the write has returned.
+void tst_QObjectPropertySource::objectReactingToAModelWriteByLeaving()
+{
+    QFETCH(int, leaving);
+    QFETCH(bool, throughSetData);
+    const bool deletes = Leaving(leaving) == Leaving::SetterDeletes
+        || Leaving(leaving) == Leaving::NotifySlotDeletes;
+    const bool inSetter = Leaving(leaving) == Leaving::SetterRemoves
+        || Leaving(leaving) == Leaving::SetterDeletes;
+
+    PropertyModel model;
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QObjectPropertySource source(&model);
+    auto* object = new Reactive;
+    const QPointer<Reactive> guard(object);
+    const auto cleanup = qScopeGuard([&guard] { delete guard.data(); });
+    object->setObjectName(QStringLiteral("r"));
+    QVERIFY(source.addObject(object));
+    const auto leave = [&source, object, deletes] {
+        if (deletes)
+            delete object;
+        else
+            source.removeObject(object);
+    };
+    if (inSetter)
+        object->inSetter = leave;
+    else
+        QObject::connect(object, &Reactive::levelChanged, leave);
+
+    const QString level = QStringLiteral("r/level");
+    bool ok = false;
+    if (throughSetData)
+        ok = model.setData(model.indexOf(model.find(level), PropertyModel::ValueColumn), 5);
+    else
+        ok = model.setValue(level, 5);
+
+    QVERIFY(ok);
+    QVERIFY(!model.find(QStringLiteral("r")));
+    QVERIFY(source.objects().isEmpty());
+    if (deletes) {
+        QVERIFY(guard.isNull());
+        return;
+    }
+    QVERIFY(!guard.isNull());
+    QCOMPARE(object->level(), 5);
+    QVERIFY(!source.groupOf(object));
+    QVERIFY(!source.removeObject(object));
+
+    // Not synchronized any more; added again it shows the current value.
+    object->inSetter = nullptr;
+    object->setLevel(8);
+    QVERIFY(!model.find(QStringLiteral("r")));
+    PropertyGroup* again = source.addObject(object);
+    QVERIFY(again);
+    QCOMPARE(again->path(), QStringLiteral("r"));
+    QCOMPARE(model.find(level)->value(), QVariant(8));
+}
+
+void tst_QObjectPropertySource::objectChangeWithSeveralPropertiesLeavingInTheFirstSlot_data()
+{
+    QTest::addColumn<bool>("destroy");
+    QTest::newRow("remove") << false;
+    QTest::newRow("delete") << true;
+}
+
+// One NOTIFY signal announces four properties; the slot of the first value
+// change removes (or deletes) the object: the other three are not written to
+// the removed group.
+void tst_QObjectPropertySource::objectChangeWithSeveralPropertiesLeavingInTheFirstSlot()
+{
+    QFETCH(bool, destroy);
+    PropertyModel model;
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QObjectPropertySource source(&model);
+    auto* recorder = new Recorder;
+    const QPointer<Recorder> guard(recorder);
+    const auto cleanup = qScopeGuard([&guard] { delete guard.data(); });
+    recorder->setObjectName(QStringLiteral("rec"));
+    QVERIFY(source.addObject(recorder));
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    bool left = false;
+    QObject::connect(&model, &PropertyModel::valueChanged, &model,
+        [&source, recorder, destroy, &left](const QString&) {
+            if (left)
+                return;
+            left = true;
+            if (destroy)
+                delete recorder;
+            else
+                source.removeObject(recorder);
+        });
+
+    recorder->m_autostop = true;
+    recorder->m_minutes = 20;
+    recorder->m_saveToDisk = false;
+    recorder->m_folder = QStringLiteral("x");
+    emit recorder->changed();
+
+    QVERIFY(left);
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(values.at(0).at(0).toString(), QStringLiteral("rec/autostop"));
+    QVERIFY(!model.find(QStringLiteral("rec")));
+    QVERIFY(source.objects().isEmpty());
+    QCOMPARE(guard.isNull(), destroy);
+}
+
+// The signal that notifies the title property also updates the group's title
+// after the properties: a slot of the property's change removes the object.
+void tst_QObjectPropertySource::titleNotificationAfterTheObjectLeft()
+{
+    PropertyModel model;
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QObjectPropertySource source(&model);
+    Sensor sensor;
+    sensor.setObjectName(QStringLiteral("s"));
+    QVERIFY(source.addObject(&sensor));
+    int removals = 0;
+    QObject::connect(
+        &model, &PropertyModel::valueChanged, &model, [&source, &sensor, &removals](const QString& path) {
+            if (path == QStringLiteral("s/label") && source.removeObject(&sensor))
+                ++removals;
+        });
+
+    sensor.setLabel(QStringLiteral("Roof"));
+
+    QCOMPARE(removals, 1);
+    QVERIFY(!model.find(QStringLiteral("s")));
+    QVERIFY(source.objects().isEmpty());
+}
+
+void tst_QObjectPropertySource::refreshWithAnObjectLeavingInASlot_data()
+{
+    QTest::addColumn<int>("trigger"); // the object whose refreshed value runs the slot
+    QTest::addColumn<int>("victim"); // the object the slot removes or deletes
+    QTest::addColumn<bool>("destroy");
+    QTest::newRow("firstRemovesItself") << 0 << 0 << false;
+    QTest::newRow("secondRemovesItself") << 1 << 1 << false;
+    QTest::newRow("secondIsDeletedByItsOwnChange") << 1 << 1 << true;
+    QTest::newRow("firstRemovesTheSecond") << 0 << 1 << false;
+    QTest::newRow("firstRemovesTheThird") << 0 << 2 << false;
+    QTest::newRow("firstDeletesTheThird") << 0 << 2 << true;
+    QTest::newRow("thirdRemovesTheFirst") << 2 << 0 << false;
+}
+
+// refresh() copies the values of three objects; a slot of the value change of
+// one of them removes (or deletes) one of the three. The others are refreshed.
+void tst_QObjectPropertySource::refreshWithAnObjectLeavingInASlot()
+{
+    QFETCH(int, trigger);
+    QFETCH(int, victim);
+    QFETCH(bool, destroy);
+    PropertyModel model;
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QObjectPropertySource source(&model);
+    const QStringList names {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")};
+    QPointer<Camera> cameras[3];
+    const auto cleanup = qScopeGuard([&cameras] {
+        for (const QPointer<Camera>& camera : cameras)
+            delete camera.data();
+    });
+    for (int i = 0; i < 3; ++i) {
+        cameras[i] = new Camera;
+        cameras[i]->setObjectName(names.at(i));
+        QVERIFY(source.addObject(cameras[i]));
+    }
+    // "frames" has no NOTIFY signal: only refresh() sees the new values.
+    for (int i = 0; i < 3; ++i)
+        cameras[i]->setFrames(11 * (i + 1));
+    bool left = false;
+    const QString triggerPath = names.at(trigger) + QStringLiteral("/frames");
+    QObject::connect(&model, &PropertyModel::valueChanged, &model,
+        [&](const QString& path) {
+            if (left || path != triggerPath)
+                return;
+            left = true;
+            if (destroy)
+                delete cameras[victim].data();
+            else
+                source.removeObject(cameras[victim]);
+        });
+
+    source.refresh();
+
+    QVERIFY(left);
+    for (int i = 0; i < 3; ++i) {
+        if (i == victim) {
+            QVERIFY(!model.find(names.at(i)));
+            continue;
+        }
+        QVERIFY(model.find(names.at(i)));
+        QCOMPARE(model.find(names.at(i) + QStringLiteral("/frames"))->value(),
+            QVariant(qint64(11 * (i + 1))));
+    }
+    QCOMPARE(source.objects().size(), 2);
+}
+
+// Removing an object other than the one being written leaves the write intact.
+// The removed object was added first, so it sits before the written one.
+void tst_QObjectPropertySource::otherObjectRemovedInsideAModelWrite()
+{
+    PropertyModel model;
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QObjectPropertySource source(&model);
+    Reactive other;
+    other.setObjectName(QStringLiteral("b"));
+    Reactive writer;
+    writer.setObjectName(QStringLiteral("a"));
+    QVERIFY(source.addObject(&other));
+    QVERIFY(source.addObject(&writer));
+    writer.inSetter = [&source, &other] { source.removeObject(&other); };
+
+    QVERIFY(model.setValue(QStringLiteral("a/level"), 5));
+
+    QCOMPARE(writer.level(), 5);
+    QVERIFY(!model.find(QStringLiteral("b")));
+    QVERIFY(model.find(QStringLiteral("a")));
+    QCOMPARE(model.find(QStringLiteral("a/level"))->value(), QVariant(5));
+    QCOMPARE(source.objects(), QList<QObject*>({&writer}));
+
+    // The written object is still synchronized both ways; the removed one is not.
+    writer.inSetter = nullptr;
+    QVERIFY(model.setValue(QStringLiteral("a/level"), 7));
+    QCOMPARE(writer.level(), 7);
+    writer.setLevel(9);
+    QCOMPARE(model.find(QStringLiteral("a/level"))->value(), QVariant(9));
+    other.setLevel(3);
+    QVERIFY(!model.find(QStringLiteral("b")));
+}
+
+// Guard: the same for a change that starts in the object and reaches several
+// properties.
+void tst_QObjectPropertySource::otherObjectRemovedInsideAnObjectChange()
+{
+    PropertyModel model;
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QObjectPropertySource source(&model);
+    Reactive other;
+    other.setObjectName(QStringLiteral("other"));
+    Recorder changing;
+    changing.setObjectName(QStringLiteral("rec"));
+    QVERIFY(source.addObject(&other));
+    QVERIFY(source.addObject(&changing));
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    bool removed = false;
+    QObject::connect(&model, &PropertyModel::valueChanged, &model,
+        [&source, &other, &removed](const QString& path) {
+            if (!removed && path.startsWith(QStringLiteral("rec/"))) {
+                removed = true;
+                source.removeObject(&other);
+            }
+        });
+
+    changing.m_autostop = true;
+    changing.m_minutes = 20;
+    changing.m_saveToDisk = false;
+    changing.m_folder = QStringLiteral("x");
+    emit changing.changed();
+
+    QVERIFY(removed);
+    QCOMPARE(values.count(), 4);
+    QVERIFY(!model.find(QStringLiteral("other")));
+    QCOMPARE(model.find(QStringLiteral("rec/minutes"))->value(), QVariant(20));
+    QCOMPARE(model.find(QStringLiteral("rec/folder"))->value(), QVariant(QStringLiteral("x")));
+    QCOMPARE(source.objects(), QList<QObject*>({&changing}));
+}
+
+// Guard: a slot connected before the source removes the object at the first
+// change, again and again; nothing of the removed objects is left in the
+// source, so adding the object once more gives it a fresh group every time.
+void tst_QObjectPropertySource::objectRemovedByAnEarlierSlotLeavesNoRecord()
+{
+    PropertyModel model;
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QObjectPropertySource* current = nullptr;
+    Camera camera;
+    camera.setObjectName(QStringLiteral("cam"));
+    int removals = 0;
+    QObject::connect(&model, &PropertyModel::valueChanged, &model,
+        [&current, &camera, &removals](const QString& path) {
+            if (path == QStringLiteral("cam/name") && current && current->removeObject(&camera))
+                ++removals;
+        });
+    QObjectPropertySource source(&model);
+    current = &source;
+
+    for (int round = 0; round < 20; ++round) {
+        PropertyGroup* group = source.addObject(&camera);
+        QVERIFY(group);
+        QCOMPARE(group->path(), QStringLiteral("cam"));
+        QCOMPARE(source.objects(), QList<QObject*>({&camera}));
+        QVERIFY(model.setValue(
+            QStringLiteral("cam/name"), QStringLiteral("Name %1").arg(round)));
+        QCOMPARE(removals, round + 1);
+        QVERIFY(!model.find(QStringLiteral("cam")));
+        QVERIFY(source.objects().isEmpty());
+        QVERIFY(!source.groupOf(&camera));
+    }
+}
+
+namespace {
+
+enum class SyncKind {
+    ModelWrite,
+    ObjectNotification,
+    Refresh,
+};
+
+} // namespace
+
+void tst_QObjectPropertySource::objectRemovedAndAddedAgainInsideASync_data()
+{
+    QTest::addColumn<int>("kind");
+    QTest::newRow("modelWrite") << int(SyncKind::ModelWrite);
+    QTest::newRow("objectNotification") << int(SyncKind::ObjectNotification);
+    QTest::newRow("refresh") << int(SyncKind::Refresh);
+}
+
+// A slot removes the object and adds it again while the source is syncing it:
+// afterwards there is one record, one group, synchronized both ways.
+void tst_QObjectPropertySource::objectRemovedAndAddedAgainInsideASync()
+{
+    QFETCH(int, kind);
+    PropertyModel model;
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QObjectPropertySource source(&model);
+    Camera camera;
+    camera.setObjectName(QStringLiteral("cam"));
+    QVERIFY(source.addObject(&camera));
+    // The path whose change runs the slot: for a model write the read-back of
+    // the adjusted value, for the others the value copied from the object.
+    const QString triggerPath = SyncKind(kind) == SyncKind::ModelWrite
+        ? QStringLiteral("cam/fov")
+        : SyncKind(kind) == SyncKind::ObjectNotification ? QStringLiteral("cam/name")
+                                                          : QStringLiteral("cam/frames");
+    int rounds = 0;
+    QObject::connect(&model, &PropertyModel::valueChanged, &model,
+        [&source, &camera, &rounds, triggerPath](const QString& path) {
+            if (rounds > 0 || path != triggerPath)
+                return;
+            ++rounds;
+            source.removeObject(&camera);
+            source.addObject(&camera);
+        });
+
+    switch (SyncKind(kind)) {
+    case SyncKind::ModelWrite:
+        QVERIFY(model.setValue(QStringLiteral("cam/fov"), 75));
+        break;
+    case SyncKind::ObjectNotification:
+        camera.setName(QStringLiteral("Renamed"));
+        break;
+    case SyncKind::Refresh:
+        camera.setFrames(77);
+        source.refresh();
+        break;
+    }
+
+    QCOMPARE(rounds, 1);
+    QCOMPARE(source.objects(), QList<QObject*>({&camera}));
+    QVERIFY(source.groupOf(&camera));
+    QCOMPARE(childIds(model.root()), QStringList({QStringLiteral("cam")}));
+    QCOMPARE(model.find(QStringLiteral("cam/fov"))->value(), QVariant(camera.fov()));
+    QCOMPARE(model.find(QStringLiteral("cam/name"))->value(), QVariant(camera.name()));
+    QCOMPARE(model.find(QStringLiteral("cam/frames"))->value(), QVariant(camera.frames()));
+
+    // Synchronized both ways.
+    QVERIFY(model.setValue(QStringLiteral("cam/name"), QStringLiteral("ViaModel")));
+    QCOMPARE(camera.name(), QStringLiteral("ViaModel"));
+    camera.setName(QStringLiteral("ViaObject"));
+    QCOMPARE(model.find(QStringLiteral("cam/name"))->value(), QVariant(QStringLiteral("ViaObject")));
+
+    // One removal succeeds, the next finds nothing.
+    QVERIFY(source.removeObject(&camera));
+    QVERIFY(!source.removeObject(&camera));
+    QVERIFY(source.objects().isEmpty());
+    QVERIFY(!model.find(QStringLiteral("cam")));
 }
 
 QTEST_GUILESS_MAIN(tst_QObjectPropertySource)
