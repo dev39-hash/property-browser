@@ -49,6 +49,10 @@ Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC tria
   `QObjectPropertySource`) receive the correct values instead of reading freed memory. `valueChanged` carries copies of
   the values. Outside such a handler both calls still destroy at once. "Reset to default" and "Reset group" of the views
   stop writing properties that a handler removed or replaced.
+- A `QObjectPropertySource` survives `removeObject()`, or the deletion of the object, while it is syncing a value: from
+  a `valueChanged` handler, from a slot on the object's `NOTIFY` signal or its setter, while it reads back the
+  properties one signal notifies, and during `refresh()` (also when the removed object is another one). Before, the
+  source could use freed memory. The group leaves the model and the object stops being synchronized at once.
 - Editors that `PropertyDelegate` opens (`PropertyTreeView`, or any view that uses the delegate, also through a proxy
   model) follow changes of the property's attributes, such as a range, `decimals` or a suffix, while they are open. They
   keep the text being typed when the model reports a change that leaves the value as it was (another role such as the
