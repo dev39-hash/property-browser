@@ -137,7 +137,8 @@ because applications may override them (see [conventions.md](conventions.md)). `
 
 ## Qt Creator projects
 
-`examples/qtcreator/` has two projects that build the library and all examples, for opening in Qt Creator:
+`examples/qtcreator/` has two projects that build the library and all examples, for opening in Qt Creator, and a qmake
+application:
 
 - `CMakeLists.txt`: builds `../../qpb` and reuses `../CMakeLists.txt`, so a new example shows up without further work.
   Open it, pick a Qt 6.5+ or Qt 5.15 kit and choose the example in the run target selector. From a terminal:
@@ -145,6 +146,22 @@ because applications may override them (see [conventions.md](conventions.md)). `
 - `qpb_examples.pro`: a qmake project for those who work with qmake. It builds the same sources as one static library
   (`qmake/qpb`) and one executable per example (`qmake/<example>/<example>.pro`). It only serves the examples; projects
   integrate qpb with CMake.
+- `qmake_app/qmake_app.pro`: a qmake application laid out like a project that keeps qpb as `components/qpb` and replaces
+  that folder as a whole on updates. qpb supports CMake only and ships no qmake file; this is an example to copy, not a
+  supported integration, and it is not built by CTest. Its parts:
+  - `qpb_component.pri`: the only setting, the path of the component folder (here the repository's `qpb/`; a comment
+    shows the `components/qpb` form).
+  - `qpb_lib/qpb_lib.pro`: builds the component folder unchanged as one static library. Sources, headers and the
+    translations resource are found by globbing, `include/qpb/qpbversion.h` is generated from `VERSION` and
+    `cmake/qpbversion.h.in` (written only when it changes), and the defines qpb applies to its own sources
+    (`QT_NO_CAST_FROM_ASCII` and the like) are set in this project only, so they do not reach the application.
+  - `qpb.pri`: what the application includes: include paths, `QPB_STATIC`, the link line and the dependency on the
+    library.
+  - `app/`: a small application with its `main.cpp`.
+
+  From a terminal, in an empty build folder (`nmake` or `jom` instead of `make` with MSVC):
+  `qmake <path to>/qmake_app.pro && make`. The library project is also what `qpb_examples.pro` builds
+  (`qmake/qpb/qpb.pro` includes it), so there is one copy.
 
 When an example is added under `examples/`, it is added to `examples/CMakeLists.txt`, to `QPB_EXAMPLES` in
 `qpb_examples.pro` and as `qmake/<example>/<example>.pro`; `qtcreator_examples_listed` fails otherwise.

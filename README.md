@@ -39,8 +39,9 @@ Requirements: C++17, Qt 6.5 or newer or Qt 5.15, CMake 3.21 or newer; see
 ## Examples
 
 More in [`examples/`](examples): quickstart, a custom `QColor` type, an inspector, a settings dialog, a runtime
-plugin configuration, a form view and a tree view sharing one search filter, an editor for QObjects with undo/redo and
-JSON files, a dark and a light theme from one style sheet template
+plugin configuration, a form view and a tree view sharing one search filter, a reusable panel with a search box and a
+description of the current property ([`examples/property_panel`](examples/property_panel)), an editor for QObjects
+with undo/redo and JSON files, a dark and a light theme from one style sheet template
 ([`examples/custom_theme`](examples/custom_theme); see [style sheets](qpb/doc/guide/style-sheets.md)), and
 English, Japanese and Vietnamese switched at run time ([`examples/translations`](examples/translations); see
 [translations](qpb/doc/guide/translations.md)).
@@ -48,7 +49,9 @@ English, Japanese and Vietnamese switched at run time ([`examples/translations`]
 To build and run them all in Qt Creator, open [`examples/qtcreator/CMakeLists.txt`](examples/qtcreator/CMakeLists.txt)
 (or [`qpb_examples.pro`](examples/qtcreator/qpb_examples.pro) with qmake), pick a Qt 6.5+ or Qt 5.15 kit and choose
 the example in the run target selector. The qmake project only serves the examples; projects integrate qpb with CMake
-(see above).
+(see above). For an application that is built with qmake anyway,
+[`examples/qtcreator/qmake_app`](examples/qtcreator/qmake_app) shows how to build the component folder unchanged as a
+static library; it is an example to copy, not a supported integration.
 
 ## Developing qpb
 
