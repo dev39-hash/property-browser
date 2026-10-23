@@ -84,6 +84,8 @@ public:
     // used after an emission unless the guard says the model is still there.
     void emitSubtreeChanged(PropertyGroup* group, const QPointer<PropertyModel>& guard)
     {
+        if (!inTree(group))
+            return; // a handler detached it meanwhile: it has no rows to announce
         const int count = group->childCount();
         if (count == 0)
             return;
@@ -151,6 +153,8 @@ public:
     {
         const QPointer<PropertyModel> guard(q);
         if (property != root.get()) {
+            if (!inTree(property))
+                return; // detached by a handler: no index to announce
             const QModelIndex index = q->indexOf(property);
             emitRowsChanged(index.parent(), index.row(), index.row());
         }
@@ -197,7 +201,9 @@ public:
         return holdData;
     }
 
-    void retire(std::unique_ptr<Property> detached) override
+    // Takes over a subtree that was detached from the tree. It is destroyed at
+    // once, or when the outermost hold ends.
+    void retire(std::unique_ptr<Property> detached)
     {
         holdData->retire(std::move(detached));
     }
@@ -294,11 +300,33 @@ public:
 
     void evaluateAllConditions(bool notify, bool warn = true)
     {
+        // A handler of dataChanged may delete the model, which destroys this
+        // object: nothing of it is used after a notification unless the guard
+        // says the model is still there.
+        const QPointer<PropertyModel> guard(q);
         rebuildDependents();
-        for (const QList<Property*>& properties : std::as_const(dependents)) {
-            for (Property* property : properties)
+        // A handler may change the tree, which evaluates again and rebuilds
+        // dependents: this walk goes on over what it started with.
+        const QHash<QString, QList<Property*>> snapshot = dependents;
+        for (const QList<Property*>& properties : snapshot) {
+            for (Property* property : properties) {
+                if (!inTree(property))
+                    continue; // removed by a handler; kept alive by the hold
                 evaluate(property, notify, warn);
+                if (!guard)
+                    return;
+            }
         }
+    }
+
+    // Whether property belongs to the tree of this model. A property that a
+    // handler detached meanwhile has no model index to announce.
+    bool inTree(const Property* property) const
+    {
+        const Property* top = property;
+        while (top->parent())
+            top = top->parent();
+        return top == root.get();
     }
 
     void evaluateDependents(const QString& sourcePath, const QPointer<PropertyModel>& guard)
@@ -307,6 +335,8 @@ public:
             rebuildDependents();
         const QList<Property*> properties = dependents.value(sourcePath);
         for (Property* property : properties) {
+            if (!inTree(property))
+                continue; // removed by a handler; kept alive by the hold
             evaluate(property, true);
             if (!guard)
                 return;

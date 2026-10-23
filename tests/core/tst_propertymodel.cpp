@@ -254,6 +254,23 @@ private slots:
     void modelDeletedByADataChangedHandler_data();
     void modelDeletedByADataChangedHandler();
 
+    // A handler of dataChanged() deletes the model while a structure, condition
+    // or presentation call is still running.
+    void modelDeletedFromAStructureOrConditionCall_data();
+    void modelDeletedFromAStructureOrConditionCall();
+    void presentationSetterKeepsTheTreeUntilItReturns_data();
+    void presentationSetterKeepsTheTreeUntilItReturns();
+    void modelDeletedFromACallInsideAValueHandler_data();
+    void modelDeletedFromACallInsideAValueHandler();
+    void removalOutsideAHandlerDestroysAtOnce();
+    void handlerChangesTheTreeWhileConditionsAreEvaluated();
+    void addReturnsTheAddedPropertyAfterAHandlerChangedTheGroup_data();
+    void addReturnsTheAddedPropertyAfterAHandlerChangedTheGroup();
+    void addGroupReturnsTheNewGroupAfterAHandlerRanDuringTheAdd_data();
+    void addGroupReturnsTheNewGroupAfterAHandlerRanDuringTheAdd();
+    void recursiveChangeSkipsGroupsRemovedByAHandler_data();
+    void recursiveChangeSkipsGroupsRemovedByAHandler();
+
     // Edits made by the user are announced apart from application writes.
     void setDataEmitsUserValueChanged();
     void checkStateEmitsUserValueChanged();
@@ -2595,6 +2612,590 @@ void tst_PropertyModel::modelDeletedByADataChangedHandler()
     QCOMPARE(log.events.count(QStringLiteral("deleted")), 1);
     QCOMPARE(log.events.count(QStringLiteral("destroyed")), 1);
     QCOMPARE(log.events.last(), QStringLiteral("destroyed"));
+}
+
+namespace {
+
+// How many tracked properties were created and destroyed.
+struct LifeStats
+{
+    int created = 0;
+    int destroyed = 0;
+};
+
+// One marker per tracked property, kept alive by the property's validator.
+struct LifeMarker
+{
+    explicit LifeMarker(LifeStats* lifeStats)
+        : stats(lifeStats)
+    {
+        ++stats->created;
+    }
+    ~LifeMarker()
+    {
+        ++stats->destroyed;
+    }
+    LifeMarker(const LifeMarker&) = delete;
+    LifeMarker& operator=(const LifeMarker&) = delete;
+    LifeStats* stats;
+};
+
+// Every property of the subtree, groups included, counts its own destruction.
+void trackAll(Property& property, LifeStats& stats)
+{
+    auto marker = std::make_shared<LifeMarker>(&stats);
+    property.setValidator([marker](const QVariant&, const Property&) {
+        return ValidationResult::valid();
+    });
+    if (PropertyGroup* group = property.toGroup()) {
+        for (Property* child : group->children())
+            trackAll(*child, stats);
+    }
+}
+
+// Panel
+// |-- gate      bool
+// |-- t1        int, enabled when Box/src
+// |-- t2        int, visible when Box/src
+// |-- t3        int, enabled when Box/src
+// |-- extra     int
+// |-- G
+// |   |-- inner int
+// |   `-- Deep
+// |       `-- leaf int
+// `-- Box
+//     `-- src   bool, false (only with the source)
+// Without the source the conditions of t1..t3 count as met.
+std::unique_ptr<PropertyGroup> createPanel(bool withSource)
+{
+    auto root = PropertyGroup::create(QStringLiteral("Panel"));
+    root->addBool(QStringLiteral("gate"), true);
+    root->addInt(QStringLiteral("t1"), 1).enabledWhen(QStringLiteral("Box/src"));
+    root->addInt(QStringLiteral("t2"), 2).visibleWhen(QStringLiteral("Box/src"));
+    root->addInt(QStringLiteral("t3"), 3).enabledWhen(QStringLiteral("Box/src"));
+    root->addInt(QStringLiteral("extra"), 4);
+    PropertyGroup& group = root->addGroup(QStringLiteral("G"));
+    group.addInt(QStringLiteral("inner"), 5);
+    group.addGroup(QStringLiteral("Deep")).addInt(QStringLiteral("leaf"), 6);
+    PropertyGroup& box = root->addGroup(QStringLiteral("Box"));
+    if (withSource)
+        box.addBool(QStringLiteral("src"), false);
+    return root;
+}
+
+enum class Op {
+    Add, // Box gets "src", which flips t1..t3
+    RemoveSource, // Box loses "src", which flips t1..t3
+    RemoveGroup, // the root loses Box
+    SetEnabledWhen, // "extra" gets a condition that is not met
+    SetVisibleWhen,
+    ReplaceUnmetCondition, // t1 gets the condition it already has, and it is not met
+    ClearUnmetEnabledWhen,
+    ClearUnmetVisibleWhen,
+    SetDisplayName,
+    SetToolTip,
+    SetAttribute,
+    SetGroupFlags,
+    SetGroupReadOnly,
+    WriteSource, // "src" becomes true, which flips t1..t3
+};
+
+// The parts of a panel an operation touches, taken before anything is deleted.
+struct Panel
+{
+    PropertyGroup* root = nullptr;
+    PropertyGroup* box = nullptr;
+    PropertyGroup* group = nullptr;
+    Property* t1 = nullptr;
+    Property* t2 = nullptr;
+    Property* extra = nullptr;
+    Property* src = nullptr; // only with the source
+    std::unique_ptr<Property> fresh; // what Op::Add adds
+};
+
+Panel pickPanel(PropertyModel& model)
+{
+    Panel panel;
+    panel.root = model.root();
+    panel.box = model.find(QStringLiteral("Box"))->toGroup();
+    panel.group = model.find(QStringLiteral("G"))->toGroup();
+    panel.t1 = model.find(QStringLiteral("t1"));
+    panel.t2 = model.find(QStringLiteral("t2"));
+    panel.extra = model.find(QStringLiteral("extra"));
+    panel.src = model.find(QStringLiteral("Box/src"));
+    return panel;
+}
+
+// Returns false only when a removal or a write was refused.
+bool runOp(Op op, Panel& panel)
+{
+    switch (op) {
+    case Op::Add:
+        panel.box->add(std::move(panel.fresh));
+        return true;
+    case Op::RemoveSource:
+        return panel.box->remove(QStringLiteral("src"));
+    case Op::RemoveGroup:
+        return panel.root->remove(QStringLiteral("Box"));
+    case Op::SetEnabledWhen:
+        panel.extra->setEnabledWhen(QStringLiteral("Box/src"));
+        return true;
+    case Op::SetVisibleWhen:
+        panel.extra->setVisibleWhen(QStringLiteral("Box/src"));
+        return true;
+    case Op::ReplaceUnmetCondition:
+        panel.t1->setEnabledWhen(QStringLiteral("Box/src"));
+        return true;
+    case Op::ClearUnmetEnabledWhen:
+        panel.t1->clearEnabledWhen();
+        return true;
+    case Op::ClearUnmetVisibleWhen:
+        panel.t2->clearVisibleWhen();
+        return true;
+    case Op::SetDisplayName:
+        panel.t1->setDisplayName(QStringLiteral("First"));
+        return true;
+    case Op::SetToolTip:
+        panel.t1->setToolTip(QStringLiteral("A tip"));
+        return true;
+    case Op::SetAttribute:
+        panel.t1->setAttribute(QStringLiteral("custom"), QStringLiteral("x"));
+        return true;
+    case Op::SetGroupFlags:
+        panel.group->setFlags(Property::Flags(Property::Flag::Disabled));
+        return true;
+    case Op::SetGroupReadOnly:
+        panel.group->setReadOnly(true);
+        return true;
+    case Op::WriteSource:
+        return panel.src->setValue(true);
+    }
+    return false;
+}
+
+// What the model announced, and what had been destroyed when the model was deleted.
+struct Announced
+{
+    int data = 0;
+    int inserted = 0;
+    int removed = 0;
+    int other = 0; // reset, layout change, value signals
+    int destroyedAtDeletion = -1;
+};
+
+void countSignals(PropertyModel* model, Announced& announced)
+{
+    QObject::connect(model, &QAbstractItemModel::rowsInserted, [&announced] { ++announced.inserted; });
+    QObject::connect(model, &QAbstractItemModel::rowsRemoved, [&announced] { ++announced.removed; });
+    QObject::connect(model, &QAbstractItemModel::modelReset, [&announced] { ++announced.other; });
+    QObject::connect(model, &QAbstractItemModel::layoutChanged, [&announced] { ++announced.other; });
+    QObject::connect(model, &PropertyModel::valueChanged, [&announced] { ++announced.other; });
+    QObject::connect(model, &PropertyModel::batchValueChanged, [&announced] { ++announced.other; });
+}
+
+// A handler of dataChanged() deletes the model at the given announcement while
+// op runs. The call returns normally, announces nothing more, and every tracked
+// property (also one the call detached or was about to add) is destroyed once,
+// when the call has returned. With checkTiming, the tree must also still be
+// alive when the handler that deleted the model has returned.
+void deleteModelFromDataChanged(Op op, bool withSource, int deleteAt, bool checkTiming)
+{
+    LifeStats stats;
+    auto* model = new PropertyModel(createPanel(withSource));
+    const QPointer<PropertyModel> guard(model);
+    const auto cleanup = qScopeGuard([&guard] { delete guard.data(); });
+    trackAll(*model->root(), stats);
+    Panel panel = pickPanel(*model);
+    if (op == Op::Add) {
+        panel.fresh = Property::create(Types::Bool, QStringLiteral("src"), false);
+        trackAll(*panel.fresh, stats);
+    }
+    const int created = stats.created;
+
+    Announced announced;
+    countSignals(model, announced);
+    QObject::connect(model, &QAbstractItemModel::dataChanged, [&] {
+        if (++announced.data != deleteAt)
+            return;
+        delete model;
+        announced.destroyedAtDeletion = stats.destroyed;
+    });
+
+    const bool result = runOp(op, panel);
+
+    QVERIFY(result);
+    QVERIFY(guard.isNull());
+    QCOMPARE(announced.data, deleteAt); // nothing is announced after the deletion
+    QCOMPARE(announced.inserted, op == Op::Add ? 1 : 0);
+    QCOMPARE(announced.removed, (op == Op::RemoveSource || op == Op::RemoveGroup) ? 1 : 0);
+    QCOMPARE(announced.other, 0);
+    QVERIFY(created > 0);
+    if (checkTiming)
+        QCOMPARE(announced.destroyedAtDeletion, 0); // the call is still running
+    QCOMPARE(stats.created, created);
+    QCOMPARE(stats.destroyed, created); // all destroyed once, nothing leaks
+}
+
+} // namespace
+
+void tst_PropertyModel::modelDeletedFromAStructureOrConditionCall_data()
+{
+    QTest::addColumn<int>("op");
+    QTest::addColumn<bool>("withSource");
+    QTest::addColumn<int>("deleteAt"); // number of the dataChanged() that deletes the model
+    const auto row = [](const char* name, Op op, bool withSource, int deleteAt) {
+        QTest::newRow(name) << int(op) << withSource << deleteAt;
+    };
+    row("add", Op::Add, false, 1);
+    row("remove/source", Op::RemoveSource, true, 1);
+    row("remove/group", Op::RemoveGroup, true, 1);
+    row("setEnabledWhen/unmet", Op::SetEnabledWhen, true, 1);
+    row("setVisibleWhen/unmet", Op::SetVisibleWhen, true, 1);
+    row("setEnabledWhen/replacesAnUnmetOne", Op::ReplaceUnmetCondition, true, 1);
+    row("clearEnabledWhen/unmet", Op::ClearUnmetEnabledWhen, true, 1);
+    row("clearVisibleWhen/unmet", Op::ClearUnmetVisibleWhen, true, 1);
+    row("setDisplayName", Op::SetDisplayName, true, 1);
+    row("setToolTip", Op::SetToolTip, true, 1);
+    row("setAttribute", Op::SetAttribute, true, 1);
+    row("setFlags/group", Op::SetGroupFlags, true, 1);
+    row("setFlags/groupRows", Op::SetGroupFlags, true, 2);
+    row("setFlags/groupSubtree", Op::SetGroupFlags, true, 3);
+    row("setReadOnly/group", Op::SetGroupReadOnly, true, 1);
+    row("writeSource/atTheSource", Op::WriteSource, true, 1);
+    row("writeSource/atADependent", Op::WriteSource, true, 2);
+}
+
+// A handler of dataChanged() deletes the model at the given announcement of a
+// structure, condition or presentation call. The call returns normally,
+// announces nothing more, and the tree (also a property the call detached or was
+// about to add) is destroyed once, when the call has returned.
+void tst_PropertyModel::modelDeletedFromAStructureOrConditionCall()
+{
+    QFETCH(int, op);
+    QFETCH(bool, withSource);
+    QFETCH(int, deleteAt);
+    const bool presentation = Op(op) >= Op::SetDisplayName && Op(op) <= Op::SetGroupReadOnly;
+
+    // A presentation setter touches nothing after the announcement, so when it
+    // lets the tree go is covered apart (presentationSetterKeepsTheTreeUntilItReturns).
+    deleteModelFromDataChanged(Op(op), withSource, deleteAt, !presentation);
+}
+
+void tst_PropertyModel::presentationSetterKeepsTheTreeUntilItReturns_data()
+{
+    QTest::addColumn<int>("op");
+    QTest::addColumn<int>("deleteAt");
+    const auto row = [](const char* name, Op op, int deleteAt) {
+        QTest::newRow(name) << int(op) << deleteAt;
+    };
+    row("setDisplayName", Op::SetDisplayName, 1);
+    row("setToolTip", Op::SetToolTip, 1);
+    row("setAttribute", Op::SetAttribute, 1);
+    row("setFlags/group", Op::SetGroupFlags, 1);
+    row("setFlags/groupRows", Op::SetGroupFlags, 2);
+    row("setFlags/groupSubtree", Op::SetGroupFlags, 3);
+    row("setReadOnly/group", Op::SetGroupReadOnly, 1);
+}
+
+// Same as modelDeletedFromAStructureOrConditionCall for the presentation
+// setters, with the tree still alive in the slot that deletes the model: it is
+// destroyed when the setter has returned.
+void tst_PropertyModel::presentationSetterKeepsTheTreeUntilItReturns()
+{
+    QFETCH(int, op);
+    QFETCH(int, deleteAt);
+    deleteModelFromDataChanged(Op(op), true, deleteAt, true);
+}
+
+void tst_PropertyModel::modelDeletedFromACallInsideAValueHandler_data()
+{
+    QTest::addColumn<int>("op");
+    QTest::addColumn<bool>("withSource");
+    const auto row = [](const char* name, Op op, bool withSource) {
+        QTest::newRow(name) << int(op) << withSource;
+    };
+    row("add", Op::Add, false);
+    row("remove/source", Op::RemoveSource, true);
+    row("remove/group", Op::RemoveGroup, true);
+    row("setEnabledWhen/unmet", Op::SetEnabledWhen, true);
+    row("setVisibleWhen/unmet", Op::SetVisibleWhen, true);
+    row("setEnabledWhen/replacesAnUnmetOne", Op::ReplaceUnmetCondition, true);
+    row("clearEnabledWhen/unmet", Op::ClearUnmetEnabledWhen, true);
+}
+
+// The call runs inside a handler of valueChanged(), which is itself part of a
+// write: the model is deleted by a dataChanged() slot during the call. The call
+// returns normally, and the tree dies once, when the outermost write has
+// returned, not when the call has.
+void tst_PropertyModel::modelDeletedFromACallInsideAValueHandler()
+{
+    QFETCH(int, op);
+    QFETCH(bool, withSource);
+
+    LifeStats stats;
+    auto* model = new PropertyModel(createPanel(withSource));
+    const QPointer<PropertyModel> guard(model);
+    const auto cleanup = qScopeGuard([&guard] { delete guard.data(); });
+    trackAll(*model->root(), stats);
+    Panel panel = pickPanel(*model);
+    if (Op(op) == Op::Add) {
+        panel.fresh = Property::create(Types::Bool, QStringLiteral("src"), false);
+        trackAll(*panel.fresh, stats);
+    }
+    const int created = stats.created;
+
+    bool armed = false;
+    int dataWhileArmed = 0;
+    int destroyedAtDeletion = -1;
+    int destroyedAfterCall = -1;
+    int handlerCalls = 0;
+    bool result = false;
+    QObject::connect(model, &QAbstractItemModel::dataChanged, [&] {
+        if (!armed || ++dataWhileArmed != 1)
+            return;
+        delete model;
+        destroyedAtDeletion = stats.destroyed;
+    });
+    QObject::connect(model, &PropertyModel::valueChanged, [&] {
+        if (handlerCalls++ > 0)
+            return;
+        armed = true;
+        result = runOp(Op(op), panel);
+        armed = false;
+        destroyedAfterCall = stats.destroyed;
+    });
+
+    const bool written = model->setValue(QStringLiteral("gate"), false);
+
+    QVERIFY(written);
+    QCOMPARE(handlerCalls, 1);
+    QVERIFY(result);
+    QVERIFY(guard.isNull());
+    QCOMPARE(dataWhileArmed, 1);
+    QCOMPARE(destroyedAtDeletion, 0);
+    QCOMPARE(destroyedAfterCall, 0); // the write further up is still running
+    QCOMPARE(stats.created, created);
+    QCOMPARE(stats.destroyed, created);
+}
+
+// Guard: nothing is held back when no handler deletes the model. A property
+// removed outside any handler, also one that flips conditions, is destroyed
+// before remove() returns, and deleting the model destroys the rest at once.
+void tst_PropertyModel::removalOutsideAHandlerDestroysAtOnce()
+{
+    LifeStats stats;
+    auto* model = new PropertyModel(createPanel(true));
+    const QPointer<PropertyModel> guard(model);
+    const auto cleanup = qScopeGuard([&guard] { delete guard.data(); });
+    auto tester = std::make_unique<QAbstractItemModelTester>(
+        model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    trackAll(*model->root(), stats);
+    const int created = stats.created; // Panel and the 11 properties below it
+    QCOMPARE(created, 12);
+    int dataCalls = 0;
+    QObject::connect(model, &QAbstractItemModel::dataChanged, [&dataCalls] { ++dataCalls; });
+    PropertyGroup* box = model->find(QStringLiteral("Box"))->toGroup();
+
+    // "src" flips the three dependents (three announcements).
+    QVERIFY(box->remove(QStringLiteral("src")));
+    QCOMPARE(stats.destroyed, 1);
+    QCOMPARE(dataCalls, 3);
+    QVERIFY(model->find(QStringLiteral("t1"))->isEnabled());
+    QVERIFY(model->find(QStringLiteral("t2"))->isVisible());
+
+    // A group with a whole subtree: Box, then G with inner, Deep and leaf.
+    QVERIFY(model->root()->remove(QStringLiteral("Box")));
+    QCOMPARE(stats.destroyed, 2);
+    QVERIFY(model->root()->remove(QStringLiteral("G")));
+    QCOMPARE(stats.destroyed, 6);
+    QVERIFY(!model->find(QStringLiteral("G")));
+
+    // Adding and removing a property that nothing depends on.
+    auto extra = Property::create(Types::Int, QStringLiteral("later"), 1);
+    trackAll(*extra, stats);
+    model->root()->add(std::move(extra));
+    QCOMPARE(stats.created, created + 1);
+    QVERIFY(model->root()->remove(QStringLiteral("later")));
+    QCOMPARE(stats.destroyed, 7);
+
+    tester.reset();
+    delete guard.data();
+    QCOMPARE(stats.destroyed, created + 1);
+}
+
+// Adding "src" flips the conditions of t1..t3. The first announcement is
+// handled by removing t3 and adding another property, which evaluate the
+// conditions again inside the evaluation that is running: that one goes on over
+// what it started with, and skips the dependent that was removed meanwhile (no
+// announcement for a property that is not in the tree).
+void tst_PropertyModel::handlerChangesTheTreeWhileConditionsAreEvaluated()
+{
+    PropertyModel model(createPanel(false));
+    QAbstractItemModelTester tester(
+        &model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    PropertyGroup* root = model.root();
+    PropertyGroup* box = model.find(QStringLiteral("Box"))->toGroup();
+    int dataCalls = 0;
+    bool acted = false;
+    QObject::connect(&model, &QAbstractItemModel::dataChanged, [&] {
+        ++dataCalls;
+        if (acted)
+            return;
+        acted = true;
+        QVERIFY(root->remove(QStringLiteral("t3")));
+        root->addInt(QStringLiteral("late"), 7);
+    });
+
+    box->addBool(QStringLiteral("src"), false);
+
+    QVERIFY(acted);
+    QCOMPARE(dataCalls, 2); // t1 (the first), then t2 (found by the nested evaluation)
+    QVERIFY(!model.find(QStringLiteral("t3")));
+    QVERIFY(model.find(QStringLiteral("late")));
+    QVERIFY(!model.find(QStringLiteral("t1"))->isEnabled());
+    QVERIFY(!model.find(QStringLiteral("t2"))->isVisible());
+}
+
+void tst_PropertyModel::addReturnsTheAddedPropertyAfterAHandlerChangedTheGroup_data()
+{
+    QTest::addColumn<bool>("removeAdded"); // else the handler adds a sibling
+
+    QTest::newRow("the handler removes the added property") << true;
+    QTest::newRow("the handler adds a sibling") << false;
+}
+
+// Adding "G/x" flips the condition of "dep", which announces dataChanged while
+// add() is still running. A handler that removes the added property (the only
+// child), or adds another one after it, must not change what add() returns: the
+// reference is to the property that was added. After the first case it is no
+// longer valid to use, so only its address is compared.
+void tst_PropertyModel::addReturnsTheAddedPropertyAfterAHandlerChangedTheGroup()
+{
+    QFETCH(bool, removeAdded);
+
+    auto root = PropertyGroup::create(QStringLiteral("Panel"));
+    PropertyGroup* group = &root->addGroup(QStringLiteral("G"));
+    root->addInt(QStringLiteral("dep"), 1).enabledWhen(QStringLiteral("G/x"));
+    PropertyModel model(std::move(root));
+    QAbstractItemModelTester tester(
+        &model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+
+    auto added = Property::create(Types::Bool, QStringLiteral("x"), false);
+    const Property* const addedAddress = added.get();
+    bool acted = false;
+    QObject::connect(&model, &QAbstractItemModel::dataChanged, [&] {
+        if (acted)
+            return;
+        acted = true;
+        if (removeAdded)
+            QVERIFY(group->remove(QStringLiteral("x")));
+        else
+            group->addInt(QStringLiteral("y"), 2);
+    });
+
+    const Property* const returned = &group->add(std::move(added));
+
+    QVERIFY(acted);
+    QCOMPARE(returned, addedAddress);
+    QCOMPARE(bool(model.find(QStringLiteral("G/x"))), !removeAdded);
+    QCOMPARE(bool(model.find(QStringLiteral("G/y"))), !removeAdded);
+}
+
+void tst_PropertyModel::addGroupReturnsTheNewGroupAfterAHandlerRanDuringTheAdd_data()
+{
+    QTest::addColumn<bool>("deleteModel"); // else the handler removes the new group
+
+    QTest::newRow("the handler deletes the model") << true;
+    QTest::newRow("the handler removes the new group") << false;
+}
+
+// Adding the group "G2" flips the condition of "dep" (a group has no value, so
+// the condition is not met once the group exists), which announces dataChanged
+// while addGroup() is still running. What addGroup() returns is the new group;
+// nothing of it is read once the handler has deleted the model or removed it,
+// so only its address is compared.
+void tst_PropertyModel::addGroupReturnsTheNewGroupAfterAHandlerRanDuringTheAdd()
+{
+    QFETCH(bool, deleteModel);
+
+    auto root = PropertyGroup::create(QStringLiteral("Panel"));
+    root->addInt(QStringLiteral("dep"), 1).enabledWhen(QStringLiteral("G2"));
+    auto* model = new PropertyModel(std::move(root));
+    const QPointer<PropertyModel> guard(model);
+    const auto cleanup = qScopeGuard([&guard] { delete guard.data(); });
+    PropertyGroup* panel = model->root();
+    const Property* newGroup = nullptr;
+    bool acted = false;
+    QObject::connect(model, &QAbstractItemModel::dataChanged, [&] {
+        if (acted)
+            return;
+        acted = true;
+        newGroup = guard->find(QStringLiteral("G2"));
+        if (deleteModel)
+            delete guard.data();
+        else
+            QVERIFY(panel->remove(QStringLiteral("G2")));
+    });
+
+    const PropertyGroup* const returned = &panel->addGroup(QStringLiteral("G2"));
+
+    QVERIFY(acted);
+    QVERIFY(newGroup);
+    QCOMPARE(static_cast<const Property*>(returned), newGroup);
+    QCOMPARE(guard.isNull(), deleteModel);
+}
+
+void tst_PropertyModel::recursiveChangeSkipsGroupsRemovedByAHandler_data()
+{
+    QTest::addColumn<QString>("flagged"); // whose read-only flag is set; empty: the root
+    QTest::addColumn<QString>("removed"); // removed by the handler
+    QTest::addColumn<int>("removeAt"); // the announcement whose handler removes it
+    QTest::addColumn<int>("expectedCalls");
+
+    // The root's rows, G's rows and Deep's rows. Box comes after G in the walk
+    // and is removed while G's rows are announced.
+    QTest::newRow("sibling ahead in the walk")
+        << QString() << QStringLiteral("Box") << 2 << 3;
+    // Only the group's own row: its children are not announced.
+    QTest::newRow("the group itself") << QStringLiteral("G") << QStringLiteral("G") << 1 << 1;
+}
+
+// Setting a flag announces the property and, for a group, all rows below it.
+// A handler that removes a group the walk has not reached yet, or the group
+// being announced, must not make the walk announce rows of a detached group
+// (they would be taken for rows of the root).
+void tst_PropertyModel::recursiveChangeSkipsGroupsRemovedByAHandler()
+{
+    QFETCH(QString, flagged);
+    QFETCH(QString, removed);
+    QFETCH(int, removeAt);
+    QFETCH(int, expectedCalls);
+
+    PropertyModel model(createPanel(false));
+    model.find(QStringLiteral("Box"))->toGroup()->addInt(QStringLiteral("filler"), 1);
+    QAbstractItemModelTester tester(
+        &model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    PropertyGroup* root = model.root();
+    Property* target = flagged.isEmpty() ? root : model.find(flagged);
+    int dataCalls = 0;
+    bool invalidRange = false;
+    bool acted = false;
+    QObject::connect(&model, &QAbstractItemModel::dataChanged,
+        [&](const QModelIndex& topLeft, const QModelIndex& bottomRight) {
+            ++dataCalls;
+            invalidRange = invalidRange || !topLeft.isValid() || !bottomRight.isValid();
+            if (dataCalls != removeAt)
+                return;
+            acted = true;
+            QVERIFY(root->remove(removed));
+        });
+
+    target->setReadOnly(true);
+
+    QVERIFY(acted);
+    QCOMPARE(dataCalls, expectedCalls);
+    QVERIFY(!invalidRange);
+    QVERIFY(!model.find(removed));
 }
 
 QTEST_APPLESS_MAIN(tst_PropertyModel)

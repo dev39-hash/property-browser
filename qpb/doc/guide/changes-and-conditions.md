@@ -78,13 +78,19 @@ group" commands of the views stop writing when a handler replaced the tree and s
 reset in code (`resetToDefault()` of a group, `PropertyModel::resetAllToDefault()`) and the loading functions continue
 over the properties they started with; the ones a handler detached are still written, but without notifications.
 
-A handler of `valueChanged`, `userValueChanged`, `batchValueChanged` or `validationFailed` may also delete the
-`PropertyModel`, including while a group is being reset (`resetToDefault()` of a group or of the model,
+A handler of `valueChanged`, `userValueChanged`, `batchValueChanged`, `validationFailed` or `dataChanged` may also
+delete the `PropertyModel`, including while a group is being reset (`resetToDefault()` of a group or of the model,
 `resetAllToDefault()`), normalized (`normalizeValue()`, `normalizeAllValues()`), made the default
 (`makeValueDefault()`, `makeAllValuesDefault()`) or loaded (`qpb::serialization::load()` / `fromJson()`), and while a
-view resets a group. The walk finishes over the properties it started with, without further notifications and without
-touching the deleted model, and the tree is destroyed when the outermost call has returned. A view's reset stops
-writing.
+view resets a group. For `dataChanged` this also covers `PropertyGroup::add()` and `remove()`, setting or clearing
+`enabledWhen` / `visibleWhen`, and the presentation setters (`setDisplayName()`, `setToolTip()`, `setAttribute()`,
+`setFlags()` and the like). The call or walk finishes over the properties it started with, without further
+notifications and without touching the deleted model, and the tree is destroyed when the outermost call has returned.
+A view's reset stops writing. When a handler deleted the model, the reference returned by `add()` (and the builder
+returned by the `addXxx()` functions) and every pointer into the deleted model are not valid after the call returns.
+
+Deleting the model from a handler of its structural signals (rows inserted or removed, model reset) is not supported:
+`QAbstractItemModel` still uses the model after emitting them.
 
 ## Dependencies between properties
 
