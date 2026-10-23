@@ -78,6 +78,14 @@ group" commands of the views stop writing when a handler replaced the tree and s
 reset in code (`resetToDefault()` of a group, `PropertyModel::resetAllToDefault()`) and the loading functions continue
 over the properties they started with; the ones a handler detached are still written, but without notifications.
 
+A handler of `valueChanged`, `userValueChanged`, `batchValueChanged` or `validationFailed` may also delete the
+`PropertyModel`, including while a group is being reset (`resetToDefault()` of a group or of the model,
+`resetAllToDefault()`), normalized (`normalizeValue()`, `normalizeAllValues()`), made the default
+(`makeValueDefault()`, `makeAllValuesDefault()`) or loaded (`qpb::serialization::load()` / `fromJson()`), and while a
+view resets a group. The walk finishes over the properties it started with, without further notifications and without
+touching the deleted model, and the tree is destroyed when the outermost call has returned. A view's reset stops
+writing.
+
 ## Dependencies between properties
 
 A property can be enabled or shown depending on the value of another one, identified by its path from the root:

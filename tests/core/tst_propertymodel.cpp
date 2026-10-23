@@ -6,6 +6,7 @@
 #include <QLocale>
 #include <QPointer>
 #include <QRegularExpression>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTest>
 
@@ -245,6 +246,13 @@ private slots:
     void modelDeletedByAValueHandler_data();
     void modelDeletedByAValueHandler();
     void destroyingADetachedPropertyDetachesMore();
+
+    // A handler deletes the model while a group walk is running.
+    void modelDeletedDuringAGroupWalk_data();
+    void modelDeletedDuringAGroupWalk();
+    void modelDeletedInANestedWalk();
+    void modelDeletedByADataChangedHandler_data();
+    void modelDeletedByADataChangedHandler();
 
     // Edits made by the user are announced apart from application writes.
     void setDataEmitsUserValueChanged();
@@ -2234,6 +2242,359 @@ void tst_PropertyModel::unroundedDoubleSurvivesNormalizingAndDefaults()
     QVERIFY(scale->setValue(9.0));
     QVERIFY(scale->resetToDefault());
     QCOMPARE(scale->value(), QVariant(0.0625));
+}
+
+// --- A handler deletes the model during a group walk ---------------------------------------
+
+namespace {
+
+enum class Walk {
+    ResetGroup, // PropertyModel::resetToDefault() of the "Transform" group
+    ResetLeaf, // PropertyModel::resetToDefault() of "Transform/x"
+    ResetAll,
+    NormalizeAll,
+    MakeAllDefault,
+};
+
+enum class Trigger {
+    Value, // valueChanged()
+    Batch, // batchValueChanged()
+    Failure, // validationFailed()
+    Data, // dataChanged()
+};
+
+// What happened, in order: "visit:<path>" when a validator is asked about a
+// value, "deleted" when a handler deletes the model, "destroyed" when the
+// property that owns the marker is destroyed (the tree dies with the model's
+// tree).
+struct WalkLog
+{
+    QStringList events;
+    int deletions = 0;
+};
+
+struct DestroyedMarker
+{
+    explicit DestroyedMarker(WalkLog* walkLog)
+        : log(walkLog)
+    { }
+    ~DestroyedMarker()
+    {
+        log->events << QStringLiteral("destroyed");
+    }
+    WalkLog* log;
+};
+
+// Logs every value the property's validator is asked about, refuses them all
+// if requested, and keeps marker alive for as long as the property lives.
+void watch(Property& property, WalkLog& log, bool refuse, std::shared_ptr<DestroyedMarker> marker)
+{
+    const QString path = property.path();
+    property.setValidator([&log, path, refuse, marker](const QVariant&, const Property&) {
+        log.events << QStringLiteral("visit:") + path;
+        return refuse ? ValidationResult::error(QStringLiteral("refused"))
+                      : ValidationResult::valid();
+    });
+}
+
+// Deletes the model in the first notification of the given kind.
+void deleteModelAt(PropertyModel* model, Trigger trigger, WalkLog& log)
+{
+    const auto remove = [model, &log] {
+        if (log.deletions++ > 0)
+            return;
+        log.events << QStringLiteral("deleted");
+        delete model;
+    };
+    switch (trigger) {
+    case Trigger::Value:
+        QObject::connect(model, &PropertyModel::valueChanged, remove);
+        break;
+    case Trigger::Batch:
+        QObject::connect(model, &PropertyModel::batchValueChanged, remove);
+        break;
+    case Trigger::Failure:
+        QObject::connect(model, &PropertyModel::validationFailed, remove);
+        break;
+    case Trigger::Data:
+        QObject::connect(model, &QAbstractItemModel::dataChanged, remove);
+        break;
+    }
+}
+
+// Every leaf of createTree() in tree order.
+const QStringList AllLeaves {QStringLiteral("name"), QStringLiteral("visible"),
+    QStringLiteral("Transform/x"), QStringLiteral("Transform/y"),
+    QStringLiteral("Transform/Pivot/z"), QStringLiteral("fov")};
+
+// Values that every walk below has something to do with: not the defaults, and
+// outside the ranges that apply now.
+void prepareValues(PropertyModel& model)
+{
+    QVERIFY(model.setValue(QStringLiteral("name"), QStringLiteral("N")));
+    QVERIFY(model.setValue(QStringLiteral("visible"), false));
+    QVERIFY(model.setValue(XPath, 8.0));
+    QVERIFY(model.setValue(QStringLiteral("Transform/y"), 2.0));
+    QVERIFY(model.setValue(QStringLiteral("Transform/Pivot/z"), 3.0));
+    QVERIFY(model.setValue(QStringLiteral("fov"), 150));
+    model.find(XPath)->setAttribute(Attr::Maximum, 5.0);
+    model.find(QStringLiteral("fov"))->setAttribute(Attr::Maximum, 100);
+}
+
+QStringList visitsIn(const QStringList& events)
+{
+    QStringList visits;
+    for (const QString& event : events) {
+        if (event.startsWith(QLatin1String("visit:")))
+            visits << event;
+    }
+    return visits;
+}
+
+QStringList visitsOf(const QStringList& paths)
+{
+    QStringList visits;
+    for (const QString& path : paths)
+        visits << QStringLiteral("visit:") + path;
+    return visits;
+}
+
+} // namespace
+
+void tst_PropertyModel::modelDeletedDuringAGroupWalk_data()
+{
+    QTest::addColumn<int>("walk");
+    QTest::addColumn<int>("trigger");
+    QTest::newRow("resetGroup/value") << int(Walk::ResetGroup) << int(Trigger::Value);
+    QTest::newRow("resetGroup/batch") << int(Walk::ResetGroup) << int(Trigger::Batch);
+    QTest::newRow("resetGroup/failure") << int(Walk::ResetGroup) << int(Trigger::Failure);
+    QTest::newRow("resetLeaf/value") << int(Walk::ResetLeaf) << int(Trigger::Value);
+    QTest::newRow("resetAll/value") << int(Walk::ResetAll) << int(Trigger::Value);
+    QTest::newRow("resetAll/batch") << int(Walk::ResetAll) << int(Trigger::Batch);
+    QTest::newRow("resetAll/failure") << int(Walk::ResetAll) << int(Trigger::Failure);
+    QTest::newRow("normalizeAll/value") << int(Walk::NormalizeAll) << int(Trigger::Value);
+    QTest::newRow("normalizeAll/batch") << int(Walk::NormalizeAll) << int(Trigger::Batch);
+    QTest::newRow("normalizeAll/failure") << int(Walk::NormalizeAll) << int(Trigger::Failure);
+    QTest::newRow("makeAllDefault/data") << int(Walk::MakeAllDefault) << int(Trigger::Data);
+}
+
+// A handler deletes the model at the first notification of a walk. The walk
+// goes on over the properties it started with, nothing is announced any more,
+// and the tree dies once, when the walk has returned.
+void tst_PropertyModel::modelDeletedDuringAGroupWalk()
+{
+    QFETCH(int, walk);
+    QFETCH(int, trigger);
+    const bool refuses = Trigger(trigger) == Trigger::Failure;
+
+    WalkLog log;
+    auto* model = new PropertyModel(createTree());
+    const QPointer<PropertyModel> guard(model);
+    const auto cleanup = qScopeGuard([&guard] { delete guard.data(); });
+    prepareValues(*model);
+    // The first leaf a walk reaches refuses every value in the failure rows.
+    const QString refusing
+        = Walk(walk) == Walk::ResetGroup ? XPath : QStringLiteral("name");
+    auto marker = std::make_shared<DestroyedMarker>(&log);
+    const std::weak_ptr<DestroyedMarker> alive = marker;
+    for (const QString& path : AllLeaves) {
+        watch(*model->find(path), log, refuses && path == refusing,
+            path == QStringLiteral("fov") ? marker : nullptr);
+    }
+    marker.reset();
+    deleteModelAt(model, Trigger(trigger), log);
+    const QModelIndex transform = model->indexOf(model->find(QStringLiteral("Transform")));
+    const QModelIndex leaf = model->indexOf(model->find(XPath));
+
+    bool result = true;
+    QStringList expectedVisits;
+    switch (Walk(walk)) {
+    case Walk::ResetGroup:
+        result = model->resetToDefault(transform);
+        expectedVisits = visitsOf({XPath, QStringLiteral("Transform/y"),
+            QStringLiteral("Transform/Pivot/z")});
+        break;
+    case Walk::ResetLeaf:
+        result = model->resetToDefault(leaf);
+        expectedVisits = visitsOf({XPath});
+        break;
+    case Walk::ResetAll:
+        result = model->resetAllToDefault();
+        expectedVisits = visitsOf(AllLeaves);
+        break;
+    case Walk::NormalizeAll:
+        result = model->normalizeAllValues();
+        expectedVisits = visitsOf(AllLeaves);
+        break;
+    case Walk::MakeAllDefault:
+        model->makeAllValuesDefault();
+        break;
+    }
+
+    // false only when a value was rejected
+    QCOMPARE(result, !refuses);
+    QCOMPARE(log.deletions, 1);
+    QVERIFY(guard.isNull());
+    QVERIFY(alive.expired()); // nothing leaks
+    QCOMPARE(visitsIn(log.events), expectedVisits);
+    QCOMPARE(log.events.count(QStringLiteral("deleted")), 1);
+    QCOMPARE(log.events.count(QStringLiteral("destroyed")), 1);
+    // The tree is destroyed after everything the walk did.
+    QCOMPARE(log.events.last(), QStringLiteral("destroyed"));
+    const int deleted = log.events.indexOf(QStringLiteral("deleted"));
+    if (Trigger(trigger) == Trigger::Batch) {
+        QCOMPARE(deleted, log.events.size() - 2); // announced after the last write
+    } else if (expectedVisits.size() > 1) {
+        // The first notification came before the last property was reached.
+        QVERIFY2(deleted < log.events.size() - 2,
+            qPrintable(QStringLiteral("events: ") + log.events.join(QLatin1Char(','))));
+        QVERIFY2(deleted < log.events.lastIndexOf(expectedVisits.last()),
+            "the walk must go on over the remaining properties after the deletion");
+    }
+}
+
+// A handler of the first change of a walk starts another walk over a group, and
+// a handler of that walk's first change deletes the model: both walks finish,
+// and the tree dies once, after the outer one has returned.
+void tst_PropertyModel::modelDeletedInANestedWalk()
+{
+    WalkLog log;
+    auto* model = new PropertyModel(createTree());
+    const QPointer<PropertyModel> guard(model);
+    const auto cleanup = qScopeGuard([&guard] { delete guard.data(); });
+    QVERIFY(model->setValue(QStringLiteral("name"), QStringLiteral("N")));
+    QVERIFY(model->setValue(XPath, 1.0));
+    QVERIFY(model->setValue(QStringLiteral("Transform/y"), 2.0));
+    QVERIFY(model->setValue(QStringLiteral("Transform/Pivot/z"), 3.0));
+    auto marker = std::make_shared<DestroyedMarker>(&log);
+    const std::weak_ptr<DestroyedMarker> alive = marker;
+    for (const QString& path : AllLeaves)
+        watch(*model->find(path), log, false, path == QStringLiteral("fov") ? marker : nullptr);
+    marker.reset();
+
+    PropertyGroup* transform = model->find(QStringLiteral("Transform"))->toGroup();
+    int calls = 0;
+    bool innerResult = false;
+    QObject::connect(model, &PropertyModel::valueChanged, [&] {
+        if (++calls == 1) { // "name", written by the outer walk
+            log.events << QStringLiteral("inner:begin");
+            innerResult = transform->resetToDefault();
+            log.events << QStringLiteral("inner:end");
+        } else if (calls == 2) { // "Transform/x", written by the inner walk
+            log.events << QStringLiteral("deleted");
+            delete model;
+        }
+    });
+
+    const bool outerResult = model->resetAllToDefault();
+
+    QVERIFY(outerResult);
+    QVERIFY(innerResult);
+    QCOMPARE(calls, 2);
+    QVERIFY(guard.isNull());
+    QVERIFY(alive.expired());
+    const QStringList expected {QStringLiteral("visit:name"), QStringLiteral("inner:begin"),
+        QStringLiteral("visit:Transform/x"), QStringLiteral("deleted"),
+        QStringLiteral("visit:Transform/y"), QStringLiteral("visit:Transform/Pivot/z"),
+        QStringLiteral("inner:end"), QStringLiteral("visit:visible"),
+        QStringLiteral("visit:Transform/x"), QStringLiteral("visit:Transform/y"),
+        QStringLiteral("visit:Transform/Pivot/z"), QStringLiteral("visit:fov"),
+        QStringLiteral("destroyed")};
+    QCOMPARE(log.events, expected);
+}
+
+namespace {
+
+enum class DataAction {
+    SetValue, // PropertyModel::setValue()
+    ResetAll,
+    ResetGroup,
+    DependentLeaf, // a write that changes the enabled state of a leaf
+    DependentGroup, // a write that changes the enabled state of a group
+};
+
+} // namespace
+
+void tst_PropertyModel::modelDeletedByADataChangedHandler_data()
+{
+    QTest::addColumn<int>("action");
+    QTest::addColumn<int>("deleteAt"); // number of the dataChanged() that deletes the model
+    QTest::newRow("setValue") << int(DataAction::SetValue) << 1;
+    QTest::newRow("resetAll") << int(DataAction::ResetAll) << 1;
+    QTest::newRow("resetAll/second") << int(DataAction::ResetAll) << 2;
+    QTest::newRow("resetGroup") << int(DataAction::ResetGroup) << 1;
+    QTest::newRow("dependentLeaf") << int(DataAction::DependentLeaf) << 2;
+    QTest::newRow("dependentGroup") << int(DataAction::DependentGroup) << 2;
+    QTest::newRow("dependentGroup/subtree") << int(DataAction::DependentGroup) << 3;
+}
+
+// A handler of dataChanged() deletes the model, also the one announced for a
+// dependent property or for the rows below a group: the write or the walk goes
+// on without announcements, and the tree dies once, after the outermost write.
+void tst_PropertyModel::modelDeletedByADataChangedHandler()
+{
+    QFETCH(int, action);
+    QFETCH(int, deleteAt);
+
+    WalkLog log;
+    auto* model = new PropertyModel(createTree());
+    const QPointer<PropertyModel> guard(model);
+    const auto cleanup = qScopeGuard([&guard] { delete guard.data(); });
+    prepareValues(*model);
+    auto marker = std::make_shared<DestroyedMarker>(&log);
+    const std::weak_ptr<DestroyedMarker> alive = marker;
+    for (const QString& path : AllLeaves)
+        watch(*model->find(path), log, false, path == QStringLiteral("fov") ? marker : nullptr);
+    marker.reset();
+    if (DataAction(action) == DataAction::DependentLeaf)
+        model->find(QStringLiteral("Transform/y"))->setEnabledWhen(QStringLiteral("visible"));
+    else if (DataAction(action) == DataAction::DependentGroup)
+        model->find(QStringLiteral("Transform"))->setEnabledWhen(QStringLiteral("visible"));
+
+    int dataCalls = 0;
+    QObject::connect(model, &QAbstractItemModel::dataChanged, [&] {
+        if (++dataCalls != deleteAt)
+            return;
+        log.events << QStringLiteral("deleted");
+        delete model;
+    });
+    int valueCalls = 0;
+    QObject::connect(model, &PropertyModel::valueChanged, [&valueCalls] { ++valueCalls; });
+
+    QStringList expectedVisits;
+    bool result = false;
+    switch (DataAction(action)) {
+    case DataAction::SetValue:
+        result = model->setValue(QStringLiteral("Transform/y"), 7.0);
+        expectedVisits = visitsOf({QStringLiteral("Transform/y")});
+        break;
+    case DataAction::ResetAll:
+        result = model->resetAllToDefault();
+        expectedVisits = visitsOf(AllLeaves);
+        break;
+    case DataAction::ResetGroup:
+        result = model->resetToDefault(
+            model->indexOf(model->find(QStringLiteral("Transform"))));
+        expectedVisits = visitsOf({XPath, QStringLiteral("Transform/y"),
+            QStringLiteral("Transform/Pivot/z")});
+        break;
+    case DataAction::DependentLeaf:
+    case DataAction::DependentGroup:
+        result = model->setValue(QStringLiteral("visible"), true);
+        expectedVisits = visitsOf({QStringLiteral("visible")});
+        break;
+    }
+
+    QVERIFY(result);
+    QCOMPARE(dataCalls, deleteAt); // nothing is announced after the deletion
+    // Only the writes that were announced before the deletion reached valueChanged().
+    QCOMPARE(valueCalls, DataAction(action) == DataAction::ResetAll && deleteAt == 2 ? 1 : 0);
+    QVERIFY(guard.isNull());
+    QVERIFY(alive.expired());
+    QCOMPARE(visitsIn(log.events), expectedVisits);
+    QCOMPARE(log.events.count(QStringLiteral("deleted")), 1);
+    QCOMPARE(log.events.count(QStringLiteral("destroyed")), 1);
+    QCOMPARE(log.events.last(), QStringLiteral("destroyed"));
 }
 
 QTEST_APPLESS_MAIN(tst_PropertyModel)

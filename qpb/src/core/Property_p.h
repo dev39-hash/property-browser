@@ -7,9 +7,12 @@
 #include <qpb/PropertyGroup.h>
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 namespace qpb::detail {
+
+class TreeHoldState;
 
 // Receives change notifications from a property tree. Implemented by
 // PropertyModel; only the root of a tree holds the pointer, every node finds
@@ -38,36 +41,105 @@ public:
     virtual void endBatch() = 0;
     // A condition (enabledWhen / visibleWhen) was set or cleared on property.
     virtual void conditionsChanged(Property* property) = 0;
-    // While at least one hold is active, a subtree detached from the tree is
-    // kept alive: handlers of value signals may replace or remove parts of the
-    // tree while code further up the call stack still uses them.
-    virtual void beginHold() = 0;
-    virtual void endHold() = 0;
+    // The hold state of the tree (see TreeHoldState). It is shared with every
+    // hold, so it outlives the observer while a hold is active.
+    virtual const std::shared_ptr<TreeHoldState>& holdState() = 0;
     // Takes over a subtree that was detached from the tree. It is destroyed at
     // once, or when the outermost hold ends.
     virtual void retire(std::unique_ptr<Property> detached) = 0;
 };
 
-// Holds the detached subtrees of an observer for the lifetime of the object.
+// While at least one hold is active, a subtree detached from the tree is kept
+// alive: handlers of value signals may replace or remove parts of the tree
+// while code further up the call stack still uses them. The observer (the
+// model) may also be deleted by such a handler: it then hands its tree to the
+// state and marks itself gone, so the walks in progress finish over the tree
+// without notifications, and the tree is destroyed when the outermost hold
+// ends.
+class TreeHoldState
+{
+public:
+    explicit TreeHoldState(TreeObserver* tree)
+        : observer(tree)
+    { }
+
+    void begin()
+    {
+        ++depth;
+    }
+
+    void end()
+    {
+        if (--depth > 0)
+            return;
+        // Destroying a property runs user code (custom types); it may detach
+        // more subtrees, which are destroyed at once (no hold is active).
+        std::vector<std::unique_ptr<Property>> detached = std::exchange(retired, {});
+        std::unique_ptr<PropertyGroup> tree = std::move(orphan);
+        detached.clear();
+        tree.reset();
+    }
+
+    // Takes over a subtree that was detached from the tree. It is destroyed at
+    // once, or when the outermost hold ends.
+    void retire(std::unique_ptr<Property> detached)
+    {
+        if (depth > 0)
+            retired.push_back(std::move(detached));
+        // else destroyed here
+    }
+
+    // The observer is being destroyed. With a hold active, the state keeps the
+    // tree until the last hold ends; otherwise root is destroyed by the caller.
+    void observerGone(std::unique_ptr<PropertyGroup>& root)
+    {
+        observer = nullptr;
+        if (depth > 0)
+            orphan = std::move(root);
+    }
+
+    TreeObserver* observer; // nullptr once the observer is gone
+    int depth = 0;
+
+private:
+    std::vector<std::unique_ptr<Property>> retired;
+    std::unique_ptr<PropertyGroup> orphan; // the tree of a deleted observer
+};
+
+// Holds the tree of an observer (see TreeHoldState) for the lifetime of the
+// object. Batches of the observer are reached through it, so nothing is called
+// on an observer that a handler deleted meanwhile.
 class TreeHold
 {
 public:
     explicit TreeHold(TreeObserver* tree)
-        : observer(tree)
+        : state(tree ? tree->holdState() : nullptr)
     {
-        if (observer)
-            observer->beginHold();
+        if (state)
+            state->begin();
     }
     ~TreeHold()
     {
-        if (observer)
-            observer->endHold();
+        if (state)
+            state->end();
     }
     TreeHold(const TreeHold&) = delete;
     TreeHold& operator=(const TreeHold&) = delete;
 
+    // No-ops without an observer, or once it is gone.
+    void beginBatch() const
+    {
+        if (state && state->observer)
+            state->observer->beginBatch();
+    }
+    void endBatch() const
+    {
+        if (state && state->observer)
+            state->observer->endBatch();
+    }
+
 private:
-    TreeObserver* observer;
+    std::shared_ptr<TreeHoldState> state;
 };
 
 // A condition on another property's value (1.4), evaluated by the model.

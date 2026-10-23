@@ -15,6 +15,7 @@
 #include <QPlainTextEdit>
 #include <QPointer>
 #include <QPushButton>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QSortFilterProxyModel>
 #include <QSpinBox>
@@ -328,6 +329,8 @@ private slots:
     void commitWithUserHandlerChangingTree();
     void groupResetWithUserHandlerChangingTree_data();
     void groupResetWithUserHandlerChangingTree();
+    void groupResetWithHandlerDeletingTheModel_data();
+    void groupResetWithHandlerDeletingTheModel();
 
     // Committing without closing, and spin boxes that commit on every step.
     void commitOnStepCommitsEachStepAndKeepsTheEditorOpen_data();
@@ -1585,6 +1588,63 @@ void tst_PropertyTreeView::groupResetWithUserHandlerChangingTree()
     QCOMPARE(handlers.firstOldValue, QVariant(100));
     QVERIFY(handlers.lifetime.expired());
     checkTreeAfter(*f, TreeChange(change));
+}
+
+void tst_PropertyTreeView::groupResetWithHandlerDeletingTheModel_data()
+{
+    QTest::addColumn<int>("signal");
+    QTest::newRow("valueChanged") << 0;
+    QTest::newRow("userValueChanged") << 1;
+    QTest::newRow("batchValueChanged") << 2;
+}
+
+// "Reset group" writes one value after the other; a slot of the first change
+// (or of the batch that follows the last one) deletes the model. The reset
+// stops without touching the model again, the model's tree is destroyed, and
+// the view can show another model afterwards.
+void tst_PropertyTreeView::groupResetWithHandlerDeletingTheModel()
+{
+    QFETCH(int, signal);
+    auto* model = new PropertyModel(createTree());
+    const QPointer<PropertyModel> guard(model);
+    const auto cleanup = qScopeGuard([&guard] { delete guard.data(); });
+    f->view->setModel(model);
+    QVERIFY(model->setValue(QStringLiteral("Camera/fov"), 100));
+    QVERIFY(model->setValue(QStringLiteral("Camera/projection"), 1));
+    QVERIFY(model->setValue(QStringLiteral("Camera/lut"), QStringLiteral("a.cube")));
+    const std::weak_ptr<int> lifetime = trackLifetime(*model->find(QStringLiteral("Camera/lut")));
+    int deletions = 0;
+    const auto remove = [model, &deletions] {
+        if (deletions++ == 0)
+            delete model;
+    };
+    switch (signal) {
+    case 0:
+        QObject::connect(model, &PropertyModel::valueChanged, remove);
+        break;
+    case 1:
+        QObject::connect(model, &PropertyModel::userValueChanged, remove);
+        break;
+    default:
+        QObject::connect(model, &PropertyModel::batchValueChanged, remove);
+        break;
+    }
+    const QModelIndex camera = model->indexOf(model->find(QStringLiteral("Camera")));
+
+    QVERIFY(resetFromContextMenu(f->view, camera));
+
+    QCOMPARE(deletions, 1);
+    QVERIFY(guard.isNull());
+    QVERIFY(lifetime.expired()); // the tree went with the model, and nothing leaks
+
+    // The view is still usable: it shows another model and edits it.
+    f->view->setModel(&f->model);
+    QVERIFY(f->view->model() == &f->model);
+    auto* spinBox = f->edit<QSpinBox>(QStringLiteral("Camera/fov"));
+    QVERIFY(spinBox);
+    spinBox->setValue(90);
+    QTest::keyClick(spinBox, Qt::Key_Return);
+    QTRY_COMPARE(f->stored(QStringLiteral("Camera/fov")), QVariant(90));
 }
 
 namespace {

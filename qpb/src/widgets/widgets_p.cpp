@@ -5,6 +5,7 @@
 #include <qpb/PropertyModel.h>
 
 #include <QtCore/qabstractproxymodel.h>
+#include <QtCore/qpointer.h>
 #include <QtWidgets/qplaintextedit.h>
 #include <QtWidgets/qtextedit.h>
 #include <QtWidgets/qwidget.h>
@@ -73,14 +74,16 @@ void resetByUser(PropertyModel* model, const Property* property)
 {
     // A handler of valueChanged may replace the tree or remove properties
     // while the reset is running: the properties are found again by path
-    // before each write, and the reset stops when the tree was replaced.
+    // before each write, and the reset stops when the tree was replaced or the
+    // model was deleted.
     QStringList paths;
     collectLeafPaths(property, paths);
     const PropertyGroup* root = model->root();
+    const QPointer<PropertyModel> guard(model);
 
     model->beginBatch();
     for (const QString& path : std::as_const(paths)) {
-        if (model->root() != root)
+        if (!guard || model->root() != root)
             break;
         const Property* leaf = model->find(path);
         if (!leaf || !leaf->isModified())
@@ -88,7 +91,8 @@ void resetByUser(PropertyModel* model, const Property* property)
         model->setData(model->indexOf(leaf, PropertyModel::ValueColumn), leaf->defaultValue(),
             Qt::EditRole);
     }
-    model->endBatch();
+    if (guard)
+        model->endBatch();
 }
 
 PropertyModel* propertyModelOf(const QModelIndex& index, QModelIndex* sourceIndex)

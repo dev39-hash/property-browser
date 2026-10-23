@@ -5,6 +5,8 @@
 #include <QAbstractItemModelTester>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QPointer>
+#include <QScopeGuard>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QStandardPaths>
@@ -80,6 +82,8 @@ private slots:
     void batchOnModel();
     void treeChangeDuringLoad_data();
     void treeChangeDuringLoad();
+    void modelDeletedDuringALoad_data();
+    void modelDeletedDuringALoad();
 
     // Doubles stored without rounding.
     void unroundedDoublesSurviveJson();
@@ -341,6 +345,120 @@ void tst_Serialization::treeChangeDuringLoad()
         QVERIFY(!model.find(QStringLiteral("General")));
         QCOMPARE(model.find(QStringLiteral("Limits/ratio"))->value(), QVariant(0.25));
     }
+}
+
+namespace {
+
+// What happened, in order: "visit:<path>" when a validator is asked about a
+// value, "deleted" when a handler deletes the model, "destroyed" when the
+// property that owns the marker is destroyed.
+struct LoadLog
+{
+    QStringList events;
+    int deletions = 0;
+};
+
+struct DestroyedMarker
+{
+    explicit DestroyedMarker(LoadLog* loadLog)
+        : log(loadLog)
+    { }
+    ~DestroyedMarker()
+    {
+        log->events << QStringLiteral("destroyed");
+    }
+    LoadLog* log;
+};
+
+// Logs every value the property's validator is asked about, refuses them all
+// if requested, and keeps marker alive for as long as the property lives.
+void watch(Property& property, LoadLog& log, bool refuse, std::shared_ptr<DestroyedMarker> marker)
+{
+    const QString path = property.path();
+    property.setValidator([&log, path, refuse, marker](const QVariant&, const Property&) {
+        log.events << QStringLiteral("visit:") + path;
+        return refuse ? ValidationResult::error(QStringLiteral("refused"))
+                      : ValidationResult::valid();
+    });
+}
+
+} // namespace
+
+void tst_Serialization::modelDeletedDuringALoad_data()
+{
+    QTest::addColumn<bool>("viaJson");
+    QTest::addColumn<bool>("refuses");
+    QTest::newRow("fromJson/value") << true << false;
+    QTest::newRow("load/value") << false << false;
+    QTest::newRow("fromJson/failure") << true << true;
+    QTest::newRow("load/failure") << false << true;
+}
+
+// A handler deletes the model at the first notification while the values are
+// written (a changed value, or a refused one): the loader goes on over the
+// group it started with, nothing is announced any more, and the tree dies once,
+// when the loader has returned.
+void tst_Serialization::modelDeletedDuringALoad()
+{
+    QFETCH(bool, viaJson);
+    QFETCH(bool, refuses);
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    auto source = createSettings();
+    modify(*source);
+    const QJsonObject json = serialization::toJson(*source);
+    QSettings settings(dir.filePath(QStringLiteral("settings.ini")), QSettings::IniFormat);
+    serialization::save(*source, settings);
+
+    LoadLog log;
+    auto* model = new PropertyModel(createSettings());
+    const QPointer<PropertyModel> guard(model);
+    const auto cleanup = qScopeGuard([&guard] { delete guard.data(); });
+    // Keys are visited in the order of the JSON object (sorted) or of the tree.
+    const QStringList jsonOrder {QStringLiteral("General/autosave"),
+        QStringLiteral("General/language"), QStringLiteral("General/minutes"),
+        QStringLiteral("General/theme"), QStringLiteral("Limits/big"),
+        QStringLiteral("Limits/notes"), QStringLiteral("Limits/ratio")};
+    const QStringList treeOrder {QStringLiteral("General/language"),
+        QStringLiteral("General/autosave"), QStringLiteral("General/minutes"),
+        QStringLiteral("General/theme"), QStringLiteral("Limits/ratio"),
+        QStringLiteral("Limits/big"), QStringLiteral("Limits/notes")};
+    const QStringList order = viaJson ? jsonOrder : treeOrder;
+    auto marker = std::make_shared<DestroyedMarker>(&log);
+    const std::weak_ptr<DestroyedMarker> alive = marker;
+    for (const QString& path : order)
+        watch(*model->find(path), log, refuses && path == order.first(), nullptr);
+    watch(*model->find(QStringLiteral("version")), log, false, marker); // read-only: never visited
+    marker.reset();
+    const auto remove = [model, &log] {
+        if (log.deletions++ > 0)
+            return;
+        log.events << QStringLiteral("deleted");
+        delete model;
+    };
+    if (refuses)
+        QObject::connect(model, &PropertyModel::validationFailed, remove);
+    else
+        QObject::connect(model, &PropertyModel::valueChanged, remove);
+
+    PropertyGroup& root = *model->root();
+    const bool accepted
+        = viaJson ? serialization::fromJson(root, json) : serialization::load(root, settings);
+
+    QCOMPARE(accepted, !refuses); // false only when a value was rejected
+    QCOMPARE(log.deletions, 1);
+    QVERIFY(guard.isNull());
+    QVERIFY(alive.expired()); // nothing leaks
+    QStringList visits;
+    for (const QString& event : std::as_const(log.events)) {
+        if (event.startsWith(QLatin1String("visit:")))
+            visits << event.mid(6);
+    }
+    QCOMPARE(visits, order);
+    // The tree is destroyed after the last value was written.
+    QCOMPARE(log.events.last(), QStringLiteral("destroyed"));
+    QCOMPARE(log.events.count(QStringLiteral("destroyed")), 1);
+    QCOMPARE(log.events.indexOf(QStringLiteral("deleted")), 1); // after the first visit
 }
 
 namespace {

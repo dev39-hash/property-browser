@@ -2,10 +2,84 @@
 
 #include <qpb/qpbcore.h>
 
+#include <QPointer>
 #include <QRegularExpression>
+#include <QScopeGuard>
 #include <QTest>
 
+#include <memory>
+
 using namespace qpb;
+
+namespace {
+
+enum class GroupWalk {
+    Reset,
+    Normalize,
+    MakeDefault,
+};
+
+enum class Notification {
+    Value, // valueChanged()
+    Batch, // batchValueChanged()
+    Failure, // validationFailed()
+    Data, // dataChanged()
+};
+
+// What happened, in order: "visit:<path>" when a validator is asked about a
+// value, "deleted" when a handler deletes the model, "destroyed" when the
+// property that owns the marker is destroyed.
+struct WalkLog
+{
+    QStringList events;
+    int deletions = 0;
+};
+
+struct DestroyedMarker
+{
+    explicit DestroyedMarker(WalkLog* walkLog)
+        : log(walkLog)
+    { }
+    ~DestroyedMarker()
+    {
+        log->events << QStringLiteral("destroyed");
+    }
+    WalkLog* log;
+};
+
+// Logs every value the property's validator is asked about, refuses them all
+// if requested, and keeps marker alive for as long as the property lives.
+void watch(Property& property, WalkLog& log, bool refuse, std::shared_ptr<DestroyedMarker> marker)
+{
+    const QString path = property.path();
+    property.setValidator([&log, path, refuse, marker](const QVariant&, const Property&) {
+        log.events << QStringLiteral("visit:") + path;
+        return refuse ? ValidationResult::error(QStringLiteral("refused"))
+                      : ValidationResult::valid();
+    });
+}
+
+// root
+// |-- name
+// |-- g
+// |   |-- a
+// |   |-- b
+// |   `-- sub
+// |       `-- c
+// `-- tail
+std::unique_ptr<PropertyGroup> createWalkTree()
+{
+    auto root = PropertyGroup::create(QStringLiteral("root"));
+    root->addString(QStringLiteral("name"), QStringLiteral("Main"));
+    PropertyGroup& g = root->addGroup(QStringLiteral("g"));
+    g.addInt(QStringLiteral("a"), 0).range(0, 100);
+    g.addInt(QStringLiteral("b"), 0).range(0, 100);
+    g.addGroup(QStringLiteral("sub")).addInt(QStringLiteral("c"), 0).range(0, 100);
+    root->addInt(QStringLiteral("tail"), 0);
+    return root;
+}
+
+} // namespace
 
 class tst_Property : public QObject
 {
@@ -37,6 +111,10 @@ private slots:
     void normalizeValueOnGroups();
     void makeValueDefaultWithoutModel();
     void attributeChangesLeaveValuesAlone();
+
+    // A handler deletes the model while a group is being walked.
+    void modelDeletedDuringAGroupWalk_data();
+    void modelDeletedDuringAGroupWalk();
 };
 
 void tst_Property::typedAddsStoreValueAndDefault()
@@ -630,6 +708,112 @@ void tst_Property::attributeChangesLeaveValuesAlone()
     QCOMPARE(n.defaultValue(), QVariant(5));
     QCOMPARE(d.value().toDouble(), 1.234);
     QCOMPARE(d.defaultValue().toDouble(), 1.234);
+}
+
+void tst_Property::modelDeletedDuringAGroupWalk_data()
+{
+    QTest::addColumn<int>("walk");
+    QTest::addColumn<int>("notification");
+    QTest::newRow("reset/value") << int(GroupWalk::Reset) << int(Notification::Value);
+    QTest::newRow("reset/batch") << int(GroupWalk::Reset) << int(Notification::Batch);
+    QTest::newRow("reset/failure") << int(GroupWalk::Reset) << int(Notification::Failure);
+    QTest::newRow("normalize/value") << int(GroupWalk::Normalize) << int(Notification::Value);
+    QTest::newRow("normalize/batch") << int(GroupWalk::Normalize) << int(Notification::Batch);
+    QTest::newRow("normalize/failure") << int(GroupWalk::Normalize) << int(Notification::Failure);
+    QTest::newRow("makeDefault/data") << int(GroupWalk::MakeDefault) << int(Notification::Data);
+}
+
+// A handler deletes the model at the first notification of a walk over a
+// group (called on the group itself, not through the model). The walk goes on
+// over the group's descendants, nothing is announced any more, and the tree
+// dies once, when the walk has returned.
+void tst_Property::modelDeletedDuringAGroupWalk()
+{
+    QFETCH(int, walk);
+    QFETCH(int, notification);
+    const bool refuses = Notification(notification) == Notification::Failure;
+
+    WalkLog log;
+    auto* model = new PropertyModel(createWalkTree());
+    const QPointer<PropertyModel> guard(model);
+    const auto cleanup = qScopeGuard([&guard] { delete guard.data(); });
+    for (const QString& path : {QStringLiteral("g/a"), QStringLiteral("g/b"),
+             QStringLiteral("g/sub/c")}) {
+        QVERIFY(model->setValue(path, 10));
+        model->find(path)->setAttribute(Attr::Maximum, 5);
+    }
+    auto marker = std::make_shared<DestroyedMarker>(&log);
+    const std::weak_ptr<DestroyedMarker> alive = marker;
+    watch(*model->find(QStringLiteral("g/a")), log, refuses, nullptr);
+    watch(*model->find(QStringLiteral("g/b")), log, false, nullptr);
+    watch(*model->find(QStringLiteral("g/sub/c")), log, false, nullptr);
+    watch(*model->find(QStringLiteral("tail")), log, false, marker);
+    marker.reset();
+
+    const auto remove = [model, &log] {
+        if (log.deletions++ > 0)
+            return;
+        log.events << QStringLiteral("deleted");
+        delete model;
+    };
+    switch (Notification(notification)) {
+    case Notification::Value:
+        QObject::connect(model, &PropertyModel::valueChanged, remove);
+        break;
+    case Notification::Batch:
+        QObject::connect(model, &PropertyModel::batchValueChanged, remove);
+        break;
+    case Notification::Failure:
+        QObject::connect(model, &PropertyModel::validationFailed, remove);
+        break;
+    case Notification::Data:
+        QObject::connect(model, &QAbstractItemModel::dataChanged, remove);
+        break;
+    }
+
+    PropertyGroup* group = model->find(QStringLiteral("g"))->toGroup();
+    bool result = true;
+    switch (GroupWalk(walk)) {
+    case GroupWalk::Reset:
+        result = group->resetToDefault();
+        break;
+    case GroupWalk::Normalize:
+        result = group->normalizeValue();
+        break;
+    case GroupWalk::MakeDefault:
+        group->makeValueDefault();
+        break;
+    }
+
+    // false only when a value was rejected
+    QCOMPARE(result, !refuses);
+    QCOMPARE(log.deletions, 1);
+    QVERIFY(guard.isNull());
+    QVERIFY(alive.expired()); // nothing leaks
+    QStringList visits;
+    for (const QString& event : std::as_const(log.events)) {
+        if (event.startsWith(QLatin1String("visit:")))
+            visits << event;
+    }
+    if (GroupWalk(walk) == GroupWalk::MakeDefault) {
+        QVERIFY(visits.isEmpty()); // defaults are not written through the pipeline
+        QCOMPARE(log.events,
+            (QStringList {QStringLiteral("deleted"), QStringLiteral("destroyed")}));
+        return;
+    }
+    // Every descendant of the group is visited once, the rest of the tree not.
+    QCOMPARE(visits,
+        (QStringList {QStringLiteral("visit:g/a"), QStringLiteral("visit:g/b"),
+            QStringLiteral("visit:g/sub/c")}));
+    // The tree is destroyed after everything the walk did.
+    QCOMPARE(log.events.last(), QStringLiteral("destroyed"));
+    QCOMPARE(log.events.count(QStringLiteral("deleted")), 1);
+    QCOMPARE(log.events.count(QStringLiteral("destroyed")), 1);
+    const int deleted = log.events.indexOf(QStringLiteral("deleted"));
+    if (Notification(notification) == Notification::Batch)
+        QCOMPARE(deleted, log.events.size() - 2); // announced after the last write
+    else
+        QCOMPARE(deleted, 1); // after the first visit, before the second
 }
 
 QTEST_APPLESS_MAIN(tst_Property)
