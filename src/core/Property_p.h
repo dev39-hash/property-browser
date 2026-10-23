@@ -44,9 +44,6 @@ public:
     // The hold state of the tree (see TreeHoldState). It is shared with every
     // hold, so it outlives the observer while a hold is active.
     virtual const std::shared_ptr<TreeHoldState>& holdState() = 0;
-    // Takes over a subtree that was detached from the tree. It is destroyed at
-    // once, or when the outermost hold ends.
-    virtual void retire(std::unique_ptr<Property> detached) = 0;
 };
 
 // While at least one hold is active, a subtree detached from the tree is kept
@@ -125,6 +122,15 @@ public:
     }
     TreeHold(const TreeHold&) = delete;
     TreeHold& operator=(const TreeHold&) = delete;
+
+    // Takes over a subtree that was detached from the tree: it is destroyed
+    // when the outermost hold ends. Safe after the observer was deleted;
+    // without an observer the subtree is destroyed here.
+    void retire(std::unique_ptr<Property> detached) const
+    {
+        if (state)
+            state->retire(std::move(detached));
+    }
 
     // No-ops without an observer, or once it is gone.
     void beginBatch() const

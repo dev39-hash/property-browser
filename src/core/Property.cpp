@@ -111,7 +111,12 @@ bool PropertyPrivate::assign(const QVariant& input, Origin origin)
 
 void PropertyPrivate::notifyChanged(bool recursive)
 {
-    if (TreeObserver* tree = observer())
+    // A dataChanged handler may delete the model: the hold keeps the tree
+    // until this function returns (a caller that still uses the tree afterwards
+    // holds it itself).
+    TreeObserver* tree = observer();
+    const TreeHold hold(tree);
+    if (tree)
         tree->changed(q, recursive);
 }
 
@@ -443,6 +448,9 @@ Property::Condition equalTo(const QVariant& expected)
 void detail::PropertyPrivate::setCondition(std::unique_ptr<detail::PropertyCondition>& slot,
     const QString& sourcePath, Property::Condition test)
 {
+    // A dataChanged handler may delete the model, while the condition is
+    // announced or evaluated: the hold keeps the tree until this returns.
+    const detail::TreeHold hold(observer());
     const bool wasUnmet = slot && !slot->met;
     if (test) {
         slot = std::make_unique<detail::PropertyCondition>();
@@ -455,6 +463,7 @@ void detail::PropertyPrivate::setCondition(std::unique_ptr<detail::PropertyCondi
     // may change even if the new one (if any) evaluates the same.
     if (wasUnmet)
         notifyChanged(true);
+    // The observer is looked up again: it is gone if a handler deleted the model.
     if (detail::TreeObserver* tree = observer())
         tree->conditionsChanged(q); // evaluates, notifies changes
 }

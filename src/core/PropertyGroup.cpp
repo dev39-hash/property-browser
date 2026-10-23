@@ -32,14 +32,19 @@ Property& PropertyGroup::add(std::unique_ptr<Property> property)
     auto& children = d_func()->children;
     const int row = int(children.size());
     detail::TreeObserver* observer = d_func()->observer();
+    // A dataChanged handler may delete the model while the conditions are
+    // evaluated after the insertion: the hold keeps the tree until this returns.
+    const detail::TreeHold hold(observer);
     if (observer)
         observer->aboutToInsert(this, row);
     childData->parent = this;
     childData->treeObserver = nullptr; // only the root of a tree holds the observer
     children.push_back(std::move(property));
+    // A handler run by inserted() may remove it again, or add more children.
+    Property* const added = children.back().get();
     if (observer)
-        observer->inserted(this, row);
-    return *children.back();
+        observer->inserted(this, row); // the observer may be gone after this
+    return *added;
 }
 
 Property& PropertyGroup::add(const TypeId& type, const QString& id, const QVariant& value)
@@ -60,7 +65,14 @@ PropertyGroup& PropertyGroup::addGroup(const QString& id)
             qUtf8Printable(group->id()), qUtf8Printable(freeId));
         group = create(freeId);
     }
-    return *add(std::move(group)).toGroup();
+    // A group left here is the existing one: add() discards the new group and
+    // returns it, without running any handler.
+    Property* const duplicate = child(group->id());
+    PropertyGroup* const added = group.get();
+    add(std::move(group));
+    // Nothing of the new group is read after add(): a handler may have removed it,
+    // or deleted the model.
+    return duplicate ? *duplicate->toGroup() : *added;
 }
 
 BoolBuilder PropertyGroup::addBool(const QString& id, bool value)
@@ -124,16 +136,20 @@ bool PropertyGroup::remove(const QString& id)
         return false;
 
     detail::TreeObserver* observer = d_func()->observer();
+    // A dataChanged handler may delete the model while the conditions are
+    // evaluated after the removal: the hold keeps the tree until this returns.
+    const detail::TreeHold hold(observer);
     if (observer)
         observer->aboutToRemove(this, row);
     std::unique_ptr<Property> removed = std::move(children[size_t(row)]);
     children.erase(children.begin() + row);
     PropertyPrivate::get(removed.get())->parent = nullptr;
     if (observer) {
-        observer->removed(this, row);
+        observer->removed(this, row); // the observer may be gone after this
         // Destroyed after the model has been updated, and not before the value
-        // handlers running further up the call stack have returned.
-        observer->retire(std::move(removed));
+        // handlers running further up the call stack have returned. The hold
+        // takes it: the observer may be gone.
+        hold.retire(std::move(removed));
     }
     return true; // without a model, removed is destroyed here
 }

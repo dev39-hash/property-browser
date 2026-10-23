@@ -58,6 +58,13 @@ Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC tria
   `normalizeAllValues()`, `makeAllValuesDefault()`, `qpb::serialization::load()` or `fromJson()` run, or while a view
   resets a group. The walk finishes over the properties it started with, without notifications, and the tree is
   destroyed once, when the outermost call returns. Before, the walk could use freed properties.
+- A handler of `dataChanged` may delete the `PropertyModel` while `PropertyGroup::add()`, `addGroup()`, the `addXxx()`
+  functions or `remove()`, setting or clearing `enabledWhen` / `visibleWhen`, or a presentation setter
+  (`setDisplayName()`, `setToolTip()`, `setAttribute()`, `setFlags()` and the like) is announcing its change, also when
+  the call runs inside a value handler. The call returns normally (a reference or builder it returns must not be used),
+  nothing is announced after the deletion, and the tree is destroyed once, when the outermost call returns. Before, the
+  call used the freed tree. Deleting the model from a handler of the rows inserted / removed or model reset signals is
+  still not supported.
 - Editors that `PropertyDelegate` opens (`PropertyTreeView`, or any view that uses the delegate, also through a proxy
   model) follow changes of the property's attributes, such as a range, `decimals` or a suffix, while they are open. They
   keep the text being typed when the model reports a change that leaves the value as it was (another role such as the
