@@ -88,3 +88,14 @@ is off by default, which keeps such properties as plain read-only ones.
   which reads every property of every object again.
 - When an object is destroyed its group is removed. When the source is destroyed the groups stay in the model and the
   synchronization stops.
+- The source, or its parent, may be deleted during a sync: from a handler of the model's `valueChanged`, `dataChanged`,
+  `rowsInserted` or `rowsRemoved`, from the object's setter, or from a slot on the object's `NOTIFY` signal (not from
+  one of its getters). The write or read in progress completes and nothing further is synced. A source that is a child
+  of the model goes with the model when a handler of `valueChanged` or `dataChanged` deletes it; deleting the model from
+  a handler of the other signals is not supported.
+- A handler of `valueChanged` or `dataChanged` may also delete the model while the source stays alive, for example when
+  the source is not its child: the source syncs nothing more, and the objects stay added but unsynchronized.
+- A handler of `valueChanged` or `dataChanged` may remove the group, or one of its properties, while `addObject()` is
+  still adding it. The call stops at once; the object is not synchronized and has no record in the source. The group
+  keeps only the properties added so far. `addObject()` returns that group while it is in the model, and `nullptr` when
+  the model was deleted or the group was removed meanwhile.

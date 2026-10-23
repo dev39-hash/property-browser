@@ -67,7 +67,8 @@ public:
     // object name, else the class name, made unique with a "_2", "_3" ...
     // suffix. Returns the group, or nullptr if object is nullptr. Adding an
     // object again returns its existing group. When the object is destroyed its
-    // group is removed.
+    // group is removed. It also returns nullptr if a handler deleted the model,
+    // or removed the group, while the group was being added.
     PropertyGroup* addObject(
         QObject* object, PropertyGroup* parentGroup = nullptr, const QString& id = QString());
     // Removes the object's group and stops synchronizing it. Returns false if

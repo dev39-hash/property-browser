@@ -9,6 +9,7 @@
 #include <QTest>
 
 #include <functional>
+#include <memory>
 
 using namespace qpb;
 
@@ -298,6 +299,38 @@ private slots:
     void objectRemovedByAnEarlierSlotLeavesNoRecord();
     void objectRemovedAndAddedAgainInsideASync_data();
     void objectRemovedAndAddedAgainInsideASync();
+
+    // The source (or its parent) is deleted by code it runs while it syncs.
+    void sourceDeletedByTheObjectsSetterDuringAModelWrite_data();
+    void sourceDeletedByTheObjectsSetterDuringAModelWrite();
+    void sourceDeletedByANotifySlot_data();
+    void sourceDeletedByANotifySlot();
+    void sourceDeletedByAValueSlotDuringAReadBack_data();
+    void sourceDeletedByAValueSlotDuringAReadBack();
+    void sourceDeletedByAValueSlotDuringAnObjectNotification_data();
+    void sourceDeletedByAValueSlotDuringAnObjectNotification();
+    void sourceDeletedByAValueSlotDuringARefresh_data();
+    void sourceDeletedByAValueSlotDuringARefresh();
+    void sourceDeletedByADataChangedSlotDuringATitleUpdate_data();
+    void sourceDeletedByADataChangedSlotDuringATitleUpdate();
+    void sourceDeletedByARowsRemovedSlot_data();
+    void sourceDeletedByARowsRemovedSlot();
+    void sourceDeletedByARowsInsertedSlotDuringAddObject();
+    void sourceChildOfTheModelDeletedWithTheModelDuringAWrite();
+
+    // The model is deleted by code the source runs; the source itself stays.
+    void modelDeletedDuringAddObject_data();
+    void modelDeletedDuringAddObject();
+    void modelDeletedWhileTheSourceSyncs_data();
+    void modelDeletedWhileTheSourceSyncs();
+
+    // The group, or one of its properties, is removed by code addObject() runs.
+    void treeChangedDuringAddObject_data();
+    void treeChangedDuringAddObject();
+
+    // A group id with the path separator becomes a usable id.
+    void groupIdWithASlash_data();
+    void groupIdWithASlash();
 };
 
 void tst_QObjectPropertySource::propertiesAndTypes()
@@ -1251,6 +1284,761 @@ void tst_QObjectPropertySource::objectRemovedAndAddedAgainInsideASync()
     QVERIFY(!source.removeObject(&camera));
     QVERIFY(source.objects().isEmpty());
     QVERIFY(!model.find(QStringLiteral("cam")));
+}
+
+namespace {
+
+// An object that counts the writes it receives. The hook runs inside the
+// setter, before the change is announced.
+class Probe : public QObject
+{
+    Q_OBJECT
+    Q_PROPERTY(int level READ level WRITE setLevel NOTIFY levelChanged)
+
+public:
+    int level() const
+    {
+        return m_level;
+    }
+    void setLevel(int level)
+    {
+        ++levelWrites;
+        m_level = level;
+        if (inSetter) {
+            const std::function<void()> hook = inSetter;
+            hook();
+        }
+        emit levelChanged();
+    }
+
+    int levelWrites = 0;
+    std::function<void()> inSetter;
+
+signals:
+    void levelChanged();
+
+private:
+    int m_level = 1;
+};
+
+// A model with a source that a slot can delete: the source itself, or the
+// object it is a child of.
+struct Rig
+{
+    explicit Rig(bool sourceHasAParent)
+    {
+        if (sourceHasAParent)
+            holder = new QObject;
+        source = new QObjectPropertySource(&model, holder.data());
+    }
+    ~Rig()
+    {
+        delete holder.data();
+        delete source.data();
+    }
+    // Deletes the source, or its parent; harmless when it is gone already.
+    void deleteSource()
+    {
+        if (holder)
+            delete holder.data();
+        else
+            delete source.data();
+    }
+
+    PropertyModel model;
+    QAbstractItemModelTester tester {
+        &model, QAbstractItemModelTester::FailureReportingMode::Fatal};
+    QPointer<QObject> holder;
+    QPointer<QObjectPropertySource> source;
+};
+
+bool writeThroughTheModel(
+    PropertyModel& model, const QString& path, const QVariant& value, bool throughSetData)
+{
+    if (throughSetData)
+        return model.setData(model.indexOf(model.find(path), PropertyModel::ValueColumn), value);
+    return model.setValue(path, value);
+}
+
+} // namespace
+
+void tst_QObjectPropertySource::sourceDeletedByTheObjectsSetterDuringAModelWrite_data()
+{
+    QTest::addColumn<bool>("throughSetData");
+    QTest::addColumn<bool>("deleteParent");
+    QTest::newRow("setValue/source") << false << false;
+    QTest::newRow("setData/source") << true << false;
+    QTest::newRow("setValue/parent") << false << true;
+    QTest::newRow("setData/parent") << true << true;
+}
+
+// A model-side write reaches the object's setter, and the setter deletes the
+// source (or the source's parent). The write completes, the group stays with
+// the written value, and the object and the model are not synced any more.
+void tst_QObjectPropertySource::sourceDeletedByTheObjectsSetterDuringAModelWrite()
+{
+    QFETCH(bool, throughSetData);
+    QFETCH(bool, deleteParent);
+    Rig rig(deleteParent);
+    PropertyModel& model = rig.model;
+    Probe probe;
+    probe.setObjectName(QStringLiteral("p"));
+    QVERIFY(rig.source->addObject(&probe));
+    const QString level = QStringLiteral("p/level");
+    probe.inSetter = [&rig] { rig.deleteSource(); };
+
+    const bool ok = writeThroughTheModel(model, level, 5, throughSetData);
+
+    QVERIFY(ok);
+    QVERIFY(rig.source.isNull());
+    QVERIFY(rig.holder.isNull()); // never there, or deleted with the source
+    QCOMPARE(probe.level(), 5);
+    QCOMPARE(probe.levelWrites, 1);
+    QVERIFY(model.find(QStringLiteral("p")));
+    QCOMPARE(model.find(level)->value(), QVariant(5));
+
+    // Not synced in either direction.
+    probe.inSetter = nullptr;
+    QVERIFY(model.setValue(level, 7));
+    QCOMPARE(probe.level(), 5);
+    QCOMPARE(probe.levelWrites, 1);
+    probe.setLevel(9);
+    QCOMPARE(model.find(level)->value(), QVariant(7));
+}
+
+void tst_QObjectPropertySource::sourceDeletedByANotifySlot_data()
+{
+    QTest::addColumn<bool>("fromTheModel");
+    QTest::addColumn<bool>("throughSetData");
+    QTest::newRow("modelWrite/setValue") << true << false;
+    QTest::newRow("modelWrite/setData") << true << true;
+    QTest::newRow("objectChange") << false << false;
+}
+
+// An application slot on the object's NOTIFY signal, connected after the
+// source, deletes the source: during the source's own write to the object, or
+// after the source has copied an object-side change.
+void tst_QObjectPropertySource::sourceDeletedByANotifySlot()
+{
+    QFETCH(bool, fromTheModel);
+    QFETCH(bool, throughSetData);
+    Rig rig(false);
+    PropertyModel& model = rig.model;
+    Probe probe;
+    probe.setObjectName(QStringLiteral("p"));
+    QVERIFY(rig.source->addObject(&probe));
+    const QString level = QStringLiteral("p/level");
+    QObject::connect(&probe, &Probe::levelChanged, [&rig] { rig.deleteSource(); });
+
+    int expected = 0;
+    if (fromTheModel) {
+        QVERIFY(writeThroughTheModel(model, level, 5, throughSetData));
+        expected = 5;
+    } else {
+        probe.setLevel(4);
+        expected = 4;
+    }
+
+    QVERIFY(rig.source.isNull());
+    QCOMPARE(probe.level(), expected);
+    QCOMPARE(probe.levelWrites, 1);
+    QVERIFY(model.find(QStringLiteral("p")));
+    QCOMPARE(model.find(level)->value(), QVariant(expected));
+
+    // Not synced in either direction.
+    QVERIFY(model.setValue(level, 7));
+    QCOMPARE(probe.level(), expected);
+    QCOMPARE(probe.levelWrites, 1);
+    probe.setLevel(9);
+    QCOMPARE(model.find(level)->value(), QVariant(7));
+}
+
+void tst_QObjectPropertySource::sourceDeletedByAValueSlotDuringAReadBack_data()
+{
+    QTest::addColumn<bool>("throughSetData");
+    QTest::addColumn<bool>("deleteParent");
+    QTest::newRow("setValue/source") << false << false;
+    QTest::newRow("setData/source") << true << false;
+    QTest::newRow("setValue/parent") << false << true;
+}
+
+// The object adjusts the written value, so the source reads it back inside the
+// write; a slot of valueChanged() deletes the source while the read-back is
+// still running. The read-back completes and the group shows the object's value.
+void tst_QObjectPropertySource::sourceDeletedByAValueSlotDuringAReadBack()
+{
+    QFETCH(bool, throughSetData);
+    QFETCH(bool, deleteParent);
+    Rig rig(deleteParent);
+    PropertyModel& model = rig.model;
+    Camera camera;
+    camera.setObjectName(QStringLiteral("cam"));
+    QVERIFY(rig.source->addObject(&camera));
+    QSignalSpy fovChanges(&camera, &Camera::fovChanged);
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    int deletions = 0;
+    QObject::connect(&model, &PropertyModel::valueChanged, [&rig, &deletions](const QString& path) {
+        if (path == QStringLiteral("cam/fov") && deletions++ == 0)
+            rig.deleteSource();
+    });
+
+    const bool ok = writeThroughTheModel(model, QStringLiteral("cam/fov"), 75, throughSetData);
+
+    QVERIFY(ok);
+    QVERIFY(deletions >= 1);
+    QVERIFY(rig.source.isNull());
+    QCOMPARE(camera.fov(), 74); // odd values are refused by the object
+    QCOMPARE(fovChanges.count(), 1);
+    QVERIFY(model.find(QStringLiteral("cam")));
+    QCOMPARE(model.find(QStringLiteral("cam/fov"))->value(), QVariant(74));
+    const int announced = values.count();
+
+    // Not synced in either direction.
+    QVERIFY(model.setValue(QStringLiteral("cam/fov"), 100));
+    QCOMPARE(camera.fov(), 74);
+    QCOMPARE(fovChanges.count(), 1);
+    camera.setFov(90);
+    QCOMPARE(model.find(QStringLiteral("cam/fov"))->value(), QVariant(100));
+    QCOMPARE(values.count(), announced + 1); // only the write above
+}
+
+void tst_QObjectPropertySource::sourceDeletedByAValueSlotDuringAnObjectNotification_data()
+{
+    QTest::addColumn<bool>("deleteParent");
+    QTest::newRow("source") << false;
+    QTest::newRow("parent") << true;
+}
+
+// One NOTIFY signal announces four properties; the slot of the first value
+// change deletes the source (or its parent): the other three are not copied to
+// the model, the group stays with what was copied.
+void tst_QObjectPropertySource::sourceDeletedByAValueSlotDuringAnObjectNotification()
+{
+    QFETCH(bool, deleteParent);
+    Rig rig(deleteParent);
+    PropertyModel& model = rig.model;
+    Recorder recorder;
+    recorder.setObjectName(QStringLiteral("rec"));
+    QVERIFY(rig.source->addObject(&recorder));
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    bool deleted = false;
+    QObject::connect(&model, &PropertyModel::valueChanged, [&rig, &deleted](const QString&) {
+        if (deleted)
+            return;
+        deleted = true;
+        rig.deleteSource();
+    });
+
+    recorder.m_autostop = true;
+    recorder.m_minutes = 20;
+    recorder.m_saveToDisk = false;
+    recorder.m_folder = QStringLiteral("x");
+    emit recorder.changed();
+
+    QVERIFY(deleted);
+    QVERIFY(rig.source.isNull());
+    QCOMPARE(values.count(), 1);
+    QCOMPARE(values.at(0).at(0).toString(), QStringLiteral("rec/autostop"));
+    QVERIFY(model.find(QStringLiteral("rec")));
+    QCOMPARE(model.find(QStringLiteral("rec/autostop"))->value(), QVariant(true));
+    QCOMPARE(model.find(QStringLiteral("rec/minutes"))->value(), QVariant(10));
+    QCOMPARE(model.find(QStringLiteral("rec/saveToDisk"))->value(), QVariant(true));
+    QCOMPARE(model.find(QStringLiteral("rec/folder"))->value(), QVariant(QString()));
+
+    // Not synced in either direction.
+    QVERIFY(model.setValue(QStringLiteral("rec/minutes"), 30));
+    QCOMPARE(recorder.m_minutes, 20);
+    recorder.m_minutes = 40;
+    emit recorder.changed();
+    QCOMPARE(model.find(QStringLiteral("rec/minutes"))->value(), QVariant(30));
+    QCOMPARE(values.count(), 2); // only the write above
+}
+
+void tst_QObjectPropertySource::sourceDeletedByAValueSlotDuringARefresh_data()
+{
+    QTest::addColumn<int>("trigger"); // the object whose refreshed value runs the slot
+    QTest::addColumn<bool>("deleteParent");
+    QTest::newRow("first") << 0 << false;
+    QTest::newRow("second") << 1 << false;
+    QTest::newRow("first/parent") << 0 << true;
+}
+
+// refresh() copies the values of three objects; a slot of the value change of
+// one of them deletes the source. The copy in progress completes, the objects
+// after it are not refreshed, and the groups stay.
+void tst_QObjectPropertySource::sourceDeletedByAValueSlotDuringARefresh()
+{
+    QFETCH(int, trigger);
+    QFETCH(bool, deleteParent);
+    Rig rig(deleteParent);
+    PropertyModel& model = rig.model;
+    const QStringList names {QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c")};
+    Camera cameras[3];
+    for (int i = 0; i < 3; ++i) {
+        cameras[i].setObjectName(names.at(i));
+        QVERIFY(rig.source->addObject(&cameras[i]));
+    }
+    // "frames" has no NOTIFY signal: only refresh() sees the new values.
+    for (int i = 0; i < 3; ++i)
+        cameras[i].setFrames(11 * (i + 1));
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    bool deleted = false;
+    const QString triggerPath = names.at(trigger) + QStringLiteral("/frames");
+    QObject::connect(&model, &PropertyModel::valueChanged,
+        [&rig, &deleted, triggerPath](const QString& path) {
+            if (deleted || path != triggerPath)
+                return;
+            deleted = true;
+            rig.deleteSource();
+        });
+    // refresh() on a source that a slot deletes: use the pointer taken before.
+    QObjectPropertySource* source = rig.source.data();
+
+    source->refresh();
+
+    QVERIFY(deleted);
+    QVERIFY(rig.source.isNull());
+    for (int i = 0; i < 3; ++i) {
+        QVERIFY(model.find(names.at(i)));
+        // The objects up to the trigger were refreshed, the later ones were not.
+        const qint64 expected = i <= trigger ? qint64(11 * (i + 1)) : qint64(5000000000);
+        QCOMPARE(model.find(names.at(i) + QStringLiteral("/frames"))->value(), QVariant(expected));
+    }
+    QCOMPARE(values.count(), trigger + 1);
+
+    // Not synced in either direction.
+    QVERIFY(model.setValue(QStringLiteral("a/name"), QStringLiteral("Other")));
+    QCOMPARE(cameras[0].name(), QStringLiteral("Main"));
+    cameras[2].setName(QStringLiteral("Later"));
+    QCOMPARE(model.find(QStringLiteral("c/name"))->value(), QVariant(QStringLiteral("Main")));
+}
+
+void tst_QObjectPropertySource::sourceDeletedByADataChangedSlotDuringATitleUpdate_data()
+{
+    QTest::addColumn<bool>("deleteParent");
+    QTest::newRow("source") << false;
+    QTest::newRow("parent") << true;
+}
+
+// The object's NOTIFY signal also updates the group's title after the
+// property; a slot of dataChanged() deletes the source when the title changes.
+void tst_QObjectPropertySource::sourceDeletedByADataChangedSlotDuringATitleUpdate()
+{
+    QFETCH(bool, deleteParent);
+    Rig rig(deleteParent);
+    PropertyModel& model = rig.model;
+    Sensor sensor;
+    sensor.setObjectName(QStringLiteral("s"));
+    PropertyGroup* group = rig.source->addObject(&sensor);
+    QVERIFY(group);
+    QCOMPARE(group->displayName(), QStringLiteral("Outdoor"));
+    bool deleted = false;
+    QObject::connect(&model, &QAbstractItemModel::dataChanged, [&rig, &deleted, group] {
+        if (!deleted && group->displayName() == QStringLiteral("Roof")) {
+            deleted = true;
+            rig.deleteSource();
+        }
+    });
+
+    sensor.setLabel(QStringLiteral("Roof"));
+
+    QVERIFY(deleted);
+    QVERIFY(rig.source.isNull());
+    QVERIFY(model.find(QStringLiteral("s")) == group);
+    QCOMPARE(group->displayName(), QStringLiteral("Roof"));
+    QCOMPARE(model.find(QStringLiteral("s/label"))->value(), QVariant(QStringLiteral("Roof")));
+
+    // Not synced in either direction.
+    QVERIFY(model.setValue(QStringLiteral("s/label"), QStringLiteral("Garden")));
+    QCOMPARE(sensor.label(), QStringLiteral("Roof"));
+    sensor.setLabel(QStringLiteral("Later"));
+    QCOMPARE(model.find(QStringLiteral("s/label"))->value(), QVariant(QStringLiteral("Garden")));
+    QCOMPARE(group->displayName(), QStringLiteral("Roof"));
+}
+
+void tst_QObjectPropertySource::sourceDeletedByARowsRemovedSlot_data()
+{
+    QTest::addColumn<bool>("objectIsDestroyed"); // otherwise removeObject()
+    QTest::addColumn<bool>("deleteParent");
+    QTest::newRow("removeObject/source") << false << false;
+    QTest::newRow("removeObject/parent") << false << true;
+    QTest::newRow("objectDestroyed/source") << true << false;
+    QTest::newRow("objectDestroyed/parent") << true << true;
+}
+
+// A slot of rowsRemoved() deletes the source while it removes the group of an
+// object, by removeObject() or because the object was destroyed. The removal
+// completes; the other object's group stays and is not synced any more.
+void tst_QObjectPropertySource::sourceDeletedByARowsRemovedSlot()
+{
+    QFETCH(bool, objectIsDestroyed);
+    QFETCH(bool, deleteParent);
+    Rig rig(deleteParent);
+    PropertyModel& model = rig.model;
+    auto first = std::make_unique<Probe>();
+    first->setObjectName(QStringLiteral("a"));
+    Probe other;
+    other.setObjectName(QStringLiteral("b"));
+    QVERIFY(rig.source->addObject(first.get()));
+    QVERIFY(rig.source->addObject(&other));
+    int deletions = 0;
+    QObject::connect(&model, &QAbstractItemModel::rowsRemoved, [&rig, &deletions] {
+        if (deletions++ == 0)
+            rig.deleteSource();
+    });
+    QObjectPropertySource* source = rig.source.data();
+
+    if (objectIsDestroyed) {
+        first.reset();
+    } else {
+        QVERIFY(source->removeObject(first.get()));
+    }
+
+    QCOMPARE(deletions, 1);
+    QVERIFY(rig.source.isNull());
+    QVERIFY(!model.find(QStringLiteral("a")));
+    QVERIFY(model.find(QStringLiteral("b")));
+    QCOMPARE(model.find(QStringLiteral("b/level"))->value(), QVariant(1));
+
+    // The other object is not synced in either direction.
+    QVERIFY(model.setValue(QStringLiteral("b/level"), 7));
+    QCOMPARE(other.level(), 1);
+    QCOMPARE(other.levelWrites, 0);
+    other.setLevel(9);
+    QCOMPARE(model.find(QStringLiteral("b/level"))->value(), QVariant(7));
+}
+
+// A slot of rowsInserted() deletes the source while addObject() inserts the
+// group. addObject() returns the group it added, which is in the model, and
+// the source adds nothing else.
+void tst_QObjectPropertySource::sourceDeletedByARowsInsertedSlotDuringAddObject()
+{
+    Rig rig(false);
+    PropertyModel& model = rig.model;
+    Probe probe;
+    probe.setObjectName(QStringLiteral("p"));
+    QSignalSpy inserted(&model, &QAbstractItemModel::rowsInserted);
+    QSignalSpy values(&model, &PropertyModel::valueChanged);
+    int deletions = 0;
+    QObject::connect(&model, &QAbstractItemModel::rowsInserted, [&rig, &deletions] {
+        if (deletions++ == 0)
+            rig.deleteSource();
+    });
+    QObjectPropertySource* source = rig.source.data();
+
+    PropertyGroup* group = source->addObject(&probe);
+
+    QCOMPARE(deletions, 1);
+    QVERIFY(rig.source.isNull());
+    QVERIFY(group);
+    QVERIFY(group == model.find(QStringLiteral("p")));
+    QCOMPARE(group->path(), QStringLiteral("p"));
+    QCOMPARE(inserted.count(), 1); // the group, nothing after the deletion
+
+    // The object is not synced.
+    probe.setLevel(9);
+    QCOMPARE(values.count(), 0);
+    QCOMPARE(inserted.count(), 1);
+}
+
+// The source is a child of the model, and a slot of valueChanged() deletes the
+// model while the source reads back a value inside a write: the source goes
+// with it, and the write that was running returns normally.
+void tst_QObjectPropertySource::sourceChildOfTheModelDeletedWithTheModelDuringAWrite()
+{
+    auto* model = new PropertyModel(PropertyGroup::create(QStringLiteral("root")));
+    const QPointer<PropertyModel> guard(model);
+    const auto cleanup = qScopeGuard([&guard] { delete guard.data(); });
+    auto* source = new QObjectPropertySource(model, model);
+    const QPointer<QObjectPropertySource> sourceGuard(source);
+    Camera camera;
+    camera.setObjectName(QStringLiteral("cam"));
+    QVERIFY(source->addObject(&camera));
+    QSignalSpy fovChanges(&camera, &Camera::fovChanged);
+    int deletions = 0;
+    QObject::connect(model, &PropertyModel::valueChanged, [model, &deletions](const QString& path) {
+        if (path == QStringLiteral("cam/fov") && deletions++ == 0)
+            delete model;
+    });
+
+    const bool ok = model->setValue(QStringLiteral("cam/fov"), 75);
+
+    QVERIFY(ok);
+    QVERIFY(deletions >= 1);
+    QVERIFY(guard.isNull());
+    QVERIFY(sourceGuard.isNull());
+    QCOMPARE(camera.fov(), 74); // odd values are refused by the object
+    QCOMPARE(fovChanges.count(), 1);
+
+    // The object is not synced with anything any more.
+    camera.setFov(90);
+    QCOMPARE(camera.fov(), 90);
+    QCOMPARE(fovChanges.count(), 2);
+}
+
+namespace {
+
+// The value is out of its range when the object is added, so adding it changes
+// the property's value once more.
+class Overrange : public QObject
+{
+    Q_OBJECT
+    Q_CLASSINFO("qpb:level", "min=0;max=10")
+    Q_PROPERTY(int level READ level WRITE setLevel NOTIFY levelChanged)
+
+public:
+    int level() const
+    {
+        return m_level;
+    }
+    void setLevel(int level)
+    {
+        m_level = level;
+        emit levelChanged();
+    }
+
+signals:
+    void levelChanged();
+
+private:
+    int m_level = 50;
+};
+
+} // namespace
+
+void tst_QObjectPropertySource::modelDeletedDuringAddObject_data()
+{
+    QTest::addColumn<bool>("onValueChanged"); // otherwise on dataChanged
+    QTest::newRow("valueChanged") << true;
+    QTest::newRow("dataChanged") << false;
+}
+
+// A slot deletes the model while addObject() is still configuring the group's
+// properties; the source is not a child of the model. addObject() stops
+// without touching the destroyed tree and returns nullptr; the source keeps no
+// object and stays usable.
+void tst_QObjectPropertySource::modelDeletedDuringAddObject()
+{
+    QFETCH(bool, onValueChanged);
+    auto* model = new PropertyModel;
+    const QPointer<PropertyModel> guard(model);
+    const auto cleanup = qScopeGuard([&guard] { delete guard.data(); });
+    QObjectPropertySource source(model);
+    Overrange object;
+    object.setObjectName(QStringLiteral("o"));
+    int deletions = 0;
+    const auto deleteModel = [&guard, &deletions] {
+        if (deletions++ == 0)
+            delete guard.data();
+    };
+    if (onValueChanged)
+        QObject::connect(model, &PropertyModel::valueChanged, deleteModel);
+    else
+        QObject::connect(model, &QAbstractItemModel::dataChanged, deleteModel);
+
+    PropertyGroup* group = source.addObject(&object);
+
+    QVERIFY(deletions >= 1);
+    QVERIFY(guard.isNull());
+    QVERIFY(!group);
+    QVERIFY(!source.model());
+    QVERIFY(source.objects().isEmpty());
+    QVERIFY(!source.groupOf(&object));
+    QVERIFY(!source.removeObject(&object));
+
+    // Nothing is synced to the dead model, and the source takes no new object.
+    object.setLevel(3);
+    QCOMPARE(object.level(), 3);
+    source.refresh();
+    QVERIFY(!source.addObject(&object));
+    QVERIFY(source.objects().isEmpty());
+}
+
+void tst_QObjectPropertySource::modelDeletedWhileTheSourceSyncs_data()
+{
+    QTest::addColumn<int>("situation");
+    QTest::newRow("modelWrite") << 0;
+    QTest::newRow("objectNotification") << 1;
+    QTest::newRow("refresh") << 2;
+}
+
+// A slot of valueChanged() deletes the model while the source copies a value:
+// in its read-back of a model write, in a notification of the object, or in
+// refresh() with more objects after the first. The source goes on without
+// touching the destroyed tree and does not sync the objects any more.
+void tst_QObjectPropertySource::modelDeletedWhileTheSourceSyncs()
+{
+    QFETCH(int, situation);
+    auto* model = new PropertyModel(PropertyGroup::create(QStringLiteral("root")));
+    const QPointer<PropertyModel> guard(model);
+    const auto cleanup = qScopeGuard([&guard] { delete guard.data(); });
+    QObjectPropertySource source(model);
+    Camera first;
+    first.setObjectName(QStringLiteral("a"));
+    Camera second;
+    second.setObjectName(QStringLiteral("b"));
+    QVERIFY(source.addObject(&first));
+    QVERIFY(source.addObject(&second));
+    QSignalSpy firstFov(&first, &Camera::fovChanged);
+    int deletions = 0;
+    QObject::connect(model, &PropertyModel::valueChanged, [&guard, &deletions] {
+        if (deletions++ == 0)
+            delete guard.data();
+    });
+
+    if (situation == 0) {
+        QVERIFY(model->setValue(QStringLiteral("a/fov"), 75));
+        QCOMPARE(first.fov(), 74); // odd values are refused by the object
+    } else if (situation == 1) {
+        first.setFov(80);
+    } else {
+        first.setFrames(11);
+        second.setFrames(22);
+        source.refresh();
+    }
+
+    QCOMPARE(deletions, 1);
+    QVERIFY(guard.isNull());
+    QVERIFY(!source.model());
+    QVERIFY(!source.groupOf(&first));
+    QVERIFY(!source.groupOf(&second));
+
+    // The objects are not synced any more, and the source stays usable.
+    first.setFov(90);
+    second.setName(QStringLiteral("Other"));
+    source.refresh();
+    QCOMPARE(first.fov(), 90);
+    QVERIFY(!source.addObject(&first));
+    QVERIFY(source.removeObject(&first));
+    QVERIFY(source.removeObject(&second));
+}
+
+void tst_QObjectPropertySource::treeChangedDuringAddObject_data()
+{
+    QTest::addColumn<bool>("onValueChanged"); // otherwise on dataChanged
+    QTest::addColumn<bool>("removeGroup"); // otherwise only the property
+    QTest::newRow("group/valueChanged") << true << true;
+    QTest::newRow("group/dataChanged") << false << true;
+    QTest::newRow("property/valueChanged") << true << false;
+    QTest::newRow("property/dataChanged") << false << false;
+}
+
+// A slot removes the group that addObject() is configuring, or one of its
+// properties, from the model; model and source stay alive. addObject() stops
+// without touching what was removed: it returns nullptr when the group is gone
+// and the group when only the property is, and the source keeps no record of
+// the object.
+void tst_QObjectPropertySource::treeChangedDuringAddObject()
+{
+    QFETCH(bool, onValueChanged);
+    QFETCH(bool, removeGroup);
+    PropertyModel model;
+    QObjectPropertySource source(&model);
+    Overrange object;
+    object.setObjectName(QStringLiteral("o"));
+    int removals = 0;
+    const auto removeIt = [&model, &removals, removeGroup] {
+        if (removals > 0)
+            return;
+        Property* group = model.find(QStringLiteral("o"));
+        if (!group || !model.find(QStringLiteral("o/level")))
+            return;
+        ++removals;
+        if (removeGroup)
+            model.root()->remove(QStringLiteral("o"));
+        else
+            group->toGroup()->remove(QStringLiteral("level"));
+    };
+    if (onValueChanged)
+        QObject::connect(&model, &PropertyModel::valueChanged, removeIt);
+    else
+        QObject::connect(&model, &QAbstractItemModel::dataChanged, removeIt);
+
+    PropertyGroup* group = source.addObject(&object);
+
+    QCOMPARE(removals, 1);
+    QVERIFY(!model.find(QStringLiteral("o/level")));
+    if (removeGroup) {
+        QVERIFY(!group);
+        QVERIFY(!model.find(QStringLiteral("o")));
+    } else {
+        QVERIFY(group);
+        QVERIFY(group == model.find(QStringLiteral("o")));
+    }
+    QVERIFY(source.objects().isEmpty());
+    QVERIFY(!source.groupOf(&object));
+    QVERIFY(!source.removeObject(&object));
+
+    // Nothing is synced, and the object can be added again.
+    object.setLevel(3);
+    QCOMPARE(object.level(), 3);
+    source.refresh();
+    QVERIFY(!model.find(QStringLiteral("o/level")));
+    QVERIFY(source.addObject(&object));
+    QCOMPARE(source.objects().size(), 1);
+}
+
+void tst_QObjectPropertySource::groupIdWithASlash_data()
+{
+    QTest::addColumn<QString>("earlierName"); // an object added first, if not empty
+    QTest::addColumn<QString>("objectName");
+    QTest::addColumn<QString>("id"); // passed to addObject(), may be empty
+    QTest::addColumn<QString>("wrongId"); // what the warning names
+    QTest::addColumn<QString>("expectedPath");
+    QTest::addColumn<bool>("underAGroup"); // otherwise under the root
+    QTest::newRow("objectName") << QString() << QStringLiteral("a/b") << QString()
+                                << QStringLiteral("a/b") << QStringLiteral("a_b") << false;
+    QTest::newRow("explicitId") << QString() << QStringLiteral("o") << QStringLiteral("x/y")
+                                << QStringLiteral("x/y") << QStringLiteral("x_y") << false;
+    QTest::newRow("collision") << QStringLiteral("a_b") << QStringLiteral("a/b") << QString()
+                               << QStringLiteral("a/b") << QStringLiteral("a_b_2") << false;
+    QTest::newRow("underAGroup") << QString() << QStringLiteral("o") << QStringLiteral("x/y")
+                                 << QStringLiteral("x/y") << QStringLiteral("parent/x_y") << true;
+}
+
+// '/' separates the ids of a path, so a group id containing it is replaced; the
+// object's group has the replaced id, is returned by addObject() and is synced
+// in both directions. An id that collides with an existing one gets a suffix.
+void tst_QObjectPropertySource::groupIdWithASlash()
+{
+    QFETCH(QString, earlierName);
+    QFETCH(QString, objectName);
+    QFETCH(QString, id);
+    QFETCH(QString, wrongId);
+    QFETCH(QString, expectedPath);
+    QFETCH(bool, underAGroup);
+    PropertyModel model(PropertyGroup::create(QStringLiteral("root")));
+    QAbstractItemModelTester tester(&model, QAbstractItemModelTester::FailureReportingMode::Fatal);
+    QObjectPropertySource source(&model);
+    PropertyGroup* parentGroup
+        = underAGroup ? &model.root()->addGroup(QStringLiteral("parent")) : nullptr;
+    Probe earlier;
+    if (!earlierName.isEmpty()) {
+        earlier.setObjectName(earlierName);
+        QVERIFY(source.addObject(&earlier));
+    }
+    Probe probe;
+    probe.setObjectName(objectName);
+    QTest::ignoreMessage(QtWarningMsg,
+        QString(QStringLiteral("qpb: group id \"%1\" contains '/', using \"%2\"")
+                    .arg(wrongId, QString(wrongId).replace(QLatin1Char('/'), QLatin1Char('_'))))
+            .toUtf8()
+            .constData());
+
+    PropertyGroup* group = source.addObject(&probe, parentGroup, id);
+
+    QVERIFY(group);
+    QCOMPARE(group->path(), expectedPath);
+    QVERIFY(model.find(expectedPath) == group);
+    QVERIFY(source.groupOf(&probe) == group);
+    QCOMPARE(source.objects().size(), earlierName.isEmpty() ? 1 : 2);
+    const QString level = expectedPath + QStringLiteral("/level");
+    QVERIFY(model.setValue(level, 5));
+    QCOMPARE(probe.level(), 5);
+    probe.setLevel(8);
+    QCOMPARE(model.find(level)->value(), QVariant(8));
+    if (!earlierName.isEmpty())
+        QCOMPARE(earlier.levelWrites, 0);
 }
 
 QTEST_GUILESS_MAIN(tst_QObjectPropertySource)

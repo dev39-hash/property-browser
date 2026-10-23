@@ -112,6 +112,21 @@ QString uniqueId(const PropertyGroup& parent, const QString& base)
     return id;
 }
 
+// The id a group gets for base (never empty): '/' separates the ids of a path, so
+// it is replaced, as PropertyPrivate does for every id. Done here so the group's
+// path is known before the group is added, and so uniqueId() compares the id the
+// group really gets.
+QString usableId(const QString& base)
+{
+    if (!base.contains(QLatin1Char('/')))
+        return base;
+    QString fixed = base;
+    fixed.replace(QLatin1Char('/'), QLatin1Char('_'));
+    qWarning("qpb: group id \"%s\" contains '/', using \"%s\"", qUtf8Printable(base),
+        qUtf8Printable(fixed));
+    return fixed;
+}
+
 } // namespace
 
 QObjectPropertySourcePrivate::QObjectPropertySourcePrivate(PropertyModel* propertyModel)
@@ -183,9 +198,13 @@ void QObjectPropertySourcePrivate::read(ObjectBinding& binding, const QString& i
     if (!property || !binding.object)
         return;
     const QVariant value = readValue(binding.properties.value(id), binding.object);
+    const QPointer<QObjectPropertySourcePrivate> self(this);
     const bool wasUpdating = updating;
     updating = true;
     property->setValue(value);
+    // A handler of the change may have deleted the source.
+    if (!self)
+        return;
     updating = wasUpdating;
 }
 
@@ -193,9 +212,11 @@ void QObjectPropertySourcePrivate::modelValueChanged(const QString& path, const 
 {
     if (updating)
         return;
+    const QPointer<QObjectPropertySourcePrivate> self(this);
     SyncScope scope(this);
     // The write may run handlers that remove objects: records are only marked
-    // dead meanwhile, so the pointer to the record stays valid.
+    // dead meanwhile, so the pointer to the record stays valid. It may also run
+    // handlers that delete the source: nothing of it is touched afterwards.
     for (const auto& entry : bindings) {
         ObjectBinding* binding = entry.get();
         if (binding->dead)
@@ -210,6 +231,8 @@ void QObjectPropertySourcePrivate::modelValueChanged(const QString& path, const 
         const QMetaProperty metaProperty = *found;
         updating = true;
         metaProperty.write(binding->object, value);
+        if (!self)
+            return;
         updating = false;
         // The object may have refused or adjusted the value.
         if (!binding->dead && binding->object && readValue(metaProperty, binding->object) != value)
@@ -223,6 +246,7 @@ void QObjectPropertySourcePrivate::notified()
     ObjectBinding* binding = bindingOf(sender());
     if (!binding)
         return;
+    const QPointer<QObjectPropertySourcePrivate> self(this);
     SyncScope scope(this);
     const int signal = senderSignalIndex();
     const QStringList ids = binding->notified.value(signal);
@@ -230,6 +254,8 @@ void QObjectPropertySourcePrivate::notified()
         if (binding->dead)
             return;
         read(*binding, id);
+        if (!self)
+            return;
     }
     if (!binding->dead && binding->title.isValid() && binding->title.notifySignalIndex() == signal)
         readTitle(*binding);
@@ -267,8 +293,19 @@ PropertyGroup* QObjectPropertySource::addObject(
     if (detail::ObjectBinding* existing = d->bindingOf(object))
         return d->groupOf(*existing);
 
-    if (!parentGroup && !d->model->root())
+    // Every change below may run handlers that delete this source or the model,
+    // or remove the group. Once that happened nothing of the destroyed objects is
+    // touched and nothing is synced: the group added so far is returned while it
+    // is in the model, and nullptr when it died.
+    detail::QObjectPropertySourcePrivate* const dp = d.get();
+    const QPointer<detail::QObjectPropertySourcePrivate> self(dp);
+    const QPointer<PropertyModel> modelGuard(d->model);
+    std::unique_ptr<detail::ObjectBinding> binding;
+    if (!parentGroup && !d->model->root()) {
         d->model->setRoot(PropertyGroup::create(QStringLiteral("root")));
+        if (!self || !modelGuard)
+            return nullptr;
+    }
     PropertyGroup* parent = parentGroup ? parentGroup : d->model->root();
     const QMetaObject* meta = object->metaObject();
     QString base = id;
@@ -276,13 +313,40 @@ PropertyGroup* QObjectPropertySource::addObject(
         base = object->objectName();
     if (base.isEmpty())
         base = QString::fromLatin1(meta->className());
-    PropertyGroup& group = parent->addGroup(detail::uniqueId(*parent, base));
+    const QString groupId = detail::uniqueId(*parent, detail::usableId(base));
+    const QString parentPath = parent->path();
+    const QString groupPath
+        = parentPath.isEmpty() ? groupId : parentPath + QLatin1Char('/') + groupId;
+    PropertyGroup& group = parent->addGroup(groupId);
+    // A handler may also remove the group (or a property of it) without deleting
+    // the model. That is decided from the model's side, by pointer comparison
+    // only, because what was removed may be destroyed already.
+    const auto groupInModel = [&modelGuard, &groupPath, &group] {
+        if (!modelGuard)
+            return false;
+        const Property* found = modelGuard->find(groupPath);
+        return found && found->toGroup() == &group;
+    };
+    const auto interrupted = [&self, &groupInModel] { return !self || !groupInModel(); };
+    const auto lost = [&](const Property* property, const QString& propertyId) {
+        return interrupted() || group.child(propertyId) != property;
+    };
+    const auto abandon = [&]() -> PropertyGroup* {
+        // The connections made so far go with the record that is never stored.
+        if (self && binding) {
+            for (const QMetaObject::Connection& connection : std::as_const(binding->connections))
+                disconnect(connection);
+        }
+        return groupInModel() ? &group : nullptr;
+    };
+    if (interrupted())
+        return abandon();
 
-    auto binding = std::make_unique<detail::ObjectBinding>();
+    binding = std::make_unique<detail::ObjectBinding>();
     binding->object = object;
     binding->key = object;
-    binding->groupPath = group.path();
-    const QMetaMethod slot = d->metaObject()->method(d->metaObject()->indexOfSlot("notified()"));
+    binding->groupPath = groupPath;
+    const QMetaMethod slot = dp->metaObject()->method(dp->metaObject()->indexOfSlot("notified()"));
 
     for (const QMetaProperty& metaProperty : detail::propertiesOf(meta)) {
         if (!metaProperty.isReadable() || metaProperty.isFlagType())
@@ -304,6 +368,8 @@ PropertyGroup* QObjectPropertySource::addObject(
                 options << option;
             }
             property = &group.addEnum(name, options, value).property();
+            if (lost(property, name))
+                return abandon();
         } else {
             const TypeId type = metadata.contains(QStringLiteral("type"))
                 ? metadata.value(QStringLiteral("type")).toString().trimmed()
@@ -311,6 +377,8 @@ PropertyGroup* QObjectPropertySource::addObject(
             if (type.isEmpty() || !TypeRegistry::global().contains(type))
                 continue;
             property = &group.add(type, name, value);
+            if (lost(property, name))
+                return abandon();
         }
 
         for (auto it = metadata.constBegin(); it != metadata.constEnd(); ++it) {
@@ -332,35 +400,46 @@ PropertyGroup* QObjectPropertySource::addObject(
             // 1.4: another Q_PROPERTY of the same object.
             else if (key == QLatin1String("enabledWhen"))
                 property->setEnabledWhen(
-                    group.path() + QLatin1Char('/') + it.value().toString().trimmed());
+                    groupPath + QLatin1Char('/') + it.value().toString().trimmed());
             else if (key == QLatin1String("visibleWhen"))
                 property->setVisibleWhen(
-                    group.path() + QLatin1Char('/') + it.value().toString().trimmed());
+                    groupPath + QLatin1Char('/') + it.value().toString().trimmed());
             else
                 property->setAttribute(key, it.value());
+            if (lost(property, name))
+                return abandon();
         }
         if (!metaProperty.isWritable()) {
             property->setReadOnly(true);
+            if (lost(property, name))
+                return abandon();
             // 1.3: values the object changes by itself are not settings.
-            if (d->liveReadOnly && metaProperty.hasNotifySignal())
+            if (dp->liveReadOnly && metaProperty.hasNotifySignal()) {
                 property->setLive(true);
+                if (lost(property, name))
+                    return abandon();
+            }
         }
         // Attributes may change the value (e.g. clamping): start from the object's.
         property->setValue(value);
+        if (lost(property, name))
+            return abandon();
         property->setDefaultValue(property->value());
+        if (lost(property, name))
+            return abandon();
 
         binding->properties.insert(property->id(), metaProperty);
         if (metaProperty.hasNotifySignal()) {
             const int signal = metaProperty.notifySignalIndex();
             if (!binding->notified.contains(signal)) {
-                binding->connections << connect(object, metaProperty.notifySignal(), d.get(), slot);
+                binding->connections << connect(object, metaProperty.notifySignal(), dp, slot);
             }
             binding->notified[signal] << property->id();
         }
     }
 
     // Group title (1.3): the class's "qpb:title", else setTitleProperty().
-    QString titleName = d->titleProperty;
+    QString titleName = dp->titleProperty;
     const int titleInfo = meta->indexOfClassInfo("qpb:title");
     if (titleInfo >= 0)
         titleName = QString::fromUtf8(meta->classInfo(titleInfo).value()).trimmed();
@@ -370,17 +449,20 @@ PropertyGroup* QObjectPropertySource::addObject(
         binding->title = meta->property(titleIndex);
         const int signal = binding->title.notifySignalIndex();
         if (signal >= 0 && !binding->notified.contains(signal)) {
-            binding->connections << connect(object, binding->title.notifySignal(), d.get(), slot);
+            binding->connections << connect(object, binding->title.notifySignal(), dp, slot);
             binding->notified.insert(signal, {});
         }
-        d->readTitle(*binding);
+        dp->readTitle(*binding);
+        if (interrupted())
+            return abandon();
     }
 
-    binding->connections << connect(object, &QObject::destroyed, d.get(), [this, object] {
-        if (detail::ObjectBinding* gone = d->bindingOf(object))
-            d->remove(gone, true);
+    // The lambda holds the private object, not this source: remove() may delete both.
+    binding->connections << connect(object, &QObject::destroyed, dp, [dp, object] {
+        if (detail::ObjectBinding* gone = dp->bindingOf(object))
+            dp->remove(gone, true);
     });
-    d->bindings.push_back(std::move(binding));
+    dp->bindings.push_back(std::move(binding));
     return &group;
 }
 
@@ -411,17 +493,22 @@ PropertyGroup* QObjectPropertySource::groupOf(const QObject* object) const
 
 void QObjectPropertySource::refresh()
 {
-    detail::QObjectPropertySourcePrivate::SyncScope scope(d.get());
+    // A slot may delete this source: only the private object is used from here on.
+    detail::QObjectPropertySourcePrivate* const dp = d.get();
+    const QPointer<detail::QObjectPropertySourcePrivate> self(dp);
+    detail::QObjectPropertySourcePrivate::SyncScope scope(dp);
     // A slot may remove objects; they are only marked dead until the loop ends, so
     // the index and the pointers stay valid. Objects added meanwhile are fresh.
-    const std::size_t count = d->bindings.size();
+    const std::size_t count = dp->bindings.size();
     for (std::size_t i = 0; i < count; ++i) {
-        detail::ObjectBinding* binding = d->bindings[i].get();
+        detail::ObjectBinding* binding = dp->bindings[i].get();
         const QStringList ids = binding->properties.keys();
         for (const QString& id : ids) {
             if (binding->dead)
                 break;
-            d->read(*binding, id);
+            dp->read(*binding, id);
+            if (!self)
+                return;
         }
     }
 }
