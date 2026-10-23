@@ -237,18 +237,16 @@ bool Property::isModified() const
 bool Property::resetToDefault()
 {
     if (const PropertyGroup* group = toGroup()) {
-        detail::TreeObserver* observer = d->observer();
-        // A handler may replace the tree while the children are being reset.
-        const detail::TreeHold hold(observer);
-        if (observer)
-            observer->beginBatch();
+        // A handler may replace the tree, or delete the model, while the
+        // children are being reset.
+        const detail::TreeHold hold(d->observer());
+        hold.beginBatch();
         bool ok = true;
         for (Property* child : group->children()) {
             if (!child->isLive())
                 ok = child->resetToDefault() && ok;
         }
-        if (observer)
-            observer->endBatch();
+        hold.endBatch();
         return ok;
     }
     return d->assign(d->defaultValue, PropertyPrivate::Origin::Application);
@@ -258,21 +256,19 @@ namespace {
 
 // Calls op(child) for every child of group that is not live, in one batch of
 // the group's model; the result is false if any op returned false. A handler
-// may replace the tree meanwhile: the hold keeps the part being walked alive.
+// may replace the tree or delete the model meanwhile: the hold keeps the part
+// being walked alive.
 template <typename Op>
 bool forEachChangeableChild(const PropertyGroup* group, Op op)
 {
-    detail::TreeObserver* observer = PropertyPrivate::get(group)->observer();
-    const detail::TreeHold hold(observer);
-    if (observer)
-        observer->beginBatch();
+    const detail::TreeHold hold(PropertyPrivate::get(group)->observer());
+    hold.beginBatch();
     bool ok = true;
     for (Property* child : group->children()) {
         if (!child->isLive())
             ok = op(child) && ok;
     }
-    if (observer)
-        observer->endBatch();
+    hold.endBatch();
     return ok;
 }
 

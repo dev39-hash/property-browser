@@ -26,7 +26,11 @@ public:
 
     ~PropertyModelPrivate() override
     {
+        // The model may be deleted by a handler while a walk over the tree runs:
+        // the walk finishes over the detached tree, which the hold state then
+        // destroys. Without a hold, root is destroyed with this object.
         detach();
+        holdData->observerGone(root);
     }
 
     void attach(std::unique_ptr<PropertyGroup> newRoot)
@@ -76,41 +80,44 @@ public:
             q->index(last, PropertyModel::ValueColumn, parent));
     }
 
-    void emitSubtreeChanged(PropertyGroup* group)
+    // A handler of dataChanged may delete the model: nothing of this object is
+    // used after an emission unless the guard says the model is still there.
+    void emitSubtreeChanged(PropertyGroup* group, const QPointer<PropertyModel>& guard)
     {
         const int count = group->childCount();
         if (count == 0)
             return;
         emitRowsChanged(parentIndex(group), 0, count - 1);
+        if (!guard)
+            return; // a handler deleted the model, and the group with it
         for (Property* child : group->children()) {
+            if (!guard)
+                return;
             if (PropertyGroup* childGroup = child->toGroup())
-                emitSubtreeChanged(childGroup);
+                emitSubtreeChanged(childGroup, guard);
         }
     }
 
     // A hold for the duration of a notification. A handler may delete the model,
-    // which destroys this object and the detached subtrees with it: the hold is
-    // then not ended.
+    // which destroys this object: the hold keeps only the shared state, which
+    // outlives it and destroys the tree when the hold ends.
     class NotificationHold
     {
     public:
         explicit NotificationHold(PropertyModelPrivate* owner)
-            : d(owner)
-            , model(owner->q)
+            : state(owner->holdData)
         {
-            d->beginHold();
+            state->begin();
         }
         ~NotificationHold()
         {
-            if (model)
-                d->endHold();
+            state->end();
         }
         NotificationHold(const NotificationHold&) = delete;
         NotificationHold& operator=(const NotificationHold&) = delete;
 
     private:
-        PropertyModelPrivate* d;
-        QPointer<PropertyModel> model;
+        std::shared_ptr<TreeHoldState> state;
     };
 
     // --- TreeObserver ------------------------------------------------------------
@@ -142,13 +149,14 @@ public:
 
     void changed(Property* property, bool recursive) override
     {
+        const QPointer<PropertyModel> guard(q);
         if (property != root.get()) {
             const QModelIndex index = q->indexOf(property);
             emitRowsChanged(index.parent(), index.row(), index.row());
         }
-        if (recursive) {
+        if (recursive && guard) {
             if (PropertyGroup* group = property->toGroup())
-                emitSubtreeChanged(group);
+                emitSubtreeChanged(group, guard);
         }
     }
 
@@ -158,16 +166,20 @@ public:
         // Handlers may replace the tree or remove the property; it stays alive
         // until the outermost notification has returned.
         const NotificationHold hold(this);
-        changed(property, false);
-        const QString path = property->path();
-        // Dependent states first, so valueChanged() handlers see them updated.
-        evaluateDependents(path);
-        if (batchDepth > 0 && !batchPaths.contains(path))
-            batchPaths.append(path);
         // A handler may delete the model, which destroys this object: nothing
-        // of it is used after the first signal except through the guard.
+        // of it is used after a signal except through the guard.
         PropertyModel* const model = q;
         const QPointer<PropertyModel> guard(model);
+        changed(property, false);
+        if (!guard)
+            return;
+        const QString path = property->path();
+        // Dependent states first, so valueChanged() handlers see them updated.
+        evaluateDependents(path, guard);
+        if (!guard)
+            return;
+        if (batchDepth > 0 && !batchPaths.contains(path))
+            batchPaths.append(path);
         emit model->valueChanged(path, newValue, oldValue);
         if (byUser && guard)
             emit model->userValueChanged(path, newValue, oldValue);
@@ -180,26 +192,14 @@ public:
         emit q->validationFailed(property->path(), rejectedValue, message);
     }
 
-    void beginHold() override
+    const std::shared_ptr<TreeHoldState>& holdState() override
     {
-        ++holdDepth;
-    }
-
-    void endHold() override
-    {
-        if (--holdDepth > 0)
-            return;
-        // Destroying a property runs user code (custom types); it may detach
-        // more subtrees, which are destroyed at once (no hold is active).
-        std::vector<std::unique_ptr<Property>> detached = std::exchange(retired, {});
-        detached.clear();
+        return holdData;
     }
 
     void retire(std::unique_ptr<Property> detached) override
     {
-        if (holdDepth > 0)
-            retired.push_back(std::move(detached));
-        // else destroyed here
+        holdData->retire(std::move(detached));
     }
 
     void beginBatch() override
@@ -301,13 +301,16 @@ public:
         }
     }
 
-    void evaluateDependents(const QString& sourcePath)
+    void evaluateDependents(const QString& sourcePath, const QPointer<PropertyModel>& guard)
     {
         if (dependentsDirty)
             rebuildDependents();
         const QList<Property*> properties = dependents.value(sourcePath);
-        for (Property* property : properties)
+        for (Property* property : properties) {
             evaluate(property, true);
+            if (!guard)
+                return;
+        }
     }
 
     PropertyModel* q;
@@ -318,9 +321,9 @@ public:
     bool dependentsDirty = true;
     int batchDepth = 0;
     QStringList batchPaths;
-    // Subtrees detached while a value notification or a group reset is running.
-    int holdDepth = 0;
-    std::vector<std::unique_ptr<Property>> retired;
+    // Subtrees detached while a value notification or a group walk is running;
+    // shared with the holds, so it outlives a deleted model.
+    std::shared_ptr<TreeHoldState> holdData = std::make_shared<TreeHoldState>(this);
     mutable QSet<TypeId> warnedTypes;
 };
 
@@ -403,9 +406,12 @@ bool PropertyModel::resetToDefault(const QModelIndex& index)
     Property* property = propertyAt(index);
     if (!property)
         return false;
+    // A handler may delete the model: the batch is then gone with it.
+    const QPointer<PropertyModel> guard(this);
     beginBatch();
     const bool ok = property->resetToDefault();
-    endBatch();
+    if (guard)
+        endBatch();
     return ok;
 }
 

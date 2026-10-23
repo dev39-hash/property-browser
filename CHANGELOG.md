@@ -53,6 +53,11 @@ Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC tria
   a `valueChanged` handler, from a slot on the object's `NOTIFY` signal or its setter, while it reads back the
   properties one signal notifies, and during `refresh()` (also when the removed object is another one). Before, the
   source could use freed memory. The group leaves the model and the object stops being synchronized at once.
+- A handler of `valueChanged`, `userValueChanged`, `batchValueChanged` or `validationFailed` may delete the
+  `PropertyModel` while a group is being reset, normalized or made the default, while `resetAllToDefault()`,
+  `normalizeAllValues()`, `makeAllValuesDefault()`, `qpb::serialization::load()` or `fromJson()` run, or while a view
+  resets a group. The walk finishes over the properties it started with, without notifications, and the tree is
+  destroyed once, when the outermost call returns. Before, the walk could use freed properties.
 - Editors that `PropertyDelegate` opens (`PropertyTreeView`, or any view that uses the delegate, also through a proxy
   model) follow changes of the property's attributes, such as a range, `decimals` or a suffix, while they are open. They
   keep the text being typed when the model reports a change that leaves the value as it was (another role such as the
