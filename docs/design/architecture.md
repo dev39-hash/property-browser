@@ -124,7 +124,7 @@ check is possible, and in code review for every change.
 | R3 | Every value change that comes from the UI goes through `PropertyModel::setData`, so through validation and the signal. Views never write to a `Property` directly. | One place decides what a valid value is, and every change is announced. | Review, the view tests |
 | R4 | No public API without at least one user, an example or a test. | Untried API is where mistakes in a stable interface hide. | Review |
 | R5 | Only headers under `qpb/include/qpb/` are public. `qpb::detail` and everything under `qpb/src/` is internal and may change freely; public headers never include `_p.h` files or anything under `src/`. | A public header that reaches into internals would freeze them. | `architecture_rules` (includes), review |
-| R6 | Text files under `qpb/` are ASCII only (the translation catalogs `qpb_<lang>.ts` are the exception). | MSVC on a non-UTF-8 code page warns (C4819) about other characters, which breaks consumers that build with `/WX`. | `architecture_rules` (headers, sources, templates, CMake files), review |
+| R6 | Text files under `qpb/` are ASCII only (the translation catalogs `qpb_<lang>.ts` and the translated user documentation under `qpb/doc/<lang>/` are the exceptions). | MSVC on a non-UTF-8 code page warns (C4819) about other characters, which breaks consumers that build with `/WX`. | `architecture_rules` (headers, sources, templates, CMake files), review |
 
 The check is the CTest test `architecture_rules`, which runs `tools/check_architecture.cmake`; see
 [building-and-testing.md](../development/building-and-testing.md). The rules for public headers are in

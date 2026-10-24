@@ -23,7 +23,11 @@ prepares everything locally, and the person who releases verifies the result wit
    the unfinished texts in `qpb/translations/*.ts`, run it again and commit the `.ts` and `.qm` files (see
    [building-and-testing.md](building-and-testing.md)). Existing contexts and source texts are never changed within 1.x.
    The test `translations_up_to_date` (when `lupdate` is found) and `tst_translations` check this.
-5. Commit on `main`. The working tree must be clean afterwards.
+5. Since 1.9, bring the translated user documentation in `qpb/doc/vi/` up to date with the English documentation of
+   the release: every file of `qpb/doc/` and `qpb/README.md` (as `qpb/doc/vi/README.md`), the same sections, code and
+   links, and the version in the note at the top of each file. Between releases only the English documentation
+   changes; the English text is the reference.
+6. Commit on `main`. The working tree must be clean afterwards.
 
 ## 2. Verify
 

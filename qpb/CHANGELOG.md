@@ -36,6 +36,8 @@ Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC tria
   (still clamped to the range); `Attr::Decimals` then only sets the digits shown and the spin box's. A Double editor
   the user did not change writes the stored value back as it is, and `resetToDefault()` restores the full default
   (`doc/guide/values-and-validation.md`).
+- The user documentation in Vietnamese: `doc/vi/` holds a translation of `README.md` and of every page of `doc/`.
+  The English text is the reference; the translation is brought up to date with each release.
 
 ### Fixed
 - `PropertyFormView` editors keep the text being typed when the model reports a change that leaves the

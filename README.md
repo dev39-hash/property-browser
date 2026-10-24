@@ -81,6 +81,7 @@ For users of qpb (this documentation travels with the `qpb/` folder):
   [style sheets](qpb/doc/guide/style-sheets.md), [translations](qpb/doc/guide/translations.md)
 - [`qpb/doc/compatibility.md`](qpb/doc/compatibility.md): the 1.x promise, allowed changes, deprecation, Qt 5 differences
 - [`qpb/CHANGELOG.md`](qpb/CHANGELOG.md): what each version added, changed, deprecated and fixed, with upgrade notes
+- [`qpb/doc/vi/`](qpb/doc/vi/README.md): the user documentation in Vietnamese (the English text is the reference)
 
 For developers of qpb: the index is [docs/README.md](docs/README.md).
 

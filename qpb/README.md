@@ -107,6 +107,9 @@ int main(int argc, char* argv[])
 | [Translations](doc/guide/translations.md) | qpb's own languages, your texts, switching at run time |
 | [Compatibility](doc/compatibility.md) | The 1.x promise, deprecation, Qt 5 and Qt 6 differences, version checks |
 
+The documentation is also available in Vietnamese: [doc/vi/README.md](doc/vi/README.md). The English text is the
+reference; the translation is brought up to date with each release.
+
 ## Compatibility
 
 Within 1.x, updating the folder never requires changes to your code or CMake (with the same Qt major): nothing public is
