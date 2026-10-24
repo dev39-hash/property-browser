@@ -92,6 +92,12 @@ returned by the `addXxx()` functions) and every pointer into the deleted model a
 Deleting the model from a handler of its structural signals (rows inserted or removed, model reset) is not supported:
 `QAbstractItemModel` still uses the model after emitting them.
 
+A handler of `dataChanged` should not change the tree itself (`setRoot()`, `add()`, `remove()`): the receivers connected
+after it, such as views, proxy models and delegates, would get indexes of rows that have moved. To change the tree in
+reaction to `dataChanged`, defer the change until the emission is over by posting a call to the event loop
+(`QMetaObject::invokeMethod(..., Qt::QueuedConnection)` or `QTimer::singleShot(0, ...)`), and find the properties by
+path then.
+
 ## Dependencies between properties
 
 A property can be enabled or shown depending on the value of another one, identified by its path from the root:
