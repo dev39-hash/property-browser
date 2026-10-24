@@ -6,7 +6,9 @@ All notable changes to qpb are documented here. Each release has the sections
 From 1.0.0 on, releases within a major version never require changes to consuming code or CMake.
 Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC trial shows a problem.
 
-## Unreleased
+## 1.9.0 - 2026-10-24
+
+Ninth feature release of 1.x: additions only; code written for 1.0-1.8 builds and behaves the same.
 
 ### Added
 - `PropertyModel::userValueChanged(path, newValue, oldValue)`: emitted right after `valueChanged` when the value
@@ -81,6 +83,11 @@ Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC tria
   was deleted or the group was removed meanwhile. Before, the source used its freed memory. An object whose id (the
   object name or the `id` argument) contains `/` gets the group id with `_` for `/`, made unique like any other id (for
   example `a_b_2`); it no longer lands in an existing group of that id.
+
+### Upgrade notes
+- Nothing to do, unless an object added to a `QObjectPropertySource` has an object name or `id` that
+  contains `/`: its group id now has `_` for `/` and is made unique (for example `a_b_2`) instead of reusing an existing
+  group of that id, so look such a group up by the new id or with `groupOf()`.
 
 ## 1.8.0 - 2026-10-21
 

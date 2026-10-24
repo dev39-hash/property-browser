@@ -126,6 +126,9 @@ Qt): không có gì public bị xóa hay thay đổi, chỉ có thêm vào. Đi�
 Mỗi phiên bản có một mục trong [`CHANGELOG.md`](../../CHANGELOG.md) (bằng tiếng Anh, nằm trong thư mục `qpb/`) ghi những
 gì đã được thêm, thay đổi, deprecated và sửa, cùng các ghi chú nâng cấp.
 
+- **1.9.0** - thay đổi do người dùng sửa được báo riêng (`userValueChanged`), chuẩn hóa giá trị và đặt giá trị hiện
+  tại làm giá trị mặc định, số thực không làm tròn, màu của model trong form view, handler được phép thay đổi cây
+  hoặc xóa model; tài liệu tiếng Việt.
 - **1.8.0** - bản dịch các văn bản riêng của qpb (tiếng Anh, tiếng Nhật, tiếng Việt).
 - **1.7.0** - Qt 5.15 như một cấu hình thứ hai.
 - **1.6.1** - chỉ có tài liệu: README này trong thư mục component.
