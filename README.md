@@ -41,8 +41,10 @@ Requirements: C++17, Qt 6.5 or newer or Qt 5.15, CMake 3.21 or newer; see
 More in [`examples/`](examples): quickstart, a custom `QColor` type, an inspector, a settings dialog, a runtime
 plugin configuration, a form view and a tree view sharing one search filter, a reusable panel with a search box and a
 description of the current property ([`examples/property_panel`](examples/property_panel)), an editor for QObjects
-with undo/redo and JSON files, a dark and a light theme from one style sheet template
-([`examples/custom_theme`](examples/custom_theme); see [style sheets](qpb/doc/guide/style-sheets.md)), and
+with undo/redo and JSON files, handlers of the model's signals and what they may do
+([`examples/model_signals`](examples/model_signals); see
+[changes and conditions](qpb/doc/guide/changes-and-conditions.md)), a dark and a light theme from one style sheet
+template ([`examples/custom_theme`](examples/custom_theme); see [style sheets](qpb/doc/guide/style-sheets.md)), and
 English, Japanese and Vietnamese switched at run time ([`examples/translations`](examples/translations); see
 [translations](qpb/doc/guide/translations.md)).
 

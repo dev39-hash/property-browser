@@ -23,6 +23,7 @@ qpb_add_example(qpb_example_form_view SOURCES form_view/main.cpp)
 qpb_add_example(qpb_example_property_panel
     SOURCES property_panel/main.cpp property_panel/PropertyPanel.h property_panel/PropertyPanel.cpp)
 qpb_add_example(qpb_example_object_editor SOURCES object_editor/main.cpp object_editor/Light.h)
+qpb_add_example(qpb_example_model_signals SOURCES model_signals/main.cpp)
 qpb_add_example(qpb_example_custom_theme
     SOURCES custom_theme/main.cpp custom_theme/custom_theme.qrc custom_theme/theme.qss)
 qpb_add_example(qpb_example_translations
