@@ -9,6 +9,7 @@
 #include <QContextMenuEvent>
 #include <QDir>
 #include <QDoubleSpinBox>
+#include <QHeaderView>
 #include <QLineEdit>
 #include <QLocale>
 #include <QMenu>
@@ -16,6 +17,7 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QScopeGuard>
+#include <QScrollBar>
 #include <QSignalSpy>
 #include <QSortFilterProxyModel>
 #include <QSpinBox>
@@ -266,6 +268,91 @@ bool resetFromContextMenu(PropertyTreeView* view, const QModelIndex& index)
     return enabled;
 }
 
+// Width the name cells of the visible rows need so that no name is elided: the
+// indentation (and expand arrow) of the row, the text in the font the delegate
+// paints it with (bold for modified names) and the text margins of the style.
+// Group rows are spanned over both columns, so their names are not measured.
+int widestNameNeeded(const PropertyTreeView& view, const QModelIndex& parent = QModelIndex(),
+    int depth = 0)
+{
+    const QAbstractItemModel* model = view.model();
+    const int margins
+        = 2 * (view.style()->pixelMetric(QStyle::PM_FocusFrameHMargin, nullptr, &view) + 1);
+    int widest = 0;
+    for (int row = 0; row < model->rowCount(parent); ++row) {
+        if (view.isRowHidden(row, parent))
+            continue;
+        const QModelIndex index = model->index(row, PropertyModel::NameColumn, parent);
+        if (index.data(PropertyModel::IsGroupRole).toBool()) {
+            if (view.isExpanded(index))
+                widest = qMax(widest, widestNameNeeded(view, index, depth + 1));
+            continue;
+        }
+        QFont font = view.font();
+        if (index.data(PropertyModel::IsModifiedRole).toBool())
+            font.setBold(true);
+        const int levels = depth + (view.rootIsDecorated() ? 1 : 0);
+        const int needed = view.indentation() * levels
+            + QFontMetrics(font).horizontalAdvance(index.data(Qt::DisplayRole).toString())
+            + margins;
+        widest = qMax(widest, needed);
+    }
+    return widest;
+}
+
+// Gives property a display name whose text alone is at least textWidth pixels
+// wide in the font of view.
+void lengthenName(Property* property, const QWidget& view, int textWidth)
+{
+    QString name = QStringLiteral("Longest property name");
+    while (view.fontMetrics().horizontalAdvance(name) < textWidth)
+        name += QStringLiteral(" word");
+    property->setDisplayName(name);
+}
+
+// Shows view and lets the layout and the deferred work settle.
+bool showAndSettle(QWidget* view)
+{
+    view->show();
+    if (!QTest::qWaitForWindowExposed(view))
+        return false;
+    // The view's own queued work (a fit after rows or a style change) may queue
+    // more: two passes.
+    QCoreApplication::processEvents();
+    QCoreApplication::processEvents();
+    return true;
+}
+
+// The failure text of a name column that is too narrow.
+QByteArray nameColumnReport(const PropertyTreeView& view)
+{
+    return QStringLiteral("name column %1 px, widest name needs %2 px, viewport %3 px")
+        .arg(view.nameColumnWidth())
+        .arg(widestNameNeeded(view))
+        .arg(view.viewport()->width())
+        .toLocal8Bit();
+}
+
+// A real mouse drag of the name section's handle by delta pixels.
+void dragNameSection(PropertyTreeView* view, int delta)
+{
+    QHeaderView* header = view->header();
+    const int handleX = header->sectionViewportPosition(PropertyModel::NameColumn)
+        + view->nameColumnWidth() - 1;
+    const QPoint start(handleX, header->height() / 2);
+    QTest::mousePress(header->viewport(), Qt::LeftButton, Qt::NoModifier, start);
+    for (int step = 1; step <= 5; ++step) {
+        // QTest::mouseMove() does not report the pressed button in Qt 5.
+        const QPoint position = start + QPoint(delta * step / 5, 0);
+        QMouseEvent move(QEvent::MouseMove, position, header->viewport()->mapToGlobal(position),
+            Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(header->viewport(), &move);
+    }
+    QTest::mouseRelease(
+        header->viewport(), Qt::LeftButton, Qt::NoModifier, start + QPoint(delta, 0));
+    QCoreApplication::processEvents();
+}
+
 } // namespace
 
 class tst_PropertyTreeView : public QObject
@@ -301,6 +388,27 @@ private slots:
     void contextMenuLeavesLiveAlone();
     void conditions();
     void nameColumnFitsContents();
+    void nameColumnFitsAgainWhenTheViewGrows_data();
+    void nameColumnFitsAgainWhenTheViewGrows();
+    void narrowViewKeepsNamesWholeAndScrolls();
+    void wideViewFitsTheNameColumnToTheLongestName();
+    void explicitNameColumnWidthSurvivesResizesAndModelChanges_data();
+    void explicitNameColumnWidthSurvivesResizesAndModelChanges();
+    void mouseDragOnHeaderFixesTheNameColumn_data();
+    void mouseDragOnHeaderFixesTheNameColumn();
+    void dragInNarrowViewStretchesTheValueColumnAgain();
+    void expandingAndCollapsingFitTheNameColumnAgain();
+    void hiddenAndFilteredNamesAreNotMeasured();
+    void widenedViewAfterNarrowFillsWithTheValueColumn();
+    void nameColumnWidthAfterNarrowStateFillsWithTheValueColumn();
+    void applicationsStretchSettingIsKept();
+    void indentationChangedAfterShowIsMeasuredOnTheNextResize();
+    void rowsAddedThenResizedWithoutTheEventLoopStayWhole();
+    void removingTheLongestNameFitsTheNameColumnAgain();
+    void hiddenModifiedNameDoesNotWidenTheColumn();
+    void settingTheFittedWidthExplicitlyEndsTheScrolling();
+    void namesStayWholeInBothModesWithBoldAndStyleSheetFonts_data();
+    void namesStayWholeInBothModesWithBoldAndStyleSheetFonts();
     void worksThroughProxyModel();
     void multilineEditor();
     void screenshot();
@@ -900,6 +1008,514 @@ void tst_PropertyTreeView::nameColumnFitsContents()
     view.setNameColumnWidth(80);
     model.root()->addInt(QStringLiteral("aVeryLongPropertyIdentifierIndeed"), 1);
     QCOMPARE(view.nameColumnWidth(), 80);
+}
+
+void tst_PropertyTreeView::nameColumnFitsAgainWhenTheViewGrows_data()
+{
+    QTest::addColumn<bool>("shownSmall");
+    QTest::newRow("resizedBeforeShow") << false;
+    QTest::newRow("resizedAfterShow") << true;
+}
+
+// A view that gets its model while it is small must show whole names once it
+// has room: the column is fitted again, to the names and not to the view.
+void tst_PropertyTreeView::nameColumnFitsAgainWhenTheViewGrows()
+{
+    QFETCH(bool, shownSmall);
+    PropertyTreeView view;
+    PropertyModel model(createTree());
+    lengthenName(model.find(QStringLiteral("Camera/fov")), view, 215);
+    view.resize(120, 600);
+    if (shownSmall) {
+        QVERIFY(showAndSettle(&view));
+        QVERIFY2(view.viewport()->width() < 150, "the view is not small");
+    }
+    view.setModel(&model);
+    view.resize(600, 600);
+    if (shownSmall)
+        QCoreApplication::processEvents();
+    else
+        QVERIFY(showAndSettle(&view));
+
+    const int needed = widestNameNeeded(view);
+    QVERIFY2(view.nameColumnWidth() >= needed, nameColumnReport(view).constData());
+    // Fitted to the names, not stretched over the free room.
+    QVERIFY2(view.nameColumnWidth() <= needed + 6 * view.fontMetrics().averageCharWidth(),
+        nameColumnReport(view).constData());
+    QVERIFY(!view.horizontalScrollBar()->isVisible());
+}
+
+// A view too narrow for the names and the minimum value column keeps whole
+// names and scrolls horizontally to the values.
+void tst_PropertyTreeView::narrowViewKeepsNamesWholeAndScrolls()
+{
+    PropertyTreeView view;
+    PropertyModel model(createTree());
+    Property* fov = model.find(QStringLiteral("Camera/fov"));
+    lengthenName(fov, view, 215);
+    view.resize(200, 600);
+    view.setModel(&model);
+    QVERIFY(showAndSettle(&view));
+    const int needed = widestNameNeeded(view);
+    QVERIFY2(needed > 240 && needed < 340, qPrintable(QString::number(needed)));
+    QVERIFY2(view.viewport()->width() < 200, "the view is not narrow");
+
+    QVERIFY2(view.nameColumnWidth() >= needed, nameColumnReport(view).constData());
+    const int minimumValueWidth = view.header()->defaultSectionSize();
+    QVERIFY2(view.columnWidth(PropertyModel::ValueColumn) >= minimumValueWidth,
+        qPrintable(QStringLiteral("value column %1 px, minimum %2 px")
+                       .arg(view.columnWidth(PropertyModel::ValueColumn))
+                       .arg(minimumValueWidth)));
+    QVERIFY(view.horizontalScrollBar()->isVisible());
+    QVERIFY(view.horizontalScrollBar()->maximum() > 0);
+
+    // Scrolling to the end brings the whole value column into the viewport.
+    view.horizontalScrollBar()->setValue(view.horizontalScrollBar()->maximum());
+    QCoreApplication::processEvents();
+    const QRect valueRect = view.visualRect(model.indexOf(fov, PropertyModel::ValueColumn));
+    QVERIFY(valueRect.left() >= 0);
+    QVERIFY(valueRect.right() < view.viewport()->width());
+    QVERIFY(valueRect.width() >= minimumValueWidth);
+}
+
+// A view with room for everything: the name column is the longest name, the
+// value column takes the rest, and nothing scrolls.
+void tst_PropertyTreeView::wideViewFitsTheNameColumnToTheLongestName()
+{
+    PropertyTreeView view;
+    PropertyModel model(createTree());
+    lengthenName(model.find(QStringLiteral("Camera/fov")), view, 215);
+    view.resize(800, 600);
+    view.setModel(&model);
+    QVERIFY(showAndSettle(&view));
+
+    const int needed = widestNameNeeded(view);
+    QVERIFY2(view.nameColumnWidth() >= needed, nameColumnReport(view).constData());
+    QVERIFY2(view.nameColumnWidth() <= needed + 6 * view.fontMetrics().averageCharWidth(),
+        nameColumnReport(view).constData());
+    QCOMPARE(view.columnWidth(PropertyModel::ValueColumn),
+        view.viewport()->width() - view.nameColumnWidth());
+    QVERIFY(!view.horizontalScrollBar()->isVisible());
+
+    const int fitted = view.nameColumnWidth();
+    view.resize(1000, 600);
+    QCoreApplication::processEvents();
+    QCOMPARE(view.nameColumnWidth(), fitted);
+    QVERIFY(!view.horizontalScrollBar()->isVisible());
+}
+
+void tst_PropertyTreeView::explicitNameColumnWidthSurvivesResizesAndModelChanges_data()
+{
+    QTest::addColumn<bool>("byHeader");
+    QTest::newRow("setNameColumnWidth") << false;
+    QTest::newRow("headerResize") << true;
+}
+
+// A width the application or the user chose is never fitted again.
+void tst_PropertyTreeView::explicitNameColumnWidthSurvivesResizesAndModelChanges()
+{
+    QFETCH(bool, byHeader);
+    PropertyTreeView view;
+    PropertyModel model(createTree());
+    view.resize(300, 600);
+    view.setModel(&model);
+    QVERIFY(showAndSettle(&view));
+
+    if (byHeader)
+        view.header()->resizeSection(PropertyModel::NameColumn, 80);
+    else
+        view.setNameColumnWidth(80);
+    QCOMPARE(view.nameColumnWidth(), 80);
+
+    view.resize(900, 600);
+    QCoreApplication::processEvents();
+    QCOMPARE(view.nameColumnWidth(), 80);
+    view.resize(150, 600);
+    QCoreApplication::processEvents();
+    QCOMPARE(view.nameColumnWidth(), 80);
+
+    view.hide();
+    QVERIFY(showAndSettle(&view));
+    QCOMPARE(view.nameColumnWidth(), 80);
+
+    model.root()->addInt(QStringLiteral("aVeryLongPropertyIdentifierIndeed"), 1);
+    QCOMPARE(view.nameColumnWidth(), 80);
+    lengthenName(model.find(QStringLiteral("Camera/fov")), view, 215);
+    QCOMPARE(view.nameColumnWidth(), 80);
+    view.setMode(PropertyTreeView::Mode::List);
+    QCOMPARE(view.nameColumnWidth(), 80);
+    view.setMode(PropertyTreeView::Mode::Tree);
+    view.resize(700, 600);
+    QCoreApplication::processEvents();
+    QCOMPARE(view.nameColumnWidth(), 80);
+}
+
+void tst_PropertyTreeView::mouseDragOnHeaderFixesTheNameColumn_data()
+{
+    QTest::addColumn<int>("viewWidth");
+    QTest::addColumn<int>("delta");
+    QTest::newRow("narrowWider") << 200 << 70;
+    QTest::newRow("narrowNarrower") << 200 << -110;
+    QTest::newRow("wideWider") << 900 << 70;
+    QTest::newRow("wideNarrower") << 900 << -40;
+}
+
+// A real mouse drag on the section handle (not resizeSection()) stops the
+// fitting: the dragged width survives resizes and model changes, the value
+// column takes the rest of the viewport and a wide view shows no scroll bar.
+void tst_PropertyTreeView::mouseDragOnHeaderFixesTheNameColumn()
+{
+    QFETCH(int, viewWidth);
+    QFETCH(int, delta);
+    PropertyTreeView view;
+    PropertyModel model(createTree());
+    lengthenName(model.find(QStringLiteral("Camera/fov")), view, 215);
+    view.resize(viewWidth, 600);
+    view.setModel(&model);
+    QVERIFY(showAndSettle(&view));
+
+    const int fitted = view.nameColumnWidth();
+    dragNameSection(&view, delta);
+
+    const int dragged = view.nameColumnWidth();
+    QVERIFY2(qAbs(dragged - (fitted + delta)) <= 3,
+        qPrintable(QStringLiteral("fitted %1, dragged by %2, now %3")
+                       .arg(fitted)
+                       .arg(delta)
+                       .arg(dragged)));
+
+    for (int width : {900, 150, 600}) {
+        view.resize(width, 600);
+        QCoreApplication::processEvents();
+        QCOMPARE(view.nameColumnWidth(), dragged);
+    }
+    model.root()->addInt(QStringLiteral("aVeryLongPropertyIdentifierIndeed"), 1);
+    QCOMPARE(view.nameColumnWidth(), dragged);
+
+    view.resize(1000, 600);
+    QCoreApplication::processEvents();
+    QCOMPARE(view.nameColumnWidth(), dragged);
+    QCOMPARE(view.columnWidth(PropertyModel::ValueColumn), view.viewport()->width() - dragged);
+    QVERIFY(!view.horizontalScrollBar()->isVisible());
+}
+
+// The user's drag in a view that scrolls: the value column stretches over the
+// rest again, so no blank space is left to the right of it.
+void tst_PropertyTreeView::dragInNarrowViewStretchesTheValueColumnAgain()
+{
+    PropertyTreeView view;
+    PropertyModel model(createTree());
+    lengthenName(model.find(QStringLiteral("Camera/fov")), view, 215);
+    view.resize(200, 600);
+    view.setModel(&model);
+    QVERIFY(showAndSettle(&view));
+    QVERIFY(view.horizontalScrollBar()->isVisible());
+    QVERIFY(!view.header()->stretchLastSection());
+
+    dragNameSection(&view, -220);
+    QTRY_VERIFY(view.header()->stretchLastSection());
+    QTRY_COMPARE(view.columnWidth(PropertyModel::ValueColumn),
+        view.viewport()->width() - view.nameColumnWidth());
+    QTRY_VERIFY(!view.horizontalScrollBar()->isVisible());
+}
+
+// A group that is collapsed does not count; expanding it fits the column to
+// its names again.
+void tst_PropertyTreeView::expandingAndCollapsingFitTheNameColumnAgain()
+{
+    PropertyTreeView view;
+    PropertyModel model(createTree());
+    lengthenName(model.find(QStringLiteral("Camera/fov")), view, 215);
+    view.resize(900, 600);
+    view.setModel(&model);
+    QVERIFY(showAndSettle(&view));
+    const int whole = view.nameColumnWidth();
+    QVERIFY2(whole >= widestNameNeeded(view), nameColumnReport(view).constData());
+
+    const QModelIndex group = model.indexOf(model.find(QStringLiteral("Camera")));
+    view.collapse(group);
+    QTRY_VERIFY2(view.nameColumnWidth() < whole, nameColumnReport(view).constData());
+    QTRY_VERIFY2(
+        view.nameColumnWidth() >= widestNameNeeded(view), nameColumnReport(view).constData());
+
+    view.expand(group);
+    QTRY_VERIFY2(
+        view.nameColumnWidth() >= widestNameNeeded(view), nameColumnReport(view).constData());
+    QCOMPARE(view.nameColumnWidth(), whole);
+}
+
+// A hidden property and a row a filter proxy removed do not widen the column;
+// showing it again fits the column to the name.
+void tst_PropertyTreeView::hiddenAndFilteredNamesAreNotMeasured()
+{
+    PropertyTreeView view;
+    PropertyModel model(createTree());
+    Property* fov = model.find(QStringLiteral("Camera/fov"));
+    lengthenName(fov, view, 215);
+    view.resize(900, 600);
+    view.setModel(&model);
+    QVERIFY(showAndSettle(&view));
+    const int whole = view.nameColumnWidth();
+
+    fov->setVisible(false);
+    QTRY_VERIFY2(view.nameColumnWidth() < whole, nameColumnReport(view).constData());
+    fov->setVisible(true);
+    QTRY_VERIFY2(
+        view.nameColumnWidth() >= widestNameNeeded(view), nameColumnReport(view).constData());
+    QCOMPARE(view.nameColumnWidth(), whole);
+
+    PropertyFilterProxyModel proxy;
+    proxy.setSourceModel(&model);
+    view.setModel(&proxy);
+    QTRY_COMPARE(view.nameColumnWidth(), whole);
+    proxy.setFilterFixedString(QStringLiteral("projection"));
+    QTRY_VERIFY2(view.nameColumnWidth() < whole, nameColumnReport(view).constData());
+    QTRY_VERIFY2(
+        view.nameColumnWidth() >= widestNameNeeded(view), nameColumnReport(view).constData());
+    proxy.setFilterFixedString(QString());
+    QTRY_VERIFY2(
+        view.nameColumnWidth() >= widestNameNeeded(view), nameColumnReport(view).constData());
+    QCOMPARE(view.nameColumnWidth(), whole);
+    view.setModel(nullptr);
+}
+
+// A view that scrolled because it was narrow fits the value column to the
+// room again once it is wide.
+void tst_PropertyTreeView::widenedViewAfterNarrowFillsWithTheValueColumn()
+{
+    PropertyTreeView view;
+    PropertyModel model(createTree());
+    lengthenName(model.find(QStringLiteral("Camera/fov")), view, 215);
+    view.resize(200, 600);
+    view.setModel(&model);
+    QVERIFY(showAndSettle(&view));
+    QVERIFY(view.horizontalScrollBar()->isVisible());
+    const int fitted = view.nameColumnWidth();
+
+    view.resize(900, 600);
+    QTRY_VERIFY(view.header()->stretchLastSection());
+    QCOMPARE(view.nameColumnWidth(), fitted);
+    QTRY_COMPARE(view.columnWidth(PropertyModel::ValueColumn),
+        view.viewport()->width() - view.nameColumnWidth());
+    QTRY_VERIFY(!view.horizontalScrollBar()->isVisible());
+
+    view.resize(200, 600);
+    QTRY_VERIFY(view.horizontalScrollBar()->isVisible());
+    QVERIFY(!view.header()->stretchLastSection());
+    QCOMPARE(view.nameColumnWidth(), fitted);
+}
+
+// Setting the width in code ends the scrolling: the value column fills the
+// rest of the view.
+void tst_PropertyTreeView::nameColumnWidthAfterNarrowStateFillsWithTheValueColumn()
+{
+    PropertyTreeView view;
+    PropertyModel model(createTree());
+    lengthenName(model.find(QStringLiteral("Camera/fov")), view, 215);
+    view.resize(200, 600);
+    view.setModel(&model);
+    QVERIFY(showAndSettle(&view));
+    QVERIFY(view.horizontalScrollBar()->isVisible());
+
+    view.setNameColumnWidth(80);
+    QCoreApplication::processEvents();
+    QVERIFY(view.header()->stretchLastSection());
+    QCOMPARE(view.nameColumnWidth(), 80);
+    QTRY_COMPARE(view.columnWidth(PropertyModel::ValueColumn), view.viewport()->width() - 80);
+    QTRY_VERIFY(!view.horizontalScrollBar()->isVisible());
+}
+
+// An application that does not stretch the last section keeps it that way,
+// with the fitted and with a fixed name column.
+void tst_PropertyTreeView::applicationsStretchSettingIsKept()
+{
+    PropertyTreeView view;
+    PropertyModel model(createTree());
+    lengthenName(model.find(QStringLiteral("Camera/fov")), view, 215);
+    view.header()->setStretchLastSection(false);
+    view.resize(200, 600);
+    view.setModel(&model);
+    QVERIFY(showAndSettle(&view));
+    QVERIFY(!view.header()->stretchLastSection());
+    QVERIFY2(view.nameColumnWidth() >= widestNameNeeded(view), nameColumnReport(view).constData());
+
+    for (int width : {900, 200, 600}) {
+        view.resize(width, 600);
+        QCoreApplication::processEvents();
+        QVERIFY(!view.header()->stretchLastSection());
+    }
+    view.hide();
+    QVERIFY(showAndSettle(&view));
+    QVERIFY(!view.header()->stretchLastSection());
+
+    view.setNameColumnWidth(80);
+    for (int width : {900, 200}) {
+        view.resize(width, 600);
+        QCoreApplication::processEvents();
+        QVERIFY(!view.header()->stretchLastSection());
+        QCOMPARE(view.nameColumnWidth(), 80);
+    }
+}
+
+// A setting that changes what a name needs but sends no signal (the
+// indentation) is picked up by the next resize.
+void tst_PropertyTreeView::indentationChangedAfterShowIsMeasuredOnTheNextResize()
+{
+    PropertyTreeView view;
+    PropertyModel model(createTree());
+    lengthenName(model.find(QStringLiteral("Camera/fov")), view, 215);
+    view.resize(900, 600);
+    view.setModel(&model);
+    QVERIFY(showAndSettle(&view));
+    const int before = view.nameColumnWidth();
+
+    view.setIndentation(view.indentation() + 40);
+    view.resize(1000, 600);
+    QTRY_VERIFY2(
+        view.nameColumnWidth() >= widestNameNeeded(view), nameColumnReport(view).constData());
+    QVERIFY(view.nameColumnWidth() > before);
+
+    view.setRootIsDecorated(false);
+    view.resize(900, 600);
+    QTRY_VERIFY2(
+        view.nameColumnWidth() >= widestNameNeeded(view), nameColumnReport(view).constData());
+    QVERIFY(view.nameColumnWidth() < before + 40);
+}
+
+// Rows added are measured by the next fit even when the view is resized before
+// the event loop runs.
+void tst_PropertyTreeView::rowsAddedThenResizedWithoutTheEventLoopStayWhole()
+{
+    PropertyTreeView view;
+    PropertyModel model(createTree());
+    view.resize(900, 600);
+    view.setModel(&model);
+    QVERIFY(showAndSettle(&view));
+
+    const int before = view.nameColumnWidth();
+    // The id is the name shown: no signal after the insertion changes it.
+    model.root()->addInt(
+        QStringLiteral("aVeryLongPropertyIdentifierThatIsAddedAndMeasuredAfterTheNextResize"), 1);
+    view.resize(1000, 600);
+    QVERIFY2(view.nameColumnWidth() >= widestNameNeeded(view), nameColumnReport(view).constData());
+    QVERIFY(view.nameColumnWidth() > before);
+}
+
+// Removing the property with the longest name from the model narrows the
+// column to the names that are left.
+void tst_PropertyTreeView::removingTheLongestNameFitsTheNameColumnAgain()
+{
+    PropertyTreeView view;
+    PropertyModel model(createTree());
+    lengthenName(model.find(QStringLiteral("Camera/fov")), view, 215);
+    view.resize(900, 600);
+    view.setModel(&model);
+    QVERIFY(showAndSettle(&view));
+    const int whole = view.nameColumnWidth();
+    QVERIFY2(whole >= widestNameNeeded(view), nameColumnReport(view).constData());
+
+    QVERIFY(model.find(QStringLiteral("Camera"))->toGroup()->remove(QStringLiteral("fov")));
+    QTRY_VERIFY2(view.nameColumnWidth() < whole, nameColumnReport(view).constData());
+    QTRY_VERIFY2(
+        view.nameColumnWidth() >= widestNameNeeded(view), nameColumnReport(view).constData());
+}
+
+// The bold name of a modified property that is hidden is not measured.
+void tst_PropertyTreeView::hiddenModifiedNameDoesNotWidenTheColumn()
+{
+    PropertyTreeView view;
+    PropertyModel model(createTree());
+    Property* fov = model.find(QStringLiteral("Camera/fov"));
+    lengthenName(fov, view, 215);
+    QVERIFY(fov->setValue(90));
+    fov->setVisible(false);
+    view.resize(900, 600);
+    view.setModel(&model);
+    QVERIFY(showAndSettle(&view));
+    QCOMPARE(view.nameColumnWidth(), widestNameNeeded(view));
+}
+
+// setNameColumnWidth() with the width the column already has (so the header
+// reports no resize) still fixes the width and ends the scrolling.
+void tst_PropertyTreeView::settingTheFittedWidthExplicitlyEndsTheScrolling()
+{
+    PropertyTreeView view;
+    PropertyModel model(createTree());
+    lengthenName(model.find(QStringLiteral("Camera/fov")), view, 215);
+    view.resize(200, 600);
+    view.setModel(&model);
+    QVERIFY(showAndSettle(&view));
+    QVERIFY(view.horizontalScrollBar()->isVisible());
+    QVERIFY(!view.header()->stretchLastSection());
+    const int fitted = view.nameColumnWidth();
+
+    view.setNameColumnWidth(fitted);
+    QVERIFY(view.header()->stretchLastSection());
+    QCoreApplication::processEvents();
+    QCOMPARE(view.nameColumnWidth(), fitted);
+    view.resize(700, 600);
+    QCoreApplication::processEvents();
+    QCOMPARE(view.nameColumnWidth(), fitted);
+    QTRY_COMPARE(view.columnWidth(PropertyModel::ValueColumn), view.viewport()->width() - fitted);
+    QTRY_VERIFY(!view.horizontalScrollBar()->isVisible());
+}
+
+void tst_PropertyTreeView::namesStayWholeInBothModesWithBoldAndStyleSheetFonts_data()
+{
+    QTest::addColumn<bool>("listMode");
+    QTest::addColumn<bool>("modified");
+    QTest::addColumn<int>("sheet"); // 0: none, 1: before the model and show, 2: after show
+
+    const char* const sheets[] = {"noSheet", "sheetBeforeShow", "sheetAfterShow"};
+    for (int sheet = 0; sheet < 3; ++sheet) {
+        for (int modified = 0; modified < 2; ++modified) {
+            for (int list = 0; list < 2; ++list) {
+                const QByteArray row = QByteArray(list ? "list" : "tree")
+                    + (modified ? "Modified" : "Plain") + '_' + sheets[sheet];
+                QTest::newRow(row.constData()) << bool(list) << bool(modified) << sheet;
+            }
+        }
+    }
+}
+
+// The bold of a modified name, the indentation of the mode and a font a style
+// sheet enlarges all count: no name is elided once the view is shown.
+void tst_PropertyTreeView::namesStayWholeInBothModesWithBoldAndStyleSheetFonts()
+{
+    QFETCH(bool, listMode);
+    QFETCH(bool, modified);
+    QFETCH(int, sheet);
+    const QString enlarge = QStringLiteral("QTreeView { font-size: 20px; }");
+
+    PropertyTreeView view;
+    PropertyModel model(createTree());
+    Property* fov = model.find(QStringLiteral("Camera/fov"));
+    lengthenName(fov, view, 215);
+    if (modified)
+        QVERIFY(fov->setValue(90));
+    if (sheet == 1)
+        view.setStyleSheet(enlarge);
+    // With the sheet applied after show the model arrives in a roomy view, so
+    // only the font change can make the column too narrow.
+    view.resize(sheet == 2 ? 1000 : 120, 600);
+    view.setModel(&model);
+    if (listMode)
+        view.setMode(PropertyTreeView::Mode::List);
+    view.resize(1000, 600);
+    QVERIFY(showAndSettle(&view));
+
+    const int plainHeight = QFontMetrics(QApplication::font()).height();
+    if (sheet == 2) {
+        QVERIFY(view.fontMetrics().height() <= plainHeight + 1);
+        view.setStyleSheet(enlarge);
+        QCoreApplication::processEvents();
+    }
+    if (sheet != 0)
+        QVERIFY2(view.fontMetrics().height() > plainHeight, "the style sheet font did not apply");
+
+    QCOMPARE(view.mode(), listMode ? PropertyTreeView::Mode::List : PropertyTreeView::Mode::Tree);
+    QTRY_VERIFY2(
+        view.nameColumnWidth() >= widestNameNeeded(view), nameColumnReport(view).constData());
 }
 
 // Since 1.1: a multi-line text editor taller than the row; Enter adds a line,
