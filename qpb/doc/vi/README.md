@@ -1,6 +1,6 @@
 # qpb - trình duyệt property cho Qt 6 và Qt 5.15 Widgets
 
-> Đây là bản dịch tiếng Việt của tài liệu qpb 1.9.1. Bản tiếng Anh ([../../README.md](../../README.md)) là bản chuẩn;
+> Đây là bản dịch tiếng Việt của tài liệu qpb 1.9.2. Bản tiếng Anh ([../../README.md](../../README.md)) là bản chuẩn;
 > khi hai bản khác nhau thì theo bản tiếng Anh.
 
 qpb hiển thị và chỉnh sửa một cây các property có kiểu ("tên | giá trị") trong ứng dụng Qt Widgets: trình kiểm tra đối
@@ -126,6 +126,7 @@ Qt): không có gì public bị xóa hay thay đổi, chỉ có thêm vào. Đi�
 Mỗi phiên bản có một mục trong [`CHANGELOG.md`](../../CHANGELOG.md) (bằng tiếng Anh, nằm trong thư mục `qpb/`) ghi những
 gì đã được thêm, thay đổi, deprecated và sửa, cùng các ghi chú nâng cấp.
 
+- **1.9.2** - click vào một giá trị trong tree view lại mở editor của nó; double click để sửa.
 - **1.9.1** - tree view không bao giờ cắt tên property; view hẹp thì cuộn ngang.
 - **1.9.0** - thay đổi do người dùng sửa được báo riêng (`userValueChanged`), chuẩn hóa giá trị và đặt giá trị hiện
   tại làm giá trị mặc định, số thực không làm tròn, màu của model trong form view, handler được phép thay đổi cây

@@ -1,6 +1,6 @@
 # Style sheet
 
-> Đây là bản dịch tiếng Việt của tài liệu qpb 1.9.1. Bản tiếng Anh
+> Đây là bản dịch tiếng Việt của tài liệu qpb 1.9.2. Bản tiếng Anh
 > ([../../guide/style-sheets.md](../../guide/style-sheets.md)) là bản chuẩn; khi hai bản khác nhau thì theo bản tiếng
 > Anh.
 

@@ -1,6 +1,6 @@
 # Property của QObject
 
-> Đây là bản dịch tiếng Việt của tài liệu qpb 1.9.1. Bản tiếng Anh
+> Đây là bản dịch tiếng Việt của tài liệu qpb 1.9.2. Bản tiếng Anh
 > ([../../guide/qobject-source.md](../../guide/qobject-source.md)) là bản chuẩn; khi hai bản khác nhau thì theo bản
 > tiếng Anh.
 

@@ -1,6 +1,6 @@
 # Tích hợp
 
-> Đây là bản dịch tiếng Việt của tài liệu qpb 1.9.1. Bản tiếng Anh ([../integration.md](../integration.md)) là bản
+> Đây là bản dịch tiếng Việt của tài liệu qpb 1.9.2. Bản tiếng Anh ([../integration.md](../integration.md)) là bản
 > chuẩn; khi hai bản khác nhau thì theo bản tiếng Anh.
 
 Cách lấy thư mục qpb, thêm nó vào một dự án CMake, chọn giữa thư viện static và shared, dùng với Qt 5, và cập nhật nó.
