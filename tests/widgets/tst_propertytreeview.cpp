@@ -2,6 +2,7 @@
 
 #include <qpb/qpb.h>
 
+#include <QAbstractProxyModel>
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
@@ -9,6 +10,8 @@
 #include <QContextMenuEvent>
 #include <QDir>
 #include <QDoubleSpinBox>
+#include <QElapsedTimer>
+#include <QGuiApplication>
 #include <QHeaderView>
 #include <QLineEdit>
 #include <QLocale>
@@ -22,6 +25,7 @@
 #include <QSortFilterProxyModel>
 #include <QSpinBox>
 #include <QStyle>
+#include <QStyleHints>
 #include <QStyleOptionSpinBox>
 #include <QTest>
 #include <QTimer>
@@ -465,6 +469,36 @@ private slots:
     void changedDoubleEditorStoresTheSpinBoxValue();
     void unroundedDoubleEditorFollowsExternalChanges();
     void commitOnStepStoresTheSpinBoxValueOfAnUnroundedDouble();
+
+    // Opening an editor again by mouse after it closed.
+    void doubleClickIsAnEditTrigger();
+    void doubleClickOnTheValueOpensTheEditorAgain_data();
+    void doubleClickOnTheValueOpensTheEditorAgain();
+    void oneClickOnTheValueOpensTheEditorAtOnce_data();
+    void oneClickOnTheValueOpensTheEditorAtOnce();
+    void oneClickOnTheValueOpensTheEditorEventually_data();
+    void oneClickOnTheValueOpensTheEditorEventually();
+    void doubleClickOnTheCurrentValueLeavesOneEditor_data();
+    void doubleClickOnTheCurrentValueLeavesOneEditor();
+    void clicksOnNamesOpenNoEditor();
+    void clicksOnUneditableRowsOpenNoEditor_data();
+    void clicksOnUneditableRowsOpenNoEditor();
+    void clicksOnACheckBoxToggleItWithoutAnEditor_data();
+    void clicksOnACheckBoxToggleItWithoutAnEditor();
+    void rightClickOpensNoEditorAndKeepsTheContextMenu();
+    void applicationTriggersDecideWhatClicksOpen_data();
+    void applicationTriggersDecideWhatClicksOpen();
+    void doubleClickOpensTheEditorOfACurrentUnselectedValue();
+    void clickLeavesTheEditTriggersAndTheSelectionAlone_data();
+    void clickLeavesTheEditTriggersAndTheSelectionAlone();
+    void clickWithAModifierOpensNoEditorAtOnce_data();
+    void clickWithAModifierOpensNoEditorAtOnce();
+    void releaseOnAnotherCellOpensNothing();
+    void editorOpenedByAClickClosesAndOpensAgain_data();
+    void editorOpenedByAClickClosesAndOpensAgain();
+    void clickOnAnotherValueReplacesAnEditorOpenedByAClick();
+    void publicEditSlotOpensTheEditorFromOutside();
+    void noEditTriggersSetInClickedStopsLaterClicksOnly();
 
 private:
     std::unique_ptr<Fixture> f;
@@ -3074,6 +3108,813 @@ void tst_PropertyTreeView::commitOnStepStoresTheSpinBoxValueOfAnUnroundedDouble(
     QCOMPARE(f->stored(UnroundedPath).toDouble(), 0.01); // what the user chose
     QCOMPARE(spinBox->value(), 0.01);
     QVERIFY(editorOpen(f->view));
+}
+
+namespace {
+
+// ---- Opening an editor again by mouse after it closed ----
+
+enum class Closing {
+    EnterAfterChange, // type or pick a new value, then Enter
+    Escape, // change nothing, Escape
+    EnterUntouched, // change nothing, Enter
+};
+
+enum class ViewSetup {
+    Tree,
+    List,
+    ThroughProxy,
+};
+
+// One property of createTree() per editor type: the stored value before and
+// after an edit.
+struct ReopenKind
+{
+    const char* name;
+    QString path;
+    QVariant initial;
+    QVariant changed;
+};
+
+QList<ReopenKind> reopenKinds()
+{
+    return {
+        {"string", QStringLiteral("name"), QStringLiteral("Main"), QStringLiteral("Renamed")},
+        {"int", QStringLiteral("Camera/fov"), 60, 90},
+        {"double", QStringLiteral("Transform/x"), 0.0, 12.5},
+        {"enum", QStringLiteral("Camera/projection"), 0, 1},
+        {"filePath", QStringLiteral("Camera/lut"), QString(), QStringLiteral("a.cube")},
+    };
+}
+
+void addReopenColumns()
+{
+    QTest::addColumn<QString>("path");
+    QTest::addColumn<QVariant>("initial");
+    QTest::addColumn<QVariant>("changed");
+    QTest::addColumn<int>("closing");
+    QTest::addColumn<int>("setup");
+}
+
+void addReopenRow(const ReopenKind& kind, Closing closing, ViewSetup setup)
+{
+    static const char* const closings[] = {"enter", "escape", "enterUntouched"};
+    static const char* const setups[] = {"tree", "list", "proxy"};
+    const QByteArray name = QByteArray(kind.name) + "/" + closings[int(closing)] + "/"
+        + setups[int(setup)];
+    QTest::newRow(name.constData()) << kind.path << kind.initial << kind.changed << int(closing)
+                                    << int(setup);
+}
+
+// Every editor type and way of closing in the Tree mode, the first three types
+// also in the List mode and through the filter proxy. Reduced: only the
+// closing by Enter after a change, and the List mode and the proxy for strings.
+void addReopenRows(bool full)
+{
+    addReopenColumns();
+    const QList<ReopenKind> kinds = reopenKinds();
+    const QList<Closing> closings = full
+        ? QList<Closing>{Closing::EnterAfterChange, Closing::Escape, Closing::EnterUntouched}
+        : QList<Closing>{Closing::EnterAfterChange};
+    for (int k = 0; k < kinds.size(); ++k) {
+        for (Closing closing : closings) {
+            addReopenRow(kinds.at(k), closing, ViewSetup::Tree);
+            if (k < (full ? 3 : 1)) {
+                addReopenRow(kinds.at(k), closing, ViewSetup::List);
+                addReopenRow(kinds.at(k), closing, ViewSetup::ThroughProxy);
+            }
+        }
+    }
+}
+
+void applySetup(Fixture& f, PropertyFilterProxyModel& proxy, ViewSetup setup)
+{
+    switch (setup) {
+    case ViewSetup::Tree:
+        break;
+    case ViewSetup::List:
+        f.view->setMode(PropertyTreeView::Mode::List);
+        break;
+    case ViewSetup::ThroughProxy:
+        proxy.setSourceModel(&f.model);
+        f.view->setModel(&proxy);
+        break;
+    }
+}
+
+// The index of the cell in the model the view shows (the proxy's, if any).
+QModelIndex cellOf(const Fixture& f, const QString& path, int column)
+{
+    const QModelIndex source = f.model.indexOf(f.model.find(path), column);
+    const auto* proxy = qobject_cast<const QAbstractProxyModel*>(f.view->model());
+    return proxy ? proxy->mapFromSource(source) : source;
+}
+
+QPoint valuePoint(const Fixture& f, const QString& path)
+{
+    return f.view->visualRect(cellOf(f, path, PropertyModel::ValueColumn)).center();
+}
+
+QPoint namePoint(const Fixture& f, const QString& path)
+{
+    return f.view->visualRect(cellOf(f, path, PropertyModel::NameColumn)).center();
+}
+
+// The editors the view shows now (closed ones are hidden until they are deleted).
+QList<QWidget*> openEditors(const PropertyTreeView* view)
+{
+    QList<QWidget*> editors;
+    const QList<QWidget*> children = view->viewport()->findChildren<QWidget*>();
+    for (QWidget* child : children) {
+        if (child->property("_qpb_editorOwner").isValid() && child->isVisible())
+            editors.append(child);
+    }
+    return editors;
+}
+
+int openEditorCount(const PropertyTreeView* view)
+{
+    return int(openEditors(view).size());
+}
+
+// What the windowing system delivers for a double click: press, release,
+// double click, release. QTest::mouseDClick() alone sends only the third
+// event of a widget, which the view treats as a click of its own.
+void doubleClick(QWidget* viewport, const QPoint& point)
+{
+    QTest::mouseClick(viewport, Qt::LeftButton, {}, point);
+    QTest::mouseDClick(viewport, Qt::LeftButton, {}, point);
+    QTest::mouseRelease(viewport, Qt::LeftButton, {}, point);
+}
+
+void processTwice()
+{
+    QCoreApplication::processEvents();
+    QCoreApplication::processEvents();
+}
+
+// A double click interval too long for the view's delayed edit to fire within
+// a test (restored when it goes out of scope).
+class LongDoubleClickInterval
+{
+public:
+    LongDoubleClickInterval()
+        : previous(QApplication::doubleClickInterval())
+    {
+        QGuiApplication::styleHints()->setMouseDoubleClickInterval(5000);
+    }
+    ~LongDoubleClickInterval() { QGuiApplication::styleHints()->setMouseDoubleClickInterval(previous); }
+    LongDoubleClickInterval(const LongDoubleClickInterval&) = delete;
+    LongDoubleClickInterval& operator=(const LongDoubleClickInterval&) = delete;
+
+private:
+    int previous;
+};
+
+// A check that nothing happens cannot wait for a signal: wait past the delay
+// after which the view starts an edit it has scheduled.
+void waitOutTheDoubleClickDelay()
+{
+    QTest::qWait(QApplication::doubleClickInterval() + 100);
+}
+
+QString editorReport(const PropertyTreeView* view)
+{
+    return QStringLiteral("%1 editor(s) open").arg(openEditorCount(view));
+}
+
+// The widget that takes the keys of an editor: the line edit of a path editor,
+// the editor itself otherwise.
+QWidget* keyTarget(QWidget* editor)
+{
+    if (qobject_cast<detail::PathEdit*>(editor))
+        return editor->findChild<QLineEdit*>();
+    return editor;
+}
+
+// Types or picks value in the open editor.
+void changeEditor(QWidget* editor, const QVariant& value)
+{
+    if (qobject_cast<detail::PathEdit*>(editor)) {
+        auto* lineEdit = editor->findChild<QLineEdit*>();
+        lineEdit->selectAll();
+        QTest::keyClicks(lineEdit, value.toString());
+    } else if (auto* lineEdit = qobject_cast<QLineEdit*>(editor)) {
+        lineEdit->selectAll();
+        QTest::keyClicks(lineEdit, value.toString());
+    } else if (auto* spinBox = qobject_cast<QSpinBox*>(editor)) {
+        spinBox->selectAll();
+        QTest::keyClicks(spinBox, QString::number(value.toInt()));
+    } else if (auto* doubleBox = qobject_cast<QDoubleSpinBox*>(editor)) {
+        doubleBox->setValue(value.toDouble());
+    } else if (auto* comboBox = qobject_cast<QComboBox*>(editor)) {
+        QTest::keyClick(comboBox, Qt::Key_Down); // commits at once
+    }
+}
+
+// Edits the value of path the way a user does (the row becomes current, its
+// editor opens) and closes the editor. The row stays current and selected.
+bool editAndClose(Fixture& f, const QString& path, const QVariant& changed, Closing closing)
+{
+    f.view->setFocus();
+    f.view->setCurrentIndex(cellOf(f, path, PropertyModel::ValueColumn));
+    const QList<QWidget*> editors = openEditors(f.view);
+    if (editors.size() != 1)
+        return false;
+    QWidget* editor = editors.first();
+    if (closing == Closing::EnterAfterChange)
+        changeEditor(editor, changed);
+    // A combo box has closed after the change already.
+    if (!(closing == Closing::EnterAfterChange && qobject_cast<QComboBox*>(editor)))
+        QTest::keyClick(keyTarget(editor),
+            closing == Closing::Escape ? Qt::Key_Escape : Qt::Key_Return);
+    // The closed editor is deleted later, and a user's next click comes later still.
+    if (!QTest::qWaitFor([&f] { return !editorOpen(f.view); }, 2000))
+        return false;
+    // Work the close queued for the event loop runs before the next click.
+    processTwice();
+    processTwice();
+    return true;
+}
+
+// Sends key to the only editor that is open; false if there is not exactly one.
+bool pressKeyInTheOpenEditor(const PropertyTreeView* view, Qt::Key key)
+{
+    const QList<QWidget*> editors = openEditors(view);
+    if (editors.size() != 1)
+        return false;
+    QTest::keyClick(keyTarget(editors.first()), key);
+    return true;
+}
+
+// Waits until no editor is open and the work the close queued is done.
+bool waitUntilNoEditorIsOpen(const PropertyTreeView* view)
+{
+    if (!QTest::qWaitFor([view] { return !editorOpen(view); }, 2000))
+        return false;
+    processTwice();
+    processTwice();
+    return true;
+}
+
+QVariant expectedAfter(const QVariant& initial, const QVariant& changed, Closing closing)
+{
+    return closing == Closing::EnterAfterChange ? changed : initial;
+}
+
+} // namespace
+
+// The tree view edits on a double click, next to the triggers it had.
+void tst_PropertyTreeView::doubleClickIsAnEditTrigger()
+{
+    const QAbstractItemView::EditTriggers triggers = f->view->editTriggers();
+    QVERIFY(triggers.testFlag(QAbstractItemView::DoubleClicked));
+    QVERIFY(triggers.testFlag(QAbstractItemView::CurrentChanged));
+    QVERIFY(triggers.testFlag(QAbstractItemView::SelectedClicked));
+    QVERIFY(triggers.testFlag(QAbstractItemView::EditKeyPressed));
+}
+
+void tst_PropertyTreeView::doubleClickOnTheValueOpensTheEditorAgain_data()
+{
+    addReopenRows(true);
+}
+
+// After an edit ended (Enter after a change, Escape, Enter with nothing typed)
+// the row stays current; a double click on its value opens the editor again.
+void tst_PropertyTreeView::doubleClickOnTheValueOpensTheEditorAgain()
+{
+    QFETCH(QString, path);
+    QFETCH(QVariant, initial);
+    QFETCH(QVariant, changed);
+    QFETCH(int, closing);
+    QFETCH(int, setup);
+    PropertyFilterProxyModel proxy;
+    applySetup(*f, proxy, ViewSetup(setup));
+
+    QVERIFY(editAndClose(*f, path, changed, Closing(closing)));
+    const QVariant expected = expectedAfter(initial, changed, Closing(closing));
+    QCOMPARE(f->stored(path), expected);
+
+    doubleClick(f->view->viewport(), valuePoint(*f, path));
+    processTwice();
+    QVERIFY2(openEditorCount(f->view) == 1, qPrintable(editorReport(f->view)));
+    QCOMPARE(f->stored(path), expected);
+}
+
+void tst_PropertyTreeView::oneClickOnTheValueOpensTheEditorAtOnce_data()
+{
+    addReopenRows(true);
+}
+
+// The same start; one click on the value opens the editor without the wait of
+// the double click interval.
+void tst_PropertyTreeView::oneClickOnTheValueOpensTheEditorAtOnce()
+{
+    QFETCH(QString, path);
+    QFETCH(QVariant, initial);
+    QFETCH(QVariant, changed);
+    QFETCH(int, closing);
+    QFETCH(int, setup);
+    PropertyFilterProxyModel proxy;
+    applySetup(*f, proxy, ViewSetup(setup));
+
+    QVERIFY(editAndClose(*f, path, changed, Closing(closing)));
+    const QVariant expected = expectedAfter(initial, changed, Closing(closing));
+
+    // With an interval this long the view's delayed edit cannot be what opens
+    // the editor within the test.
+    const LongDoubleClickInterval longInterval;
+    QTest::mouseClick(f->view->viewport(), Qt::LeftButton, {}, valuePoint(*f, path));
+    processTwice(); // the events of the click, no waiting
+    QVERIFY2(openEditorCount(f->view) == 1,
+        qPrintable(QStringLiteral("%1 (double click interval %2 ms)")
+                       .arg(editorReport(f->view))
+                       .arg(QApplication::doubleClickInterval())));
+    QCOMPARE(f->stored(path), expected);
+}
+
+void tst_PropertyTreeView::oneClickOnTheValueOpensTheEditorEventually_data()
+{
+    addReopenRows(false);
+}
+
+// Whatever the delay, the editor opens (and only one): it proves that the
+// click of the test above hits the value cell of a row that can be edited.
+void tst_PropertyTreeView::oneClickOnTheValueOpensTheEditorEventually()
+{
+    QFETCH(QString, path);
+    QFETCH(QVariant, initial);
+    QFETCH(QVariant, changed);
+    QFETCH(int, closing);
+    QFETCH(int, setup);
+    PropertyFilterProxyModel proxy;
+    applySetup(*f, proxy, ViewSetup(setup));
+
+    QVERIFY(editAndClose(*f, path, changed, Closing(closing)));
+    const QVariant expected = expectedAfter(initial, changed, Closing(closing));
+
+    QTest::mouseClick(f->view->viewport(), Qt::LeftButton, {}, valuePoint(*f, path));
+    QTRY_COMPARE_WITH_TIMEOUT(openEditorCount(f->view), 1, 3000);
+    QCOMPARE(f->stored(path), expected);
+}
+
+void tst_PropertyTreeView::doubleClickOnTheCurrentValueLeavesOneEditor_data()
+{
+    addReopenRows(false);
+}
+
+// A double click on the current row, where its first click opens the editor:
+// one editor stays open, whatever the second click and the delayed edit of the
+// view do, and the value is not touched.
+void tst_PropertyTreeView::doubleClickOnTheCurrentValueLeavesOneEditor()
+{
+    QFETCH(QString, path);
+    QFETCH(QVariant, initial);
+    QFETCH(QVariant, changed);
+    QFETCH(int, closing);
+    QFETCH(int, setup);
+    PropertyFilterProxyModel proxy;
+    applySetup(*f, proxy, ViewSetup(setup));
+
+    QVERIFY(editAndClose(*f, path, changed, Closing(closing)));
+    const QVariant expected = expectedAfter(initial, changed, Closing(closing));
+    QSignalSpy values(&f->model, &PropertyModel::valueChanged);
+
+    doubleClick(f->view->viewport(), valuePoint(*f, path));
+    processTwice();
+    waitOutTheDoubleClickDelay(); // a late second editor would show up now
+    QVERIFY2(openEditorCount(f->view) == 1, qPrintable(editorReport(f->view)));
+    QCOMPARE(f->stored(path), expected);
+    QCOMPARE(values.count(), 0);
+}
+
+// A click or a double click on a name cell opens no editor, on the row that is
+// current and on another row.
+void tst_PropertyTreeView::clicksOnNamesOpenNoEditor()
+{
+    const QString path = QStringLiteral("Camera/fov");
+    const QString other = QStringLiteral("name");
+    QVERIFY(editAndClose(*f, path, 90, Closing::EnterAfterChange));
+    QSignalSpy values(&f->model, &PropertyModel::valueChanged);
+    QWidget* viewport = f->view->viewport();
+
+    QTest::mouseClick(viewport, Qt::LeftButton, {}, namePoint(*f, path));
+    processTwice();
+    waitOutTheDoubleClickDelay();
+    QVERIFY2(openEditorCount(f->view) == 0, qPrintable(editorReport(f->view)));
+
+    doubleClick(viewport, namePoint(*f, path));
+    processTwice();
+    waitOutTheDoubleClickDelay();
+    QVERIFY2(openEditorCount(f->view) == 0, qPrintable(editorReport(f->view)));
+
+    QTest::mouseClick(viewport, Qt::LeftButton, {}, namePoint(*f, other));
+    processTwice();
+    waitOutTheDoubleClickDelay();
+    QVERIFY2(openEditorCount(f->view) == 0, qPrintable(editorReport(f->view)));
+    QCOMPARE(f->stored(path), QVariant(90));
+    QCOMPARE(f->stored(other), QVariant(QStringLiteral("Main")));
+    QCOMPARE(values.count(), 0);
+}
+
+void tst_PropertyTreeView::clicksOnUneditableRowsOpenNoEditor_data()
+{
+    QTest::addColumn<QString>("path");
+    QTest::addColumn<bool>("group");
+    QTest::addColumn<bool>("disable");
+    QTest::addColumn<bool>("list");
+    QTest::newRow("group/tree") << "Transform" << true << false << false;
+    QTest::newRow("group/list") << "Transform" << true << false << true;
+    QTest::newRow("readOnly/tree") << "Transform/locked" << false << false << false;
+    QTest::newRow("readOnly/list") << "Transform/locked" << false << false << true;
+    QTest::newRow("disabled/tree") << "Transform/y" << false << true << false;
+    QTest::newRow("disabled/list") << "Transform/y" << false << true << true;
+}
+
+// Group, read-only and disabled rows open nothing: not by a click on the row
+// that is current already, not by a double click.
+void tst_PropertyTreeView::clicksOnUneditableRowsOpenNoEditor()
+{
+    QFETCH(QString, path);
+    QFETCH(bool, group);
+    QFETCH(bool, disable);
+    QFETCH(bool, list);
+    if (disable) {
+        f->model.find(QStringLiteral("Transform/y"))->setEnabledWhen(QStringLiteral("visible"));
+        QVERIFY(f->model.setValue(QStringLiteral("visible"), false));
+    }
+    if (list)
+        f->view->setMode(PropertyTreeView::Mode::List);
+    QSignalSpy values(&f->model, &PropertyModel::valueChanged);
+    const QVariant before = group ? QVariant() : f->stored(path);
+    const QPoint point = group ? namePoint(*f, path) : valuePoint(*f, path);
+    QWidget* viewport = f->view->viewport();
+
+    QTest::mouseClick(viewport, Qt::LeftButton, {}, point);
+    processTwice();
+    QVERIFY2(openEditorCount(f->view) == 0, qPrintable(editorReport(f->view)));
+    QTest::mouseClick(viewport, Qt::LeftButton, {}, point);
+    processTwice();
+    QVERIFY2(openEditorCount(f->view) == 0, qPrintable(editorReport(f->view)));
+    doubleClick(viewport, point);
+    processTwice();
+    QVERIFY2(openEditorCount(f->view) == 0, qPrintable(editorReport(f->view)));
+    waitOutTheDoubleClickDelay();
+    QVERIFY2(openEditorCount(f->view) == 0, qPrintable(editorReport(f->view)));
+    if (!group)
+        QCOMPARE(f->stored(path), before);
+    QCOMPARE(values.count(), 0);
+}
+
+void tst_PropertyTreeView::clicksOnACheckBoxToggleItWithoutAnEditor_data()
+{
+    QTest::addColumn<bool>("twice");
+    QTest::addColumn<bool>("current");
+    QTest::newRow("click/rowNotCurrent") << false << false;
+    QTest::newRow("click/rowCurrent") << false << true;
+    QTest::newRow("doubleClick/rowCurrent") << true << true;
+}
+
+// A click on a check box toggles it once, a double click is two clicks (it
+// toggles twice and ends where it began); no editor opens in either case.
+void tst_PropertyTreeView::clicksOnACheckBoxToggleItWithoutAnEditor()
+{
+    QFETCH(bool, twice);
+    QFETCH(bool, current);
+    const QString path = QStringLiteral("visible");
+    if (current) {
+        f->view->setFocus();
+        f->view->setCurrentIndex(f->value(path));
+    }
+    QCOMPARE(openEditorCount(f->view), 0);
+    QSignalSpy values(&f->model, &PropertyModel::valueChanged);
+    const QPoint point = f->view->visualRect(f->value(path)).topRight() + QPoint(-4, 4);
+
+    if (twice)
+        doubleClick(f->view->viewport(), point);
+    else
+        QTest::mouseClick(f->view->viewport(), Qt::LeftButton, {}, point);
+    processTwice();
+    QVERIFY2(openEditorCount(f->view) == 0, qPrintable(editorReport(f->view)));
+    waitOutTheDoubleClickDelay();
+    QVERIFY2(openEditorCount(f->view) == 0, qPrintable(editorReport(f->view)));
+    QCOMPARE(values.count(), twice ? 2 : 1);
+    QCOMPARE(f->stored(path), QVariant(twice));
+}
+
+// A right click opens the context menu and no editor, on a row whose editor
+// was open before.
+void tst_PropertyTreeView::rightClickOpensNoEditorAndKeepsTheContextMenu()
+{
+    const QString path = QStringLiteral("Camera/fov");
+    QVERIFY(editAndClose(*f, path, 90, Closing::EnterAfterChange));
+
+    // Closes any menu the clicks open, so that exec() never blocks the test.
+    int menus = 0;
+    QTimer closer;
+    closer.callOnTimeout([&menus] {
+        if (auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget())) {
+            ++menus;
+            menu->close();
+        }
+    });
+    closer.start(5);
+
+    const QPoint point = valuePoint(*f, path);
+    QTest::mouseClick(f->view->viewport(), Qt::RightButton, {}, point);
+    processTwice();
+    QVERIFY2(openEditorCount(f->view) == 0, qPrintable(editorReport(f->view)));
+
+    // What the platform sends for a right click.
+    QContextMenuEvent event(
+        QContextMenuEvent::Mouse, point, f->view->viewport()->mapToGlobal(point));
+    QApplication::sendEvent(f->view->viewport(), &event);
+    QVERIFY(menus >= 1);
+    processTwice();
+    waitOutTheDoubleClickDelay();
+    QVERIFY2(openEditorCount(f->view) == 0, qPrintable(editorReport(f->view)));
+    QCOMPARE(f->stored(path), QVariant(90));
+}
+
+void tst_PropertyTreeView::applicationTriggersDecideWhatClicksOpen_data()
+{
+    QTest::addColumn<QString>("path");
+    QTest::addColumn<bool>("keyOnly");
+    QTest::addColumn<int>("setup");
+    QTest::newRow("none/int/tree") << "Camera/fov" << false << int(ViewSetup::Tree);
+    QTest::newRow("none/string/list") << "name" << false << int(ViewSetup::List);
+    QTest::newRow("none/int/proxy") << "Camera/fov" << false << int(ViewSetup::ThroughProxy);
+    QTest::newRow("keyOnly/string/tree") << "name" << true << int(ViewSetup::Tree);
+}
+
+// An application that sets its own triggers keeps them: with none (or only the
+// edit key) neither a click nor a double click opens an editor.
+void tst_PropertyTreeView::applicationTriggersDecideWhatClicksOpen()
+{
+    QFETCH(QString, path);
+    QFETCH(bool, keyOnly);
+    QFETCH(int, setup);
+    PropertyFilterProxyModel proxy;
+    applySetup(*f, proxy, ViewSetup(setup));
+    f->view->setEditTriggers(keyOnly ? QAbstractItemView::EditKeyPressed
+                                     : QAbstractItemView::NoEditTriggers);
+    const QVariant before = f->stored(path);
+    QSignalSpy values(&f->model, &PropertyModel::valueChanged);
+
+    f->view->setFocus();
+    f->view->setCurrentIndex(cellOf(*f, path, PropertyModel::ValueColumn));
+    QCOMPARE(openEditorCount(f->view), 0);
+    QWidget* viewport = f->view->viewport();
+
+    QTest::mouseClick(viewport, Qt::LeftButton, {}, valuePoint(*f, path));
+    processTwice();
+    QVERIFY2(openEditorCount(f->view) == 0, qPrintable(editorReport(f->view)));
+    doubleClick(viewport, valuePoint(*f, path));
+    processTwice();
+    QVERIFY2(openEditorCount(f->view) == 0, qPrintable(editorReport(f->view)));
+    waitOutTheDoubleClickDelay();
+    QVERIFY2(openEditorCount(f->view) == 0, qPrintable(editorReport(f->view)));
+    QCOMPARE(f->stored(path), before);
+    QCOMPARE(values.count(), 0);
+}
+
+// A double click edits a value that is current but not selected, where the
+// click before it opens nothing (the selected-click path does not apply).
+void tst_PropertyTreeView::doubleClickOpensTheEditorOfACurrentUnselectedValue()
+{
+    const QString path = QStringLiteral("name");
+    const QAbstractItemView::EditTriggers triggers = f->view->editTriggers();
+    f->view->setFocus();
+    f->view->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    f->view->selectionModel()->setCurrentIndex(
+        cellOf(*f, path, PropertyModel::ValueColumn), QItemSelectionModel::NoUpdate);
+    f->view->clearSelection();
+    f->view->setEditTriggers(triggers);
+    QVERIFY(!f->view->selectionModel()->isSelected(cellOf(*f, path, PropertyModel::ValueColumn)));
+    QCOMPARE(openEditorCount(f->view), 0);
+    const QVariant before = f->stored(path);
+
+    doubleClick(f->view->viewport(), valuePoint(*f, path));
+    processTwice();
+    QVERIFY2(openEditorCount(f->view) == 1, qPrintable(editorReport(f->view)));
+    waitOutTheDoubleClickDelay();
+    QVERIFY2(openEditorCount(f->view) == 1, qPrintable(editorReport(f->view)));
+    QCOMPARE(f->stored(path), before);
+}
+
+void tst_PropertyTreeView::clickLeavesTheEditTriggersAndTheSelectionAlone_data()
+{
+    QTest::addColumn<int>("triggers");
+    QTest::addColumn<bool>("changeInSlot");
+    const int own = QAbstractItemView::SelectedClicked | QAbstractItemView::AnyKeyPressed
+        | QAbstractItemView::DoubleClicked;
+    QTest::newRow("default") << -1 << false;
+    QTest::newRow("custom") << own << false;
+    QTest::newRow("changedInClickedSlot") << -1 << true;
+}
+
+// A click that opens the editor at once changes nothing around it: the edit
+// triggers are the application's before, inside clicked() and after (an
+// application's own change in clicked() stays), clicked() is emitted once, and
+// the current index and the selection are the same.
+void tst_PropertyTreeView::clickLeavesTheEditTriggersAndTheSelectionAlone()
+{
+    QFETCH(int, triggers);
+    QFETCH(bool, changeInSlot);
+    const QString path = QStringLiteral("Camera/fov");
+    QVERIFY(editAndClose(*f, path, 90, Closing::EnterAfterChange));
+    if (triggers >= 0)
+        f->view->setEditTriggers(QAbstractItemView::EditTriggers(triggers));
+    const QAbstractItemView::EditTriggers before = f->view->editTriggers();
+    const QModelIndex current = f->view->currentIndex();
+    const QModelIndexList selected = f->view->selectionModel()->selectedIndexes();
+    const QAbstractItemView::EditTriggers appChoice
+        = QAbstractItemView::CurrentChanged | QAbstractItemView::SelectedClicked;
+    QAbstractItemView::EditTriggers inSlot;
+    connect(f->view, &QAbstractItemView::clicked, this, [&] {
+        inSlot = f->view->editTriggers();
+        if (changeInSlot)
+            f->view->setEditTriggers(appChoice);
+    });
+    QSignalSpy clicked(f->view, &QAbstractItemView::clicked);
+    const LongDoubleClickInterval longInterval;
+
+    QTest::mouseClick(f->view->viewport(), Qt::LeftButton, {}, valuePoint(*f, path));
+    processTwice();
+    QCOMPARE(clicked.count(), 1);
+    QCOMPARE(inSlot, before);
+    QCOMPARE(f->view->editTriggers(), changeInSlot ? appChoice : before);
+    QCOMPARE(f->view->currentIndex(), current);
+    QCOMPARE(f->view->selectionModel()->selectedIndexes(), selected);
+    QVERIFY2(openEditorCount(f->view) == 1, qPrintable(editorReport(f->view)));
+    QCOMPARE(f->stored(path), QVariant(90));
+    f->view->disconnect(this);
+}
+
+void tst_PropertyTreeView::clickWithAModifierOpensNoEditorAtOnce_data()
+{
+    QTest::addColumn<int>("modifier");
+    QTest::newRow("ctrl") << int(Qt::ControlModifier);
+    QTest::newRow("shift") << int(Qt::ShiftModifier);
+}
+
+// A click with Ctrl or Shift is the view's own business, as before: no editor
+// at once (the view's delayed edit is far away with this interval).
+void tst_PropertyTreeView::clickWithAModifierOpensNoEditorAtOnce()
+{
+    QFETCH(int, modifier);
+    const QString path = QStringLiteral("Camera/fov");
+    QVERIFY(editAndClose(*f, path, 90, Closing::EnterAfterChange));
+    QSignalSpy clicked(f->view, &QAbstractItemView::clicked);
+    QSignalSpy values(&f->model, &PropertyModel::valueChanged);
+    const LongDoubleClickInterval longInterval;
+
+    QTest::mouseClick(f->view->viewport(), Qt::LeftButton, Qt::KeyboardModifiers(modifier),
+        valuePoint(*f, path));
+    processTwice();
+    QVERIFY2(openEditorCount(f->view) == 0, qPrintable(editorReport(f->view)));
+    QCOMPARE(clicked.count(), 1);
+    QCOMPARE(values.count(), 0);
+    QCOMPARE(f->stored(path), QVariant(90));
+}
+
+// Pressing on the current value and releasing on another cell is no click:
+// nothing opens.
+void tst_PropertyTreeView::releaseOnAnotherCellOpensNothing()
+{
+    const QString path = QStringLiteral("Camera/fov");
+    QVERIFY(editAndClose(*f, path, 90, Closing::EnterAfterChange));
+    QSignalSpy clicked(f->view, &QAbstractItemView::clicked);
+    const LongDoubleClickInterval longInterval;
+    QWidget* viewport = f->view->viewport();
+
+    QTest::mousePress(viewport, Qt::LeftButton, {}, valuePoint(*f, path));
+    QTest::mouseRelease(viewport, Qt::LeftButton, {}, valuePoint(*f, QStringLiteral("name")));
+    processTwice();
+    QVERIFY2(openEditorCount(f->view) == 0, qPrintable(editorReport(f->view)));
+    QCOMPARE(clicked.count(), 0);
+    QCOMPARE(f->stored(path), QVariant(90));
+}
+
+// edit(index), the public slot of the base class, is still callable on the tree
+// view from outside the class and opens the editor of a value.
+void tst_PropertyTreeView::publicEditSlotOpensTheEditorFromOutside()
+{
+    const QString path = QStringLiteral("Camera/fov");
+    PropertyTreeView* view = f->view;
+    view->setCurrentIndex(cellOf(*f, path, PropertyModel::ValueColumn));
+    QVERIFY(QTest::qWaitFor([&] { return openEditorCount(view) == 1; }, 2000));
+    QTest::keyClick(keyTarget(openEditors(view).first()), Qt::Key_Escape);
+    QVERIFY(QTest::qWaitFor([&] { return openEditorCount(view) == 0; }, 2000));
+    processTwice();
+
+    view->edit(cellOf(*f, path, PropertyModel::ValueColumn));
+    QVERIFY2(openEditorCount(view) == 1, qPrintable(editorReport(view)));
+    QCOMPARE(f->stored(path), QVariant(60));
+}
+
+// An application that switches the triggers off in a clicked() slot: the edit
+// of that click has happened before clicked() is emitted, later clicks open
+// nothing.
+void tst_PropertyTreeView::noEditTriggersSetInClickedStopsLaterClicksOnly()
+{
+    const QString path = QStringLiteral("Camera/fov");
+    QVERIFY(editAndClose(*f, path, 90, Closing::EnterAfterChange));
+    connect(f->view, &QAbstractItemView::clicked, this,
+        [this] { f->view->setEditTriggers(QAbstractItemView::NoEditTriggers); });
+    const LongDoubleClickInterval longInterval;
+
+    QTest::mouseClick(f->view->viewport(), Qt::LeftButton, {}, valuePoint(*f, path));
+    processTwice();
+    QVERIFY2(openEditorCount(f->view) == 1, qPrintable(editorReport(f->view)));
+    QCOMPARE(f->view->editTriggers(), QAbstractItemView::NoEditTriggers);
+    QTest::keyClick(keyTarget(openEditors(f->view).first()), Qt::Key_Escape);
+    QVERIFY(QTest::qWaitFor([&] { return openEditorCount(f->view) == 0; }, 2000));
+    processTwice();
+
+    QTest::mouseClick(f->view->viewport(), Qt::LeftButton, {}, valuePoint(*f, path));
+    processTwice();
+    QVERIFY2(openEditorCount(f->view) == 0, qPrintable(editorReport(f->view)));
+    f->view->disconnect(this);
+}
+
+void tst_PropertyTreeView::editorOpenedByAClickClosesAndOpensAgain_data()
+{
+    QTest::addColumn<int>("key");
+    QTest::newRow("enter") << int(Qt::Key_Return);
+    QTest::newRow("escape") << int(Qt::Key_Escape);
+    QTest::newRow("tab") << int(Qt::Key_Tab);
+}
+
+// The editor a click opened on the current value (not one opened by
+// setCurrentIndex()) closes like any other, and the next click opens it again,
+// round after round. After Tab the editor of the next editable value is open,
+// and a click back on the first value opens its editor.
+void tst_PropertyTreeView::editorOpenedByAClickClosesAndOpensAgain()
+{
+    QFETCH(int, key);
+    const QString path = QStringLiteral("Camera/fov");
+    const QString next = QStringLiteral("Camera/projection");
+    const LongDoubleClickInterval longInterval;
+    QWidget* viewport = f->view->viewport();
+    f->view->setFocus();
+
+    // The first click makes the row current and opens its editor; closing it
+    // leaves the row current and selected, as in the user's report.
+    QTest::mouseClick(viewport, Qt::LeftButton, {}, valuePoint(*f, path));
+    processTwice();
+    QVERIFY2(openEditorCount(f->view) == 1, qPrintable(editorReport(f->view)));
+    QVERIFY(pressKeyInTheOpenEditor(f->view, Qt::Key_Escape));
+    QVERIFY(waitUntilNoEditorIsOpen(f->view));
+
+    for (int round = 1; round <= 2; ++round) {
+        QTest::mouseClick(viewport, Qt::LeftButton, {}, valuePoint(*f, path));
+        processTwice();
+        QVERIFY2(openEditorCount(f->view) == 1,
+            qPrintable(QStringLiteral("round %1: %2").arg(round).arg(editorReport(f->view))));
+        QCOMPARE(f->view->currentIndex(), cellOf(*f, path, PropertyModel::ValueColumn));
+
+        QVERIFY(pressKeyInTheOpenEditor(f->view, Qt::Key(key)));
+        if (key == Qt::Key_Tab) {
+            QTRY_COMPARE(f->view->currentIndex(), cellOf(*f, next, PropertyModel::ValueColumn));
+            QTRY_COMPARE(openEditorCount(f->view), 1);
+            // Back to the first value by a click: its editor opens.
+            QTest::mouseClick(viewport, Qt::LeftButton, {}, valuePoint(*f, path));
+            QTRY_COMPARE(f->view->currentIndex(), cellOf(*f, path, PropertyModel::ValueColumn));
+            QTRY_COMPARE(openEditorCount(f->view), 1);
+            QVERIFY(pressKeyInTheOpenEditor(f->view, Qt::Key_Escape));
+        }
+        QVERIFY(waitUntilNoEditorIsOpen(f->view));
+        QCOMPARE(f->stored(path), QVariant(60));
+        QCOMPARE(f->stored(next), QVariant(0));
+    }
+}
+
+// A click on another value while the editor a click opened is open: that editor
+// closes and the other one opens, one editor at a time.
+void tst_PropertyTreeView::clickOnAnotherValueReplacesAnEditorOpenedByAClick()
+{
+    const QString path = QStringLiteral("Camera/fov");
+    const QString other = QStringLiteral("name");
+    const LongDoubleClickInterval longInterval;
+    QWidget* viewport = f->view->viewport();
+    f->view->setFocus();
+
+    QTest::mouseClick(viewport, Qt::LeftButton, {}, valuePoint(*f, path));
+    processTwice();
+    QVERIFY(pressKeyInTheOpenEditor(f->view, Qt::Key_Escape));
+    QVERIFY(waitUntilNoEditorIsOpen(f->view));
+    QTest::mouseClick(viewport, Qt::LeftButton, {}, valuePoint(*f, path));
+    processTwice();
+    QVERIFY2(openEditorCount(f->view) == 1, qPrintable(editorReport(f->view)));
+
+    QTest::mouseClick(viewport, Qt::LeftButton, {}, valuePoint(*f, other));
+    QTRY_COMPARE(f->view->currentIndex(), cellOf(*f, other, PropertyModel::ValueColumn));
+    QTRY_COMPARE(openEditorCount(f->view), 1);
+    QCOMPARE(f->view->indexWidget(cellOf(*f, path, PropertyModel::ValueColumn)), nullptr);
+    QVERIFY(f->view->indexWidget(cellOf(*f, other, PropertyModel::ValueColumn)));
+    QCOMPARE(f->stored(path), QVariant(60));
+    QCOMPARE(f->stored(other), QVariant(QStringLiteral("Main")));
 }
 
 QTEST_MAIN(tst_PropertyTreeView)

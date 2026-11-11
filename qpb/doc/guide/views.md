@@ -27,9 +27,11 @@ code: you build the tree, create a model, and call `setModel()`.
   part of the value column.
 - **Context menu.** "Reset to default" on a property (disabled when it is not modified, is read-only or is disabled)
   and "Reset group" on a group (enabled when at least one property in it can be reset).
-- **Editing.** The editor opens when the current item changes, when a selected item is clicked, or with the platform's
-  edit key. Values are committed through the model; if the model rejects one, the editor closes, the old value stays and
-  the message shows as a tool tip at the cell.
+- **Editing.** The editor opens when the current item changes, when a value is double clicked, or with the
+  platform's edit key. A click on the value of the current row (for example after its editor closed) opens the editor at
+  once, without the wait of the double click interval. The view's `editTriggers()` decide: with an application's own
+  triggers, clicks open only what they allow. Values are committed through the model; if the model rejects one, the
+  editor closes, the old value stays and the message shows as a tool tip at the cell.
 
 ## Form view
 
