@@ -121,6 +121,7 @@ removed or changed, only added. What may and may not change, and what you should
 Each version has a section in `CHANGELOG.md` (next to this file) with what was added, changed, deprecated and fixed, and
 its upgrade notes.
 
+- **1.9.1** - the tree view never cuts property names; narrow views scroll horizontally.
 - **1.9.0** - user edits announced on their own (`userValueChanged`), normalizing values and making them the
   defaults, unrounded doubles, the model's colours in the form view, handlers that may change the tree or delete
   the model; the documentation in Vietnamese.

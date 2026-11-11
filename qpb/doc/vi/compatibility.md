@@ -1,6 +1,6 @@
 # Tương thích
 
-> Đây là bản dịch tiếng Việt của tài liệu qpb 1.9.0. Bản tiếng Anh ([../compatibility.md](../compatibility.md)) là bản
+> Đây là bản dịch tiếng Việt của tài liệu qpb 1.9.1. Bản tiếng Anh ([../compatibility.md](../compatibility.md)) là bản
 > chuẩn; khi hai bản khác nhau thì theo bản tiếng Anh.
 
 Các phiên bản 1.x cam kết điều gì, điều gì có thể và không thể thay đổi trong một bản phát hành minor hay patch,

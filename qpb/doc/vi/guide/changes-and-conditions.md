@@ -1,6 +1,6 @@
 # Thay đổi và điều kiện
 
-> Đây là bản dịch tiếng Việt của tài liệu qpb 1.9.0. Bản tiếng Anh
+> Đây là bản dịch tiếng Việt của tài liệu qpb 1.9.1. Bản tiếng Anh
 > ([../../guide/changes-and-conditions.md](../../guide/changes-and-conditions.md)) là bản chuẩn; khi hai bản khác nhau
 > thì theo bản tiếng Anh.
 
