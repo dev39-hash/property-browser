@@ -374,7 +374,7 @@ PropertyTreeView::PropertyTreeView(QWidget* parent)
 {
     setItemDelegate(d->delegate);
     setEditTriggers(QAbstractItemView::CurrentChanged | QAbstractItemView::SelectedClicked
-        | QAbstractItemView::EditKeyPressed);
+        | QAbstractItemView::DoubleClicked | QAbstractItemView::EditKeyPressed);
     setSelectionBehavior(QAbstractItemView::SelectRows);
     setSelectionMode(QAbstractItemView::SingleSelection);
     setAlternatingRowColors(true);
@@ -571,6 +571,24 @@ QModelIndex PropertyTreeView::moveCursor(CursorAction cursorAction, Qt::Keyboard
         if (d->isTabStop(index))
             return index.siblingAtColumn(PropertyModel::ValueColumn);
     }
+}
+
+bool PropertyTreeView::edit(const QModelIndex& index, EditTrigger trigger, QEvent* event)
+{
+    // The view delays the edit of a click on an already selected cell by the
+    // double click interval (and a double click cancels it): a plain left click
+    // on an editable value opens its editor at once instead. Everything else,
+    // and a view whose triggers do not contain SelectedClicked, goes to the view.
+    if (trigger == SelectedClicked && editTriggers().testFlag(SelectedClicked) && event
+        && event->type() == QEvent::MouseButtonRelease
+        && static_cast<QMouseEvent*>(event)->button() == Qt::LeftButton
+        && static_cast<QMouseEvent*>(event)->modifiers() == Qt::NoModifier && index.isValid()
+        && index.column() == PropertyModel::ValueColumn
+        && index.flags().testFlag(Qt::ItemIsEditable) && index.flags().testFlag(Qt::ItemIsEnabled)
+        && selectionModel() && selectionModel()->isSelected(index)) {
+        return QTreeView::edit(index, AllEditTriggers, event);
+    }
+    return QTreeView::edit(index, trigger, event);
 }
 
 bool PropertyTreeView::focusNextPrevChild(bool next)

@@ -29,9 +29,11 @@ trong view nào. Với code của bạn, cả hai trông giống nhau: bạn d�
   thanh cuộn ngang `Qt::ScrollBarAlwaysOff`, một view quá hẹp chỉ hiển thị phần đầu của cột giá trị.
 - **Menu ngữ cảnh.** "Reset to default" trên một property (bị disable khi nó chưa sửa, là read-only hoặc là disabled)
   và "Reset group" trên một nhóm (được bật khi có ít nhất một property trong đó có thể đặt lại).
-- **Chỉnh sửa.** Editor mở khi item hiện tại thay đổi, khi click vào một item đang được chọn, hoặc bằng phím chỉnh sửa
-  của nền tảng. Các giá trị được commit qua model; nếu model từ chối một giá trị, editor đóng, giá trị cũ vẫn còn và
-  thông điệp hiện dưới dạng tooltip tại ô.
+- **Chỉnh sửa.** Editor mở khi item hiện tại thay đổi, khi double click vào một giá trị, hoặc bằng phím
+  chỉnh sửa của nền tảng. Một cú click vào giá trị của hàng hiện tại (ví dụ sau khi editor của nó đã đóng) mở editor
+  ngay, không phải chờ khoảng thời gian double click. `editTriggers()` của view quyết định: với trigger riêng của ứng
+  dụng, click chỉ mở những gì trigger đó cho phép. Các giá trị được commit qua model; nếu model từ chối một giá trị,
+  editor đóng, giá trị cũ vẫn còn và thông điệp hiện dưới dạng tooltip tại ô.
 
 ## Form view
 

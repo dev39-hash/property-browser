@@ -54,6 +54,9 @@ public:
     int nameColumnWidth() const;
     void setNameColumnWidth(int width);
 
+    // The slot edit(index) of the base class stays callable on this class.
+    using QAbstractItemView::edit;
+
     // The delegate installed by this view.
     PropertyDelegate* propertyDelegate() const;
 
@@ -88,6 +91,10 @@ protected:
     QModelIndex moveCursor(CursorAction cursorAction, Qt::KeyboardModifiers modifiers) override;
     // Tab / Shift+Tab on a check box stop go on along the chain (since 1.5).
     bool focusNextPrevChild(bool next) override;
+    // Since 1.9.2. A click on the value of an already selected row opens its
+    // editor at once instead of after the double click interval (when
+    // editTriggers() contains SelectedClicked); everything else is the view's.
+    bool edit(const QModelIndex& index, EditTrigger trigger, QEvent* event) override;
 
 private:
     std::unique_ptr<detail::PropertyTreeViewPrivate> d;

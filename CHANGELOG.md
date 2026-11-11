@@ -6,6 +6,21 @@ All notable changes to qpb are documented here. Each release has the sections
 From 1.0.0 on, releases within a major version never require changes to consuming code or CMake.
 Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC trial shows a problem.
 
+## Unreleased
+
+### Fixed
+- `PropertyTreeView`: clicking the value of a property again after its editor closed (Enter or Escape) opens the
+  editor again. A double click on a value now edits, and a click on the value of the current row opens the editor at
+  once instead of after the double click interval, which a double click used to cancel without opening anything
+  (`doc/guide/views.md`).
+
+### Upgrade notes
+- No code changes are needed. `editTriggers()` of the tree view now includes `QAbstractItemView::DoubleClicked` by
+  default: a double click on an editable value opens its editor, so the view no longer emits `activated()` for that
+  double click (set your own triggers to keep the old behaviour). On a style that activates items with a single click,
+  a click that opens the editor no longer emits `activated()` either. An application that sets its own triggers keeps
+  them, and the click on the current value follows them (it acts only with `SelectedClicked`).
+
 ## 1.9.1 - 2026-11-11
 
 Bug-fix release: no change to the API; the tree view's name column behaves as described below.
