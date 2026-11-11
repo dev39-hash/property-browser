@@ -20,8 +20,13 @@ trong view nào. Với code của bạn, cả hai trông giống nhau: bạn d�
 - **Diện mạo (Looks).** Các hàng nhóm in đậm trên màu Button của palette; tên của các property đã sửa in đậm; các giá
   trị read-only bị làm mờ; các property hidden là các hàng bị ẩn; các hàng xen kẽ màu. Các giá trị dài được rút gọn
   (elide) ở giữa. Màu có thể được đặt từ style sheet; xem [Style sheet](style-sheets.md).
-- **Cột tên.** Nó vừa khít nội dung của mình (tối đa 60% của view) cho đến khi bạn đặt độ rộng bằng
-  `setNameColumnWidth()` hoặc người dùng kéo header.
+- **Cột tên.** Nó rộng bằng tên dài nhất đang được hiển thị trong các nhóm đã mở (kể cả tên in đậm, phần thụt lề và
+  icon), nên không tên nào bị cắt, cho đến khi bạn đặt độ rộng bằng `setNameColumnWidth()` hoặc người dùng kéo header.
+  Nó được khớp lại khi các hàng được thêm, xóa, hiện, ẩn hoặc đổi tên, khi các nhóm được mở hoặc đóng, hoặc khi view
+  đổi kích thước, được hiển thị hoặc đổi diện mạo (font, style). Việc khớp đo những hàng mà view đo cho nội dung của nó (khoảng một
+  nghìn hàng đầu tiên). Cột giá trị lấy phần còn lại của view nhưng luôn giữ tối thiểu bằng default section size của
+  header (100 px ở style mặc định): trong một view quá hẹp cho cả hai, view cuộn ngang thay vì cắt tên. Với chính sách
+  thanh cuộn ngang `Qt::ScrollBarAlwaysOff`, một view quá hẹp chỉ hiển thị phần đầu của cột giá trị.
 - **Menu ngữ cảnh.** "Reset to default" trên một property (bị disable khi nó chưa sửa, là read-only hoặc là disabled)
   và "Reset group" trên một nhóm (được bật khi có ít nhất một property trong đó có thể đặt lại).
 - **Chỉnh sửa.** Editor mở khi item hiện tại thay đổi, khi click vào một item đang được chọn, hoặc bằng phím chỉnh sửa

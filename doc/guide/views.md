@@ -17,8 +17,14 @@ code: you build the tree, create a model, and call `setModel()`.
 - **Looks.** Group rows are bold on the palette's Button colour; the names of modified properties are bold; read-only
   values are dimmed; hidden properties are hidden rows; rows alternate in colour. Long values are elided in the middle.
   Colours can be set from style sheets; see [Style sheets](style-sheets.md).
-- **Name column.** It fits its contents (up to 60% of the view) until you set a width with `setNameColumnWidth()` or the
-  user drags the header.
+- **Name column.** It is as wide as the longest name shown, in expanded groups (bold names, indentation and icons
+  included), so no name is cut, until you set a width with `setNameColumnWidth()` or the user drags the header. It is
+  fitted again when rows are added, removed, shown, hidden or renamed, when groups are expanded or collapsed, or when
+  the view is resized, shown or restyled (font, style). The fit measures the rows the view measures for its contents
+  (about the first thousand). The value column takes the rest of the view but keeps at least the header's default
+  section size (100 px in the default style): in a view too narrow for both, the view scrolls horizontally instead of
+  cutting names. With the horizontal scroll bar policy `Qt::ScrollBarAlwaysOff`, a view too narrow shows only the first
+  part of the value column.
 - **Context menu.** "Reset to default" on a property (disabled when it is not modified, is read-only or is disabled)
   and "Reset group" on a group (enabled when at least one property in it can be reset).
 - **Editing.** The editor opens when the current item changes, when a selected item is clicked, or with the platform's

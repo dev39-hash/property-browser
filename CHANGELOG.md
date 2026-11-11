@@ -6,6 +6,22 @@ All notable changes to qpb are documented here. Each release has the sections
 From 1.0.0 on, releases within a major version never require changes to consuming code or CMake.
 Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC trial shows a problem.
 
+## Unreleased
+
+### Fixed
+- `PropertyTreeView` no longer cuts property names: the name column is as wide as the longest name shown, in expanded
+  groups (bold names, indentation and icons included), instead of at most 60% of the view. It is fitted again when
+  rows are added, removed, shown, hidden or renamed, when groups are expanded or collapsed, or when the view is
+  resized, shown or restyled, so a view that got its model while small shows whole names once it has room. The value
+  column keeps at least the header's default section size; a view too narrow for both scrolls horizontally
+  (`doc/guide/views.md`).
+
+### Upgrade notes
+- Nothing to do; no code change is needed. Long names now take the width they need, and the value column can shrink to
+  its minimum (100 px in the default style) where it used to keep 40% of the view: a view too narrow for both scrolls
+  horizontally instead of eliding names (with `Qt::ScrollBarAlwaysOff` the cut-off part of the value column cannot be
+  reached). A width set with `setNameColumnWidth()` or by dragging the header is kept as before.
+
 ## 1.9.0 - 2026-10-24
 
 Ninth feature release of 1.x: additions only; code written for 1.0-1.8 builds and behaves the same.
