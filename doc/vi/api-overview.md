@@ -1,6 +1,6 @@
 # Tổng quan API
 
-> Đây là bản dịch tiếng Việt của tài liệu qpb 1.9.1. Bản tiếng Anh ([../api-overview.md](../api-overview.md)) là bản
+> Đây là bản dịch tiếng Việt của tài liệu qpb 1.9.2. Bản tiếng Anh ([../api-overview.md](../api-overview.md)) là bản
 > chuẩn; khi hai bản khác nhau thì theo bản tiếng Anh.
 
 Các lớp public theo từng header. Các header trong `include/qpb/` là tài liệu tham chiếu đầy đủ và chính xác (mỗi khai

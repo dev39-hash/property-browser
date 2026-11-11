@@ -6,7 +6,10 @@ All notable changes to qpb are documented here. Each release has the sections
 From 1.0.0 on, releases within a major version never require changes to consuming code or CMake.
 Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC trial shows a problem.
 
-## Unreleased
+## 1.9.2 - 2026-11-12
+
+Bug-fix release: clicking a value in the tree view opens its editor again. `PropertyTreeView` overrides the
+protected `QAbstractItemView::edit()` for it; its public functions are unchanged.
 
 ### Fixed
 - `PropertyTreeView`: clicking the value of a property again after its editor closed (Enter or Escape) opens the
