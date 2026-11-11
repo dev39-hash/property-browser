@@ -1,6 +1,6 @@
 # View
 
-> Đây là bản dịch tiếng Việt của tài liệu qpb 1.9.0. Bản tiếng Anh ([../../guide/views.md](../../guide/views.md)) là bản
+> Đây là bản dịch tiếng Việt của tài liệu qpb 1.9.1. Bản tiếng Anh ([../../guide/views.md](../../guide/views.md)) là bản
 > chuẩn; khi hai bản khác nhau thì theo bản tiếng Anh.
 
 Tree view, form view, filter proxy cho ô tìm kiếm, delegate cho các view của riêng bạn, bàn phím, và luồng (thread).

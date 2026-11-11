@@ -6,7 +6,9 @@ All notable changes to qpb are documented here. Each release has the sections
 From 1.0.0 on, releases within a major version never require changes to consuming code or CMake.
 Release candidates (`-rcN`) may still change the API before 1.0.0 if the RC trial shows a problem.
 
-## Unreleased
+## 1.9.1 - 2026-11-11
+
+Bug-fix release: no change to the API; the tree view's name column behaves as described below.
 
 ### Fixed
 - `PropertyTreeView` no longer cuts property names: the name column is as wide as the longest name shown, in expanded
